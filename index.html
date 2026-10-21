@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#1b1430" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="STREETZ" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+    <title>STREETZ</title>
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+
+    <!-- Touch surface: joystick on the left, camera drag elsewhere -->
+    <div id="touch"></div>
+    <div id="joy-base" class="joy"></div>
+    <div id="joy-knob" class="joy"></div>
+
+    <div id="hud" class="hidden">
+      <div id="minimap-wrap"><canvas id="minimap"></canvas><div id="zone-name"></div></div>
+      <div id="top-right">
+        <div id="stars"><span>★</span><span>★</span><span>★</span><span>★</span><span>★</span></div>
+        <div id="money">0 €</div>
+      </div>
+      <button id="btn-pause" class="ui-btn" aria-label="Pause">II</button>
+      <div id="fps"></div>
+      <div id="toast"></div>
+      <div id="buttons">
+        <button id="btn-action" class="act hidden" aria-label="Action"><span class="lbl">ACTION</span></button>
+        <button id="btn-sprint" class="act small" aria-label="Sprint">
+          <svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></svg><span class="lbl">SPRINT</span>
+        </button>
+        <button id="btn-jump" class="act big" aria-label="Sauter">
+          <svg viewBox="0 0 24 24"><path d="M12 4 3 14h5v6h8v-6h5z" /></svg><span class="lbl">SAUT</span>
+        </button>
+      </div>
+    </div>
+
+    <div id="pause" class="screen hidden">
+      <div class="panel">
+        <h2>PAUSE</h2>
+        <p class="label">Qualité graphique</p>
+        <div class="seg" id="quality">
+          <button data-q="low">Bas</button><button data-q="medium">Moyen</button><button data-q="high">Haut</button>
+        </div>
+        <button id="btn-resume" class="cta">REPRENDRE</button>
+        <p class="hint">Version prototype · jalon 1</p>
+      </div>
+    </div>
+
+    <div id="start" class="screen">
+      <div class="logo">STREET<span>Z</span></div>
+      <div class="tag">Belleplace · prototype</div>
+      <div id="loading">Chargement…</div>
+      <button id="btn-play" class="cta hidden">JOUER</button>
+      <div class="legal">18+ · Violence fictive</div>
+    </div>
+
+    <div id="rotate" class="screen">
+      <div class="phone"></div>
+      <p>Tourne ton téléphone</p>
+    </div>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
