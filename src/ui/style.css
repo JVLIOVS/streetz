@@ -168,13 +168,13 @@ body {
   transform: translate(-50%, 0);
 }
 
-/* Right-hand buttons: big, thumb-reachable, max 4 */
-#buttons {
+/* Right-hand buttons: big, thumb-reachable, max 4 visible */
+.buttons {
   position: absolute;
   right: calc(18px + var(--safe-r));
   bottom: calc(18px + var(--safe-b));
-  width: 210px;
-  height: 200px;
+  width: 220px;
+  height: 210px;
 }
 .act {
   position: absolute;
@@ -190,10 +190,11 @@ body {
   box-shadow: 0 5px 0 rgba(0, 0, 0, 0.35);
   touch-action: none;
   transition: transform 0.06s;
+  padding: 0;
 }
 .act:active,
 .act.pressed {
-  transform: translateY(3px) scale(0.96);
+  transform: translateY(3px) scale(0.95);
   box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
 }
 .act svg {
@@ -203,6 +204,11 @@ body {
   stroke: var(--ink);
   stroke-width: 1.2;
 }
+.act .ico {
+  font-size: 34px;
+  line-height: 1;
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.4));
+}
 .act .lbl {
   font-size: 11px;
   letter-spacing: 0.5px;
@@ -211,16 +217,34 @@ body {
 .act.big {
   right: 0;
   bottom: 0;
-  width: 96px;
-  height: 96px;
+  width: 100px;
+  height: 100px;
   background: linear-gradient(#ff5d84, var(--accent));
 }
+.act.big.gun {
+  background: linear-gradient(#ff8a3d, #e8430b);
+}
+.act.gas {
+  background: linear-gradient(#7dff7a, #22b14c);
+}
 .act.small {
-  right: 108px;
-  bottom: 4px;
-  width: 74px;
-  height: 74px;
+  width: 72px;
+  height: 72px;
   background: linear-gradient(#5aa8ff, #2f6fe0);
+}
+.act.b1 {
+  right: 112px;
+  bottom: 2px;
+}
+.act.b2 {
+  right: 100px;
+  bottom: 92px;
+}
+.act.brake {
+  background: linear-gradient(#ff6b6b, #c0392b);
+}
+.act.hb {
+  background: linear-gradient(#ffd166, #f39c12);
 }
 .act.small.on {
   background: linear-gradient(#ffe36e, #ffb800);
@@ -229,12 +253,127 @@ body {
 .act.small.on svg {
   fill: var(--ink);
 }
-#btn-action {
-  right: 10px;
-  bottom: 112px;
-  width: 78px;
-  height: 78px;
-  background: linear-gradient(#7dff7a, #2ec95a);
+.act.tiny {
+  right: 180px;
+  bottom: 160px;
+  width: 50px;
+  height: 50px;
+  font-size: 22px;
+  background: rgba(27, 20, 48, 0.65);
+  border-width: 3px;
+}
+.act.ctx {
+  right: calc(22px + var(--safe-r));
+  bottom: calc(132px + var(--safe-b));
+  width: 92px;
+  height: 92px;
+  background: linear-gradient(#ffe36e, #ffc400);
+  border-color: var(--ink);
+  color: var(--ink);
+  animation: pop 0.25s ease-out;
+}
+.act.ctx .lbl {
+  font-size: 15px;
+  text-shadow: none;
+  line-height: 1.05;
+  text-align: center;
+  padding: 0 6px;
+}
+@keyframes pop {
+  from {
+    transform: scale(0.6);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+#bars {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+#bars > div {
+  height: 8px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 2px solid #fff;
+  overflow: hidden;
+}
+#bars i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: #4cd964;
+  transition: width 0.2s;
+}
+#armor i {
+  background: #4aa3ff;
+}
+#armor.empty {
+  display: none;
+}
+.pill {
+  pointer-events: auto;
+  margin-top: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 3px solid #fff;
+  background: rgba(27, 20, 48, 0.7);
+  color: #fff;
+  font-weight: 900;
+  font-size: 16px;
+}
+#weapon-icon {
+  font-size: 20px;
+}
+#robbery {
+  position: absolute;
+  top: 34%;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  font-weight: 900;
+  text-shadow: 0 2px 0 #000;
+}
+#robbery .bar {
+  width: 220px;
+  height: 14px;
+  border-radius: 8px;
+  border: 3px solid #fff;
+  background: rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  margin-top: 4px;
+}
+#robbery i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--accent2);
+}
+#ko {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 72px;
+  font-weight: 900;
+  font-style: italic;
+  color: #ff3b3b;
+  -webkit-text-stroke: 3px #000;
+  background: rgba(60, 0, 0, 0.35);
+}
+#stars.flash span.on {
+  animation: blink 0.5s steps(2) infinite;
+}
+@keyframes blink {
+  50% {
+    color: #ff3b6b;
+  }
 }
 
 /* ---------- screens ---------- */

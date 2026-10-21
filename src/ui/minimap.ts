@@ -1,4 +1,5 @@
 import type { MapData, PoiKind } from '../maps/types';
+import type { SimWorld } from '../sim/world';
 
 const POI_STYLE: Partial<Record<PoiKind, { color: string; label: string }>> = {
   police: { color: '#3f7bff', label: '★' },
@@ -7,6 +8,7 @@ const POI_STYLE: Partial<Record<PoiKind, { color: string; label: string }>> = {
   bank: { color: '#2ecc71', label: '$' },
   jewelry: { color: '#b56cff', label: '◆' },
   hideout: { color: '#ffd23f', label: '⌂' },
+  shop: { color: '#22b14c', label: '🛒' },
   airport: { color: '#9fd3ff', label: '✈' },
 };
 
@@ -91,7 +93,7 @@ export class Minimap {
   }
 
   /** @param yaw camera yaw: the map rotates so that "up" is where the camera looks. */
-  update(px: number, pz: number, facing: number, yaw: number) {
+  update(px: number, pz: number, facing: number, yaw: number, sim?: SimWorld) {
     const g = this.ctx;
     const S = this.size;
     const view = 220; // meters across
@@ -106,8 +108,25 @@ export class Minimap {
     g.rotate(yaw);
     g.scale(k, k);
     const [x, z] = this.toPx(px, pz);
-    g.drawImage(this.base, -x, -z);
-    g.restore();
+    if (px > this.map.half + 50) {
+      // inside a building (rooms live off-map)
+      g.restore();
+      g.fillStyle = '#2a2140';
+      g.beginPath();
+      g.arc(S / 2, S / 2, S / 2 - 2, 0, Math.PI * 2);
+      g.fill();
+    } else {
+      g.drawImage(this.base, -x, -z);
+      if (sim) {
+        // money on the ground
+        g.fillStyle = '#5ee86a';
+        for (const pk of sim.pickups.values()) {
+          const [mx, mz] = this.toPx(pk.x, pk.z);
+          g.fillRect(mx - 6, mz - 6, 12, 12);
+        }
+      }
+      g.restore();
+    }
     // Player arrow
     g.save();
     g.translate(S / 2, S / 2);

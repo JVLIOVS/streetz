@@ -22,23 +22,41 @@
     <div id="joy-knob" class="joy"></div>
 
     <div id="hud" class="hidden">
-      <div id="minimap-wrap"><canvas id="minimap"></canvas><div id="zone-name"></div></div>
+      <div id="minimap-wrap">
+        <canvas id="minimap"></canvas>
+        <div id="bars"><div id="hp"><i></i></div><div id="armor"><i></i></div></div>
+        <div id="zone-name"></div>
+      </div>
       <div id="top-right">
         <div id="stars"><span>★</span><span>★</span><span>★</span><span>★</span><span>★</span></div>
         <div id="money">0 €</div>
+        <button id="btn-weapon" class="pill"><span id="weapon-icon">✊</span><span id="weapon-ammo"></span></button>
       </div>
       <button id="btn-pause" class="ui-btn" aria-label="Pause">II</button>
       <div id="fps"></div>
       <div id="toast"></div>
-      <div id="buttons">
-        <button id="btn-action" class="act hidden" aria-label="Action"><span class="lbl">ACTION</span></button>
-        <button id="btn-sprint" class="act small" aria-label="Sprint">
-          <svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></svg><span class="lbl">SPRINT</span>
-        </button>
-        <button id="btn-jump" class="act big" aria-label="Sauter">
+      <div id="robbery" class="hidden"><div class="lbl">BRAQUAGE</div><div class="bar"><i></i></div></div>
+      <div id="ko" class="hidden">K.O.</div>
+
+      <!-- On foot -->
+      <div id="buttons-foot" class="buttons">
+        <button id="btn-attack" class="act big" aria-label="Attaquer"><span class="ico" id="attack-icon">✊</span><span class="lbl" id="attack-lbl">FRAPPER</span></button>
+        <button id="btn-jump" class="act small b1" aria-label="Sauter">
           <svg viewBox="0 0 24 24"><path d="M12 4 3 14h5v6h8v-6h5z" /></svg><span class="lbl">SAUT</span>
         </button>
+        <button id="btn-sprint" class="act small b2" aria-label="Sprint">
+          <svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></svg><span class="lbl">SPRINT</span>
+        </button>
       </div>
+      <!-- Driving -->
+      <div id="buttons-car" class="buttons hidden">
+        <button id="btn-gas" class="act big gas" aria-label="Accélérer"><svg viewBox="0 0 24 24"><path d="M12 3 4 13h5v8h6v-8h5z" /></svg><span class="lbl">GAZ</span></button>
+        <button id="btn-brake" class="act small b1 brake" aria-label="Freiner"><svg viewBox="0 0 24 24"><path d="M12 21 4 11h5V3h6v8h5z" /></svg><span class="lbl">FREIN</span></button>
+        <button id="btn-handbrake" class="act small b2 hb" aria-label="Frein à main"><span class="ico">⟲</span><span class="lbl">DÉRAPAGE</span></button>
+        <button id="btn-horn" class="act tiny" aria-label="Klaxon">📯</button>
+      </div>
+      <!-- Contextual action (enter car, open door, rob, talk, get out...) -->
+      <button id="btn-action" class="act ctx hidden" aria-label="Action"><span class="lbl" id="action-lbl">ACTION</span></button>
     </div>
 
     <div id="pause" class="screen hidden">
@@ -49,7 +67,7 @@
           <button data-q="low">Bas</button><button data-q="medium">Moyen</button><button data-q="high">Haut</button>
         </div>
         <button id="btn-resume" class="cta">REPRENDRE</button>
-        <p class="hint">Version prototype · jalon 1</p>
+        <p class="hint">Prototype · version test 2</p>
       </div>
     </div>
 

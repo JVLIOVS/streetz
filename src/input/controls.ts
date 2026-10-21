@@ -7,6 +7,8 @@
  *  - rest of the screen: drag to orbit the camera
  *  - buttons (DOM) on the right call press()/toggle() directly
  */
+import type { ActionKind } from '../core/commands';
+
 export interface InputState {
   moveX: number;
   moveY: number;
@@ -33,6 +35,9 @@ export class Controls {
   private camLast = { x: 0, y: 0 };
   private releasedFor = 0;
   onSprintChange?: (on: boolean) => void;
+  /** Buttons held down (pedals, handbrake, trigger). */
+  readonly held = { gas: false, brake: false, handbrake: false, attack: false };
+  private actions: ActionKind[] = [];
 
   constructor(
     surface: HTMLElement,
@@ -47,6 +52,9 @@ export class Controls {
       if (e.repeat) return;
       this.keys.add(e.code);
       if (e.code === 'Space') this.state.jumpPressed = true;
+      if (e.code === 'KeyE' || e.code === 'KeyF' || e.code === 'Enter') this.pushAction('use');
+      if (e.code === 'KeyR' || e.code === 'Tab') this.pushAction('weapon');
+      if (e.code === 'KeyH') this.pushAction('horn');
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
     addEventListener('blur', () => this.keys.clear());
@@ -104,6 +112,48 @@ export class Controls {
       this.camId = null;
     }
   };
+
+  pushAction(a: ActionKind) {
+    this.actions.push(a);
+  }
+
+  takeActions(): ActionKind[] {
+    const a = this.actions;
+    this.actions = [];
+    return a;
+  }
+
+  /** Makes a DOM button set `held[key]` while a finger is on it (multi-touch safe). */
+  bindHold(el: HTMLElement, key: keyof Controls['held'], onDown?: () => void) {
+    const down = (e: PointerEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      el.setPointerCapture?.(e.pointerId);
+      this.held[key] = true;
+      el.classList.add('pressed');
+      onDown?.();
+    };
+    const up = (e: PointerEvent) => {
+      e.stopPropagation();
+      this.held[key] = false;
+      el.classList.remove('pressed');
+    };
+    el.addEventListener('pointerdown', down);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+    el.addEventListener('lostpointercapture', up);
+  }
+
+  /** Keyboard extras for desktop testing. */
+  keyHeld() {
+    const k = this.keys;
+    return {
+      gas: k.has('KeyW') || k.has('ArrowUp') || k.has('KeyZ'),
+      brake: k.has('KeyS') || k.has('ArrowDown'),
+      handbrake: k.has('Space'),
+      attack: k.has('KeyK') || k.has('ControlLeft'),
+    };
+  }
 
   pressJump() {
     this.state.jumpPressed = true;
