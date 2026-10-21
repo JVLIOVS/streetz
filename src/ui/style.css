@@ -516,3 +516,24 @@ body {
     display: flex;
   }
 }
+
+/* Health bar floating above the person you are hitting */
+#target-hp {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 64px;
+  height: 9px;
+  margin: -4px 0 0 -32px;
+  border-radius: 5px;
+  border: 2px solid #fff;
+  background: rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+  will-change: transform;
+}
+#target-hp i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: #ff4d4d;
+}

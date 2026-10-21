@@ -9,6 +9,7 @@ const LOOK_VARIANTS = 40;
 interface Entry {
   view: HumanView;
   hitSeq: number;
+  actionSeq: number;
   far: number;
 }
 
@@ -35,7 +36,7 @@ export class PedRenderer {
       let e = this.views.get(s.id);
       if (!e) {
         if (d > viewDist) continue;
-        e = { view: new HumanView(randomLook(s.look % LOOK_VARIANTS)), hitSeq: s.hitSeq, far: 0 };
+        e = { view: new HumanView(randomLook(s.look % LOOK_VARIANTS)), hitSeq: s.hitSeq, actionSeq: s.actionSeq, far: 0 };
         this.views.set(s.id, e);
         this.root.add(e.view.root);
       }
@@ -49,12 +50,30 @@ export class PedRenderer {
       if (df < -Math.PI) df += Math.PI * 2;
       v.root.rotation.y = p.facing + df * alpha;
       const base: BaseAnim =
-        s.mode === 'ko' ? 'ko' : s.mode === 'cower' ? 'cower' : s.mode === 'wave' ? 'wave' : s.mode === 'flee' ? 'sprint' : s.speed > 0.2 ? 'walk' : 'idle';
+        s.mode === 'ko'
+          ? 'ko'
+          : s.mode === 'cower'
+            ? 'cower'
+            : s.mode === 'wave'
+              ? 'wave'
+              : s.mode === 'flee'
+                ? 'sprint'
+                : s.mode === 'fight' || s.mode === 'stun'
+                  ? s.speed > 0.5
+                    ? 'run'
+                    : 'guard'
+                  : s.speed > 0.2
+                    ? 'walk'
+                    : 'idle';
       v.setBase(base);
       if (base === 'walk') v.setSpeedScale(s.speed / 1.5);
       if (s.hitSeq !== e.hitSeq) {
         e.hitSeq = s.hitSeq;
         if (s.mode !== 'ko') v.playOverlay('hit');
+      }
+      if (s.actionSeq !== e.actionSeq) {
+        e.actionSeq = s.actionSeq;
+        if (s.action) v.playOverlay(s.action);
       }
       v.setOutline(d < 18);
       v.setShadow(d < 25);

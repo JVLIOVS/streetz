@@ -30,6 +30,8 @@ export class Hud {
   private robbery = $('robbery');
   private robberyBar = $('robbery').querySelector('i') as HTMLElement;
   private ko = $('ko');
+  private targetHp = $('target-hp');
+  private targetFill = $('target-hp').firstElementChild as HTMLElement;
   private toastTimer = 0;
   private last: Record<string, string | number | boolean> = {};
 
@@ -82,6 +84,15 @@ export class Hud {
     if (this.changed('rob', s.robbery >= 0)) this.robbery.classList.toggle('hidden', s.robbery < 0);
     if (s.robbery >= 0) this.robberyBar.style.width = `${s.robbery * 100}%`;
     if (this.changed('ko', s.dead)) this.ko.classList.toggle('hidden', !s.dead);
+  }
+
+  /** Floating health bar at screen position (x, y) in px, or hidden when null. */
+  setTargetBar(pos: { x: number; y: number; ratio: number } | null) {
+    if (this.changed('tbar', !!pos)) this.targetHp.classList.toggle('hidden', !pos);
+    if (!pos) return;
+    this.targetHp.style.transform = `translate(${pos.x.toFixed(0)}px, ${pos.y.toFixed(0)}px)`;
+    const w = `${Math.max(0, pos.ratio * 100).toFixed(0)}%`;
+    if (this.changed('tfill', w)) this.targetFill.style.width = w;
   }
 
   updateZone(x: number, z: number, interior: string | null) {

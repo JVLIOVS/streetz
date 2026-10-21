@@ -19,5 +19,7 @@ export const GROUP = {
   VEHICLE: 0x0010,
   /** Trees, fountains: block movement but not the camera. */
   PROP: 0x0020,
+  /** Breakable street furniture: blocks walkers, cars plow through it. */
+  BREAKABLE: 0x0040,
 };
 export const groups = (membership: number, filter: number) => ((membership & 0xffff) << 16) | (filter & 0xffff);

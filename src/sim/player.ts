@@ -42,6 +42,9 @@ export interface PlayerState {
   robbery: number;
   context: ContextAction | null;
   dead: boolean;
+  /** Last pedestrian hit, for the target health bar. */
+  lastHit: number;
+  lastHitTick: number;
 }
 
 export const PLAYER_TUNING = {
@@ -67,6 +70,9 @@ export class Player {
   attackCooldown = 0;
   /** Pending melee hit (applied a few ticks after the punch starts). */
   pendingHit = -1;
+  /** Melee lock-on target and lunge duration (ticks without input steering). */
+  meleeLock: unknown = null;
+  lungeTicks = 0;
   respawnTimer = 0;
   robberyTarget: string | null = null;
   robberyTime = 0;
@@ -102,6 +108,8 @@ export class Player {
       robbery: -1,
       context: null,
       dead: false,
+      lastHit: -1,
+      lastHitTick: -1,
     };
     this.savePrev();
   }
@@ -143,8 +151,16 @@ export class Player {
 
     const accel = s.grounded ? T.groundAccel : T.airAccel;
     const k = 1 - Math.exp(-accel * DT);
-    s.vx += (tx - s.vx) * k;
-    s.vz += (tz - s.vz) * k;
+    if (this.lungeTicks > 0) {
+      this.lungeTicks--; // lunging at a target: keep the dash velocity
+      if (this.lungeTicks === 0) {
+        s.vx *= 0.2;
+        s.vz *= 0.2;
+      }
+    } else {
+      s.vx += (tx - s.vx) * k;
+      s.vz += (tz - s.vz) * k;
+    }
 
     if (this.jumpQueued && s.grounded && !s.dead) {
       s.vy = T.jumpSpeed;

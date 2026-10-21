@@ -9,7 +9,7 @@ import { toonGradient } from './materials';
  * and building details (balconies, chimneys, awnings, entrances) as vertex-colored boxes.
  */
 
-const PROP_MODELS: Record<PropKind, { name: string; scale: number }> = {
+const PROP_MODELS: Record<Exclude<PropKind, 'bollard'>, { name: string; scale: number }> = {
   streetlight: { name: 'streetlight', scale: 5.6 },
   trafficlight: { name: 'trafficlight_B', scale: 5 },
   bench: { name: 'bench', scale: 5 },
@@ -26,11 +26,21 @@ const _p = new THREE.Vector3();
 const _s = new THREE.Vector3();
 const _c = new THREE.Color();
 
-let propMaterial: THREE.Material | null = null;
+export let propMaterial: THREE.Material | null = null;
 const propGeo = new Map<PropKind, THREE.BufferGeometry>();
 
-function propGeometry(kind: PropKind, assets: GameAssets): THREE.BufferGeometry | null {
+/** Geometry of a street prop, base at y = 0. Bollards are procedural (vertex colors). */
+export function propGeometry(kind: PropKind, assets: GameAssets): THREE.BufferGeometry | null {
   if (propGeo.has(kind)) return propGeo.get(kind)!;
+  if (kind === 'bollard') {
+    const g = mergeGeometries([
+      colored(new THREE.CylinderGeometry(0.09, 0.11, 0.85, 8).translate(0, 0.425, 0), 0x3b2a20),
+      colored(new THREE.SphereGeometry(0.1, 8, 6).translate(0, 0.86, 0), 0x3b2a20),
+      colored(new THREE.CylinderGeometry(0.115, 0.115, 0.06, 8).translate(0, 0.7, 0), 0xd4af37),
+    ])!;
+    propGeo.set(kind, g);
+    return g;
+  }
   const spec = PROP_MODELS[kind];
   const src = assets.city.get(spec.name);
   if (!src) return null;
@@ -53,6 +63,17 @@ function propGeometry(kind: PropKind, assets: GameAssets): THREE.BufferGeometry 
   const g = mergeGeometries(parts)!;
   propGeo.set(kind, g);
   return g;
+}
+
+function colored(g: THREE.BufferGeometry, hex: number): THREE.BufferGeometry {
+  const ng = g.index ? g.toNonIndexed() : g;
+  ng.deleteAttribute('uv');
+  const n = ng.getAttribute('position').count;
+  const col = new Float32Array(n * 3);
+  _c.setHex(hex);
+  for (let i = 0; i < n; i++) col.set([_c.r, _c.g, _c.b], i * 3);
+  ng.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return ng;
 }
 
 export interface ChunkMeshes {
@@ -87,7 +108,7 @@ class BoxBatch {
   }
 }
 
-const detailMaterial = () => new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonGradient() });
+export const detailMaterial = () => new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonGradient() });
 
 const AWNINGS = [0xd63031, 0x00a86b, 0x1e6fd9, 0xf39c12, 0x8e44ad, 0x2d3436];
 
@@ -100,15 +121,7 @@ export function buildChunkDetails(map: MapData, assets: GameAssets, chunkKey: (x
     return b;
   };
 
-  for (const p of map.props) {
-    const g = propGeometry(p.kind, assets);
-    if (!g) continue;
-    const k = chunkKey(p.x, p.z);
-    _q.setFromEuler(_e.set(0, p.yaw, 0));
-    _m.compose(_p.set(p.x, 0, p.z), _q, _s.set(1, 1, 1));
-    if (!propParts.has(k)) propParts.set(k, []);
-    propParts.get(k)!.push(g.clone().applyMatrix4(_m));
-  }
+  void assets; // street props live in render/props.ts (they can break)
 
   let seed = 0;
   for (const b of map.buildings) {

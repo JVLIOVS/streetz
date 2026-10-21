@@ -26,6 +26,7 @@ import {
   type TreeDef,
   type ZoneDef,
 } from '../types';
+import { terrainHeight, terrainSlope } from '../terrain';
 
 const HALF = 500;
 const RING = 465;
@@ -554,10 +555,29 @@ export function buildParisMap(seed = 1789): MapData {
       }
     }
   }
+  // Traffic lights on every city intersection (4 corners on boulevards, 2 elsewhere)
   for (const r of roads) {
-    if (r.kind !== 'intersection' || r.w < 20 || r.d < 20 || r.w > 23) continue;
-    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    if (r.kind !== 'intersection' || r.w > 21.5 && r.w < 22.5 || r.d > 21.5 && r.d < 22.5) continue;
+    if (inRect(r.x, r.z, PARK)) continue;
+    const big = r.w >= 20 || r.d >= 20;
+    const corners = big ? [[-1, -1], [1, -1], [-1, 1], [1, 1]] : [[-1, -1], [1, 1]];
+    for (const [sx, sz] of corners) {
       props.push({ kind: 'trafficlight', x: r.x + sx * (r.w / 2 + 1), z: r.z + sz * (r.d / 2 + 1), yaw: Math.atan2(sx, sz) });
+    }
+  }
+  // Parisian bollards guarding the sidewalk corners
+  for (const b of blocks) {
+    if (b.kind === 'cites') continue;
+    for (const [cx, cz, dx, dz] of [
+      [b.x0, b.z0, 1, 1],
+      [b.x1, b.z0, -1, 1],
+      [b.x0, b.z1, 1, -1],
+      [b.x1, b.z1, -1, -1],
+    ]) {
+      for (const t of [3.5, 5]) {
+        props.push({ kind: 'bollard', x: cx + dx * t, z: cz + dz * 0.45, yaw: 0 });
+        props.push({ kind: 'bollard', x: cx + dx * 0.45, z: cz + dz * t, yaw: 0 });
+      }
     }
   }
 
@@ -643,26 +663,4 @@ function buildParkTerrain(rng: Rng): TerrainDef {
   return { x0: PARK.x0, z0: PARK.z0, sizeX, sizeZ, res, heights };
 }
 
-/** Bilinear height of the terrain at world (x, z); 0 outside. */
-export function terrainHeight(t: TerrainDef, x: number, z: number): number {
-  const fx = ((x - t.x0) / t.sizeX) * t.res;
-  const fz = ((z - t.z0) / t.sizeZ) * t.res;
-  if (fx < 0 || fz < 0 || fx > t.res || fz > t.res) return 0;
-  const ix = Math.min(t.res - 1, Math.floor(fx));
-  const iz = Math.min(t.res - 1, Math.floor(fz));
-  const tx = fx - ix;
-  const tz = fz - iz;
-  const n = t.res + 1;
-  const h00 = t.heights[iz * n + ix];
-  const h10 = t.heights[iz * n + ix + 1];
-  const h01 = t.heights[(iz + 1) * n + ix];
-  const h11 = t.heights[(iz + 1) * n + ix + 1];
-  return (h00 * (1 - tx) + h10 * tx) * (1 - tz) + (h01 * (1 - tx) + h11 * tx) * tz;
-}
-
-export function terrainSlope(t: TerrainDef, x: number, z: number): number {
-  const e = 2;
-  const dx = terrainHeight(t, x + e, z) - terrainHeight(t, x - e, z);
-  const dz = terrainHeight(t, x, z + e) - terrainHeight(t, x, z - e);
-  return Math.hypot(dx, dz) / (2 * e);
-}
+export { terrainHeight, terrainSlope };

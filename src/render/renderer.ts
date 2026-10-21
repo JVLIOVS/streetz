@@ -214,6 +214,8 @@ export class GameRenderer {
     for (const [id, v] of this.vehicles.views) roots.set(id, v.root);
     this.peds.syncRiders(this.sim.vehicles, roots, dt);
     for (const v of this.sim.vehicles.values()) if (Math.hypot(v.state.x - cx, v.state.z - cz) < 120) this.effects.vehicleSmoke(v, dt);
+    this.city.props.sync(this.sim.props, cx, cz);
+    for (const d of this.sim.props.broken.values()) if (d.spray > 0) this.effects.waterJet(d.x, d.z, d.spray, dt);
     this.effects.update(dt, this.sim.pickups);
 
     this.sky.position.copy(this.cam.camera.position);

@@ -4,11 +4,13 @@ import { DT } from '../core/loop';
 import { Rng } from '../core/rng';
 import { TRAFFIC_MIX, VEHICLES, type VehicleType } from '../data/vehicles';
 import { WEAPON_ORDER, WEAPONS, type WeaponId } from '../data/weapons';
+import { terrainHeight } from '../maps/terrain';
 import type { InteriorDef, MapData } from '../maps/types';
 import { buildStaticColliders } from './colliders';
 import { roomLayout, type RoomLayout } from './interiors';
 import { buildLaneGraph, buildSidewalkGraph, nextLane, type LaneGraph, type WalkNode } from './nav';
 import { Ped, type PedState } from './peds';
+import { PROP_SPECS, PropField, type BrokenProp } from './props';
 import { GROUP, groups, initPhysics } from './physics';
 import { angleDiff, Player, PLAYER_TUNING, type ContextAction, type PlayerState } from './player';
 import { Vehicle, type VehicleState } from './vehicle';
@@ -38,6 +40,7 @@ export interface WorldSnapshot {
   vehicles: VehicleState[];
   pickups: PickupState[];
   wanted: WantedState;
+  props: BrokenProp[];
 }
 
 export type SimEvent =
@@ -49,12 +52,23 @@ export type SimEvent =
   | { type: 'toast'; playerId: string; text: string }
   | { type: 'money'; playerId: string; amount: number }
   | { type: 'horn'; vehicle: number }
-  | { type: 'wanted'; level: number };
+  | { type: 'wanted'; level: number }
+  | { type: 'break'; x: number; y: number; z: number; kind: string; prop: number };
 
 export interface Density {
   peds: number;
   traffic: number;
   parkedRadius: number;
+}
+
+/** Something a player can hit. */
+interface Target {
+  x: number;
+  y: number;
+  z: number;
+  ped?: Ped;
+  player?: Player;
+  vehicle?: Vehicle;
 }
 
 type Crime = 'assault' | 'gunshot' | 'shoot_person' | 'knockout' | 'carjack' | 'robbery_shop' | 'robbery_big' | 'hit_and_run';
@@ -79,6 +93,9 @@ export class SimWorld {
   readonly lanes: LaneGraph;
   readonly walk: WalkNode[];
   readonly rooms = new Map<string, RoomLayout>();
+  readonly props: PropField;
+  private propColliders: RAPIER_T.Collider[] = [];
+  private scratch: number[] = [];
   private rng: Rng;
   private nextId = 1;
   private controller: RAPIER_T.KinematicCharacterController;
@@ -101,6 +118,8 @@ export class SimWorld {
     this.lanes = buildLaneGraph(map);
     this.walk = buildSidewalkGraph(map);
     this.buildInteriors();
+    this.props = new PropField(map.props);
+    this.buildProps();
     for (const f of map.featured) this.spawnVehicle(f.type as VehicleType, f.x, 0.3, f.z, f.yaw, 'none', false);
     physics.step(); // build the query structures once
   }
@@ -130,7 +149,7 @@ export class SimWorld {
     const collider = this.physics.createCollider(
       R.ColliderDesc.capsule(PLAYER_TUNING.halfHeight, PLAYER_TUNING.radius)
         .setTranslation(0, PLAYER_TUNING.halfHeight + PLAYER_TUNING.radius, 0)
-        .setCollisionGroups(groups(GROUP.PLAYER, GROUP.STATIC | GROUP.PLAYER | GROUP.PED | GROUP.VEHICLE | GROUP.PROP)),
+        .setCollisionGroups(groups(GROUP.PLAYER, GROUP.STATIC | GROUP.PLAYER | GROUP.PED | GROUP.VEHICLE | GROUP.PROP | GROUP.BREAKABLE)),
       body,
     );
     const p = new Player(id, body, collider, spawn);
@@ -146,18 +165,28 @@ export class SimWorld {
       R.ColliderDesc.capsule(0.5, 0.32).setTranslation(0, 0.85, 0).setCollisionGroups(groups(GROUP.PED, GROUP.PLAYER | GROUP.QUERY)),
       body,
     );
+    const roll = this.rng.next();
+    const temper: PedState['temper'] = roll < 0.33 ? 'fighter' : roll < 0.53 ? 'scared' : 'coward';
+    const maxHealth = temper === 'fighter' ? 130 : 100;
+    // most people carry a little cash, some are loaded
+    const money = this.rng.chance(0.12) ? this.rng.int(150, 600) : this.rng.int(5, 90);
     const state: PedState = {
       id,
       x,
-      y: 0,
+      y: this.groundY(x, z),
       z,
       facing: opts.facing ?? 0,
       speed: 0,
       mode: opts.mode ?? 'walk',
-      health: 100,
+      health: maxHealth,
+      maxHealth,
       look: this.rng.int(0, 1e9),
-      money: this.rng.int(5, 80),
+      money,
       hitSeq: 0,
+      temper,
+      target: null,
+      action: null,
+      actionSeq: 0,
     };
     const ped = new Ped(state, body, collider, this.rng);
     ped.from = opts.from ?? -1;
@@ -185,7 +214,7 @@ export class SimWorld {
     const collider = this.physics.createCollider(
       R.ColliderDesc.roundCuboid(sp.width / 2 - r, sp.height * 0.32 - r, sp.length / 2 - r, r)
         .setTranslation(0, sp.height * 0.4, 0)
-        .setCollisionGroups(groups(GROUP.VEHICLE, 0xffff)),
+        .setCollisionGroups(groups(GROUP.VEHICLE, 0xffff & ~GROUP.BREAKABLE)),
       body,
     );
     const state: VehicleState = {
@@ -225,6 +254,31 @@ export class SimWorld {
     this.vehicles.delete(id);
   }
 
+  private buildProps() {
+    const R = this.R;
+    const body = this.physics.createRigidBody(R.RigidBodyDesc.fixed());
+    const g = groups(GROUP.BREAKABLE, GROUP.PLAYER | GROUP.QUERY);
+    for (const p of this.map.props) {
+      const sh = PROP_SPECS[p.kind].shape;
+      const desc =
+        sh.kind === 'cyl'
+          ? R.ColliderDesc.cylinder(sh.h / 2, sh.r).setTranslation(p.x, sh.h / 2, p.z)
+          : R.ColliderDesc.cuboid(sh.sx / 2, sh.sy / 2, sh.sz / 2)
+              .setTranslation(p.x, sh.sy / 2, p.z)
+              .setRotation({ w: Math.cos(p.yaw / 2), x: 0, y: Math.sin(p.yaw / 2), z: 0 });
+      this.propColliders.push(this.physics.createCollider(desc.setCollisionGroups(g), body));
+    }
+  }
+
+  /** Breaks a street prop with a push; returns true if it was intact. */
+  breakProp(i: number, vx: number, vz: number, up = 2): boolean {
+    if (!this.props.break(i, vx, vz, up)) return false;
+    this.propColliders[i]?.setEnabled(false);
+    const d = this.map.props[i];
+    this.events.push({ type: 'break', x: d.x, y: 0.8, z: d.z, kind: d.kind, prop: i });
+    return true;
+  }
+
   private buildInteriors() {
     const R = this.R;
     const body = this.physics.createRigidBody(R.RigidBodyDesc.fixed());
@@ -259,8 +313,11 @@ export class SimWorld {
     for (const v of this.vehicles.values()) this.updateVehicle(v);
     for (const ped of this.peds.values()) {
       ped.savePrev();
+      if (ped.state.mode === 'fight') this.pedFight(ped);
       ped.update(this.walk, this.rng);
+      ped.state.y = this.groundY(ped.state.x, ped.state.z);
     }
+    this.props.update((x, z) => this.groundY(x, z));
     this.collectPickups();
     this.updateWanted();
     if (this.tick % 20 === 0) this.managePopulation();
@@ -319,7 +376,8 @@ export class SimWorld {
     const parkedStill = s.driver === 'none' && Math.abs(s.speed) < 0.05 && v.grounded && s.vy <= 0 && !s.wrecked;
     if (!parkedStill) {
       const ctrl = s.type === 'offroad' ? this.offroadController : this.carController;
-      const impact = v.update(ctrl, (x, z, y) => this.groundAt(x, z, y));
+      // cars bump into walls, trees and other cars; they run over people and plow through props
+      const impact = v.update(ctrl, (x, z, y) => this.groundAt(x, z, y), groups(GROUP.VEHICLE, GROUP.STATIC | GROUP.VEHICLE | GROUP.PROP));
       if (impact > 0) {
         s.health -= (impact - 3) * 3.5;
         this.events.push({ type: 'impact', x: s.x, y: s.y + 0.8, z: s.z, strength: impact });
@@ -329,6 +387,7 @@ export class SimWorld {
         }
       }
       if (Math.abs(s.speed) > 2.5) this.vehicleHits(v);
+      if (Math.abs(s.speed) > 1.2) this.vehicleProps(v);
     }
     if (s.y < this.map.killY - 2 && !s.wrecked) {
       s.wrecked = true;
@@ -429,6 +488,30 @@ export class SimWorld {
     }
   }
 
+  /** Cars plow through street furniture: the prop breaks, the car loses some speed. */
+  private vehicleProps(v: Vehicle) {
+    const s = v.state;
+    const sp = v.spec;
+    const fx = -Math.sin(s.yaw);
+    const fz = -Math.cos(s.yaw);
+    for (const i of this.props.near(s.x, s.z, sp.length / 2 + 1, this.scratch)) {
+      const d = this.map.props[i];
+      const r = this.props.radius(i);
+      const dx = d.x - s.x;
+      const dz = d.z - s.z;
+      const lf = dx * fx + dz * fz;
+      const lr = dx * fz - dz * fx;
+      if (Math.abs(lf) > sp.length / 2 + r || Math.abs(lr) > sp.width / 2 + r) continue;
+      const spec = PROP_SPECS[d.kind];
+      // push along the car's motion, a bit outwards
+      const side = lr > 0 ? 1 : -1;
+      if (!this.breakProp(i, s.vx * 1.1 + fz * side * 2, s.vz * 1.1 - fx * side * 2, 2 + Math.abs(s.speed) * 0.2)) continue;
+      s.vx *= spec.carKeep;
+      s.vz *= spec.carKeep;
+      s.health -= spec.carDamage;
+    }
+  }
+
   private explode(v: Vehicle) {
     const s = v.state;
     s.wrecked = true;
@@ -460,6 +543,11 @@ export class SimWorld {
       if (o === v || o.state.wrecked) continue;
       const d = Math.hypot(o.state.x - s.x, o.state.z - s.z);
       if (d < 7) o.state.health -= 80 * (1 - d / 7);
+    }
+    for (const i of [...this.props.near(s.x, s.z, 7, this.scratch)]) {
+      const p = this.map.props[i];
+      const d = Math.hypot(p.x - s.x, p.z - s.z) + 0.1;
+      if (d < 7) this.breakProp(i, ((p.x - s.x) / d) * 12, ((p.z - s.z) / d) * 12, 8);
     }
   }
 
@@ -702,16 +790,31 @@ export class SimWorld {
     }
     const spec = WEAPONS[weapon];
     p.attackCooldown = spec.cooldown;
-    const aimYaw = s.speed > 0.5 ? s.facing : p.input?.yaw ?? s.facing;
-    const target = this.autoAim(p, aimYaw, spec.range, spec.melee ? Math.PI : spec.aimCone);
-    if (target) s.facing = Math.atan2(-(target.x - s.x), -(target.z - s.z));
-    else if (s.speed < 0.5) s.facing = aimYaw;
     s.actionSeq++;
     if (spec.melee) {
       s.action = s.actionSeq % 3 === 0 ? 'kick' : 'punch';
-      p.pendingHit = 10;
+      // Melee assist: lock on the closest target around and lunge at it
+      const target = this.meleeTarget(p, 3.4);
+      p.meleeLock = target;
+      if (target) {
+        const dx = target.x - s.x;
+        const dz = target.z - s.z;
+        const d = Math.hypot(dx, dz);
+        s.facing = Math.atan2(-dx, -dz);
+        if (d > 1.1) {
+          const v = Math.min(10, (d - 1.0) / 0.12);
+          s.vx = (dx / d) * v;
+          s.vz = (dz / d) * v;
+          p.lungeTicks = 7;
+        }
+      }
+      p.pendingHit = 7;
       return;
     }
+    const aimYaw = s.speed > 0.5 ? s.facing : p.input?.yaw ?? s.facing;
+    const target = this.autoAim(p, aimYaw, spec.range, spec.aimCone);
+    if (target) s.facing = Math.atan2(-(target.x - s.x), -(target.z - s.z));
+    else if (s.speed < 0.5) s.facing = aimYaw;
     s.action = 'shoot';
     s.ammo[weapon]--;
     const fx = s.x - Math.sin(s.facing) * 0.6;
@@ -725,11 +828,6 @@ export class SimWorld {
       tx = target.x;
       ty = target.y;
       tz = target.z;
-      hit = true;
-      if (target.ped) {
-        this.damagePed(target.ped, spec.damage, p, s.x, s.z);
-        this.crime(p, target.ped.alive ? 'shoot_person' : 'knockout', tx, tz, target.ped);
-      } else if (target.vehicle) target.vehicle.state.health -= spec.damage * 0.8;
     } else {
       const dx = -Math.sin(s.facing);
       const dz = -Math.cos(s.facing);
@@ -738,61 +836,175 @@ export class SimWorld {
       ty = fy;
       tz = fz + dz * d;
     }
+    // a fragile prop on the bullet's path takes the hit (bins fly, hydrants burst…)
+    const blocker = this.propOnSegment(fx, fz, tx, tz);
+    if (blocker) {
+      const len = Math.hypot(tx - fx, tz - fz) || 1;
+      this.breakProp(blocker.i, ((tx - fx) / len) * 7, ((tz - fz) / len) * 7, 3);
+      tx = blocker.x;
+      tz = blocker.z;
+      ty = 0.6;
+    } else if (target) {
+      hit = true;
+      this.hitTarget(p, target, spec.damage, false);
+    }
     this.events.push({ type: 'shot', fx, fy, fz, tx, ty, tz, hit });
     this.crime(p, 'gunshot', s.x, s.z, null, true);
     for (const ped of this.peds.values()) {
-      if (Math.hypot(ped.state.x - s.x, ped.state.z - s.z) < 40) ped.scare(s.x, s.z, this.rng.chance(0.35));
+      if (ped.state.mode !== 'fight' && Math.hypot(ped.state.x - s.x, ped.state.z - s.z) < 40) ped.scare(s.x, s.z, this.rng.chance(0.35));
     }
   }
 
-  private autoAim(p: Player, yaw: number, range: number, cone: number) {
+  /** Closest fragile prop crossing the 2D segment a→b. */
+  private propOnSegment(ax: number, az: number, bx: number, bz: number) {
+    const len = Math.hypot(bx - ax, bz - az);
+    if (len < 0.1) return null;
+    const ux = (bx - ax) / len;
+    const uz = (bz - az) / len;
+    let best: { i: number; x: number; z: number; t: number } | null = null;
+    for (let t = 0; t < len + 6; t += 10) {
+      for (const i of this.props.near(ax + ux * Math.min(t, len), az + uz * Math.min(t, len), 6, this.scratch)) {
+        const d = this.map.props[i];
+        if (!PROP_SPECS[d.kind].fragile) continue;
+        const along = (d.x - ax) * ux + (d.z - az) * uz;
+        if (along < 0.3 || along > len) continue;
+        const off = Math.abs((d.x - ax) * uz - (d.z - az) * ux);
+        if (off < this.props.radius(i) + 0.15 && (!best || along < best.t)) best = { i, x: d.x, z: d.z, t: along };
+      }
+    }
+    return best;
+  }
+
+  /** Everything a player can hit: pedestrians, other players, cars (guns only). */
+  private targets(p: Player, withVehicles: boolean): Target[] {
+    const out: Target[] = [];
+    const s = p.state;
+    for (const ped of this.peds.values()) if (ped.alive) out.push({ x: ped.state.x, y: ped.state.y + 1.1, z: ped.state.z, ped });
+    for (const o of this.players.values()) {
+      if (o === p || o.state.dead || o.state.vehicle >= 0 || o.state.interior !== s.interior) continue;
+      out.push({ x: o.state.x, y: o.state.y + 1.1, z: o.state.z, player: o });
+    }
+    if (withVehicles) for (const v of this.vehicles.values()) if (!v.state.wrecked && v.state.driver !== s.id) out.push({ x: v.state.x, y: v.state.y + 0.9, z: v.state.z, vehicle: v });
+    return out;
+  }
+
+  private meleeTarget(p: Player, range: number): Target | null {
+    const s = p.state;
+    const fx = -Math.sin(s.facing);
+    const fz = -Math.cos(s.facing);
+    let best: Target | null = null;
+    let bestScore = Infinity;
+    for (const t of this.targets(p, false)) {
+      const dx = t.x - s.x;
+      const dz = t.z - s.z;
+      const d = Math.hypot(dx, dz);
+      if (d > range || Math.abs(t.y - 1.1 - s.y) > 1.5) continue;
+      const cos = d > 0.01 ? (dx * fx + dz * fz) / d : 1;
+      const score = d * (1.6 - cos * 0.6);
+      if (score < bestScore) {
+        bestScore = score;
+        best = t;
+      }
+    }
+    return best;
+  }
+
+  private autoAim(p: Player, yaw: number, range: number, cone: number): Target | null {
     const s = p.state;
     const fx = -Math.sin(yaw);
     const fz = -Math.cos(yaw);
-    let best: { x: number; y: number; z: number; ped?: Ped; vehicle?: Vehicle } | null = null;
+    let best: Target | null = null;
     let bestScore = Infinity;
-    const consider = (x: number, y: number, z: number, ped?: Ped, vehicle?: Vehicle) => {
-      const dx = x - s.x;
-      const dz = z - s.z;
+    for (const t of this.targets(p, true)) {
+      const dx = t.x - s.x;
+      const dz = t.z - s.z;
       const d = Math.hypot(dx, dz);
-      if (d > range || d < 0.1) return;
+      if (d > range || d < 0.1) continue;
       const cos = (dx * fx + dz * fz) / d;
-      if (cos < Math.cos(cone)) return;
-      const score = d * (2 - cos);
-      if (score >= bestScore) return;
-      if (d > 2 && this.castStatic(s.x, s.y + 1.3, s.z, dx / d, (y - s.y - 1.3) / d, dz / d, d) < d - 0.5) return;
+      if (cos < Math.cos(cone)) continue;
+      // people first, cars only if nobody is in the cone
+      const score = d * (2 - cos) + (t.vehicle ? 60 : 0);
+      if (score >= bestScore) continue;
+      if (d > 2 && this.castStatic(s.x, s.y + 1.3, s.z, dx / d, (t.y - s.y - 1.3) / d, dz / d, d) < d - 0.5) continue;
       bestScore = score;
-      best = { x, y, z, ped, vehicle };
-    };
-    for (const ped of this.peds.values()) if (ped.alive) consider(ped.state.x, ped.state.y + 1.1, ped.state.z, ped);
-    if (!WEAPONS[s.weapon].melee) for (const v of this.vehicles.values()) if (!v.state.wrecked && v.state.driver === 'npc') consider(v.state.x, v.state.y + 0.9, v.state.z, undefined, v);
-    return best as { x: number; y: number; z: number; ped?: Ped; vehicle?: Vehicle } | null;
+      best = t;
+    }
+    return best;
   }
 
   private resolveMelee(p: Player) {
     const s = p.state;
-    const spec = WEAPONS.fist;
+    let t = p.meleeLock as Target | null;
+    p.meleeLock = null;
+    // the locked target must still be in reach (generous), otherwise take whoever is in front
+    if (t) {
+      const cur = t.ped ? t.ped.state : t.player?.state;
+      if (!cur || Math.hypot(cur.x - s.x, cur.z - s.z) > 2.4 || (t.ped && !t.ped.alive) || (t.player && t.player.state.dead)) t = null;
+    }
+    t ??= this.meleeTarget(p, 2.0);
+    if (!t) {
+      // nobody around: kick the closest fragile prop in front (bins, bollards, benches…)
+      const fx = -Math.sin(s.facing);
+      const fz = -Math.cos(s.facing);
+      for (const i of this.props.near(s.x + fx, s.z + fz, 1.3, this.scratch)) {
+        if (PROP_SPECS[this.map.props[i].kind].fragile) {
+          this.breakProp(i, fx * 7, fz * 7, 3);
+          break;
+        }
+      }
+      return;
+    }
+    const cur = (t.ped ? t.ped.state : t.player!.state) as { x: number; y: number; z: number };
     const fx = -Math.sin(s.facing);
     const fz = -Math.cos(s.facing);
-    let best: Ped | null = null;
-    let bd = Infinity;
-    for (const ped of this.peds.values()) {
-      if (!ped.alive) continue;
-      const dx = ped.state.x - s.x;
-      const dz = ped.state.z - s.z;
-      const d = Math.hypot(dx, dz);
-      if (d < spec.range && (dx * fx + dz * fz) / (d + 1e-6) > 0.35 && d < bd) {
-        bd = d;
-        best = ped;
+    if (t.ped) {
+      t.ped.kvx = fx * 2.2;
+      t.ped.kvz = fz * 2.2;
+    }
+    this.events.push({ type: 'punch', x: cur.x, y: cur.y + 1.3, z: cur.z });
+    this.hitTarget(p, t, s.action === 'kick' ? WEAPONS.fist.damage * 1.3 : WEAPONS.fist.damage, true);
+    for (const o of this.peds.values()) if (o !== t.ped && Math.hypot(o.state.x - s.x, o.state.z - s.z) < 14) o.scare(s.x, s.z, false);
+  }
+
+  private hitTarget(p: Player, t: Target, damage: number, melee: boolean) {
+    const s = p.state;
+    if (t.ped) {
+      this.damagePed(t.ped, damage, p, s.x, s.z);
+      s.lastHit = t.ped.state.id;
+      s.lastHitTick = this.tick;
+      this.crime(p, t.ped.alive ? (melee ? 'assault' : 'shoot_person') : 'knockout', t.ped.state.x, t.ped.state.z, t.ped);
+    } else if (t.player) {
+      this.damagePlayer(t.player, damage * 0.8);
+    } else if (t.vehicle) t.vehicle.state.health -= damage * 0.8;
+  }
+
+  /** Pedestrians who fight back: chase the attacker and throw punches. */
+  private pedFight(ped: Ped) {
+    const s = ped.state;
+    const target = s.target ? this.players.get(s.target) : undefined;
+    const ts = target?.state;
+    if (!ts || ts.dead || ts.vehicle >= 0 || ts.interior || Math.hypot(ts.x - s.x, ts.z - s.z) > 25) {
+      s.mode = 'walk';
+      s.target = null;
+      ped.to = ped.from = this.nearestWalkNode(s.x, s.z);
+      return;
+    }
+    ped.chase.x = ts.x;
+    ped.chase.z = ts.z;
+    ped.chase.stop = 1.15;
+    const d = Math.hypot(ts.x - s.x, ts.z - s.z);
+    if (ped.pendingHit > 0 && --ped.pendingHit === 0) {
+      if (d < 1.9) {
+        this.events.push({ type: 'punch', x: ts.x, y: ts.y + 1.3, z: ts.z });
+        this.damagePlayer(target!, s.action === 'kick' ? 11 : 8);
       }
     }
-    if (!best) return;
-    best.kvx = fx * 2.5;
-    best.kvz = fz * 2.5;
-    this.events.push({ type: 'punch', x: best.state.x, y: best.state.y + 1.3, z: best.state.z });
-    this.damagePed(best, s.action === 'kick' ? spec.damage * 1.3 : spec.damage, p, s.x, s.z);
-    this.crime(p, best.alive ? 'assault' : 'knockout', best.state.x, best.state.z, best);
-    for (const o of this.peds.values()) if (o !== best && Math.hypot(o.state.x - s.x, o.state.z - s.z) < 14) o.scare(s.x, s.z, false);
+    if (d < 1.6 && ped.attackCooldown <= 0 && ped.pendingHit <= 0) {
+      s.actionSeq++;
+      s.action = s.actionSeq % 3 === 0 ? 'kick' : 'punch';
+      ped.pendingHit = 14;
+      ped.attackCooldown = this.rng.range(0.9, 1.4);
+    }
   }
 
   damagePed(ped: Ped, amount: number, by: Player | null, fromX: number, fromZ: number) {
@@ -800,7 +1012,9 @@ export class SimWorld {
     ped.state.health -= amount;
     ped.state.hitSeq++;
     if (ped.state.health <= 0) {
+      ped.state.health = 0;
       ped.state.mode = 'ko';
+      ped.state.target = null;
       ped.timer = 0;
       ped.state.facing = Math.atan2(-(fromX - ped.state.x), -(fromZ - ped.state.z));
       if (ped.state.money > 0) {
@@ -811,8 +1025,12 @@ export class SimWorld {
     } else if (ped.state.mode === 'shopkeeper') {
       ped.state.mode = 'cower';
       ped.timer = 6;
-    } else ped.scare(fromX, fromZ, false);
-    void by;
+    } else ped.hurt(by?.state.id ?? null, fromX, fromZ);
+  }
+
+  /** Ground height for walkers (park hills), cheap: terrain lookup, no raycast. */
+  private groundY(x: number, z: number) {
+    return this.map.terrain ? terrainHeight(this.map.terrain, x, z) : 0;
   }
 
   damagePlayer(p: Player, amount: number) {
@@ -1044,6 +1262,7 @@ export class SimWorld {
       vehicles: [...this.vehicles.values()].map((v) => ({ ...v.state })),
       pickups: [...this.pickups.values()].map((p) => ({ ...p })),
       wanted: { ...this.wanted },
+      props: this.props.snapshot(),
     };
   }
 

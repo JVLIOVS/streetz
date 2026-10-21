@@ -132,6 +132,58 @@ export function buildSidewalkGraph(map: MapData): WalkNode[] {
     });
     for (let k = 0; k < 4; k++) link(ids[k], ids[(k + 1) % 4]);
   }
+  // Squares: a loop around the fountain, linked to the block corners
+  for (const b of map.blocks) {
+    if (b.kind !== 'place') continue;
+    const cx = (b.x0 + b.x1) / 2;
+    const cz = (b.z0 + b.z1) / 2;
+    const ring: number[] = [];
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2;
+      const n: WalkNode = { id: nodes.length, x: cx + Math.cos(a) * 12, z: cz + Math.sin(a) * 12, links: [] };
+      nodes.push(n);
+      ring.push(n.id);
+    }
+    for (let k = 0; k < 6; k++) link(ring[k], ring[(k + 1) % 6]);
+    for (const c of nodes.filter((n) => !ring.includes(n.id) && n.x > b.x0 && n.x < b.x1 && n.z > b.z0 && n.z < b.z1)) {
+      let best = ring[0];
+      for (const r of ring) if (Math.hypot(nodes[r].x - c.x, nodes[r].z - c.z) < Math.hypot(nodes[best].x - c.x, nodes[best].z - c.z)) best = r;
+      link(c.id, best);
+    }
+  }
+  // Park: a coarse grid of paths over the hills, connected to the nearest sidewalks
+  if (map.terrain) {
+    const t = map.terrain;
+    const n = 4;
+    const grid: number[][] = [];
+    const corners = nodes.length;
+    for (let i = 0; i < n; i++) {
+      grid.push([]);
+      for (let j = 0; j < n; j++) {
+        const node: WalkNode = { id: nodes.length, x: t.x0 + 25 + (i / (n - 1)) * (t.sizeX - 50), z: t.z0 + 25 + (j / (n - 1)) * (t.sizeZ - 50), links: [] };
+        nodes.push(node);
+        grid[i].push(node.id);
+      }
+    }
+    for (let i = 0; i < n; i++)
+      for (let j = 0; j < n; j++) {
+        if (i + 1 < n) link(grid[i][j], grid[i + 1][j]);
+        if (j + 1 < n) link(grid[i][j], grid[i][j + 1]);
+      }
+    for (const id of grid.flat()) {
+      const p = nodes[id];
+      let best = -1;
+      let bd = 45;
+      for (let k = 0; k < corners; k++) {
+        const d = Math.hypot(nodes[k].x - p.x, nodes[k].z - p.z);
+        if (d < bd) {
+          bd = d;
+          best = k;
+        }
+      }
+      if (best >= 0) link(id, best);
+    }
+  }
   // Crosswalks: corners facing each other across a street (aligned on x or z)
   for (const a of nodes) {
     for (const b of nodes) {

@@ -1,3 +1,4 @@
+import { Vector3 } from 'three';
 import type { Sound } from './audio/sound';
 import { CommandQueue, type MoveCommand } from './core/commands';
 import { FixedLoop } from './core/loop';
@@ -107,6 +108,9 @@ export class Game {
         case 'explosion':
           this.sound.explosion(d);
           break;
+        case 'break':
+          if (d < 40) this.sound.impact(e.kind === 'streetlight' || e.kind === 'trafficlight' || e.kind === 'dumpster' ? 14 : 7);
+          break;
         case 'impact':
           if (d < 20) this.sound.impact(e.strength);
           break;
@@ -126,6 +130,24 @@ export class Game {
           break;
       }
     }
+  }
+
+  private tmp = new Vector3();
+
+  /** Shows the health of the last pedestrian you hit, above their head, for a few seconds. */
+  private updateTargetBar(id: number, tick: number) {
+    const ped = this.sim.peds.get(id);
+    if (!ped || tick < 0 || this.sim.tick - tick > 60 * 5) {
+      this.hud.setTargetBar(null);
+      return;
+    }
+    const s = ped.state;
+    const v = this.tmp.set(s.x, s.y + 2.25, s.z).project(this.view.cam.camera);
+    if (v.z > 1) {
+      this.hud.setTargetBar(null);
+      return;
+    }
+    this.hud.setTargetBar({ x: ((v.x + 1) / 2) * innerWidth, y: ((1 - v.y) / 2) * innerHeight, ratio: s.health / s.maxHealth });
   }
 
   private render(alpha: number, dt: number) {
@@ -152,6 +174,7 @@ export class Game {
     }
     this.hud.update(dt);
     this.hud.updatePlayer(me);
+    this.updateTargetBar(me.lastHit, me.lastHitTick);
     this.hudTimer -= dt;
     if (this.hudTimer <= 0) {
       this.hudTimer = 1 / 20;

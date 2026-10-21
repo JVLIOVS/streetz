@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { MapData } from '../maps/types';
 import type { GameAssets } from './assets';
 import { buildChunkDetails, buildSigns } from './details';
+import { PropsView } from './props';
 import { buildingMaterial, roadMaterial, roofMaterial, toon, waterMaterial } from './materials';
 
 export const CHUNK_SIZE = 125;
@@ -28,6 +29,7 @@ const _e = new THREE.Euler();
 export class CityView {
   readonly root = new THREE.Group();
   readonly chunks: Chunk[] = [];
+  readonly props: PropsView;
   private buildingMat = buildingMaterial();
   private roofMat = roofMaterial();
 
@@ -72,6 +74,15 @@ export class CityView {
       }
     }
     this.root.add(buildSigns(map));
+    this.props = new PropsView(
+      map,
+      assets,
+      this.chunks.map((c) => c.group),
+      chunkKey,
+      opts.shadows,
+      (k) => this.chunks[k].detail,
+    );
+    this.root.add(this.props.root);
     this.buildTrees(map, chunkOf, opts.shadows);
     this.root.add(this.buildSolids(map, opts.shadows));
     this.root.add(this.buildRoads(map, opts.shadows));

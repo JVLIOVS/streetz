@@ -3,7 +3,10 @@ import { DT } from '../core/loop';
 import type { Rng } from '../core/rng';
 import type { WalkNode } from './nav';
 
-export type PedMode = 'walk' | 'idle' | 'flee' | 'cower' | 'ko' | 'shopkeeper' | 'wave';
+export type PedMode = 'walk' | 'idle' | 'flee' | 'cower' | 'ko' | 'shopkeeper' | 'wave' | 'stun' | 'fight';
+
+/** How a pedestrian reacts when attacked. */
+export type Temper = 'coward' | 'scared' | 'fighter';
 
 /** Serializable pedestrian state. */
 export interface PedState {
@@ -20,6 +23,13 @@ export interface PedState {
   money: number;
   /** Incremented each time the ped gets hit (renderer plays a hit reaction). */
   hitSeq: number;
+  maxHealth: number;
+  temper: Temper;
+  /** Player this ped is fighting (fighters only). */
+  target: string | null;
+  /** Last attack move and a counter so the renderer plays it once. */
+  action: 'punch' | 'kick' | null;
+  actionSeq: number;
 }
 
 const WALK = 1.45;
@@ -37,6 +47,12 @@ export class Ped {
   kvz = 0;
   ambient = true;
   walkSpeed: number;
+  /** Chase target set by the world each tick while fighting. */
+  chase = { x: 0, z: 0, stop: 1.2 };
+  attackCooldown = 0;
+  pendingHit = -1;
+  /** What to do once the hit stun wears off. */
+  afterStun: PedMode = 'flee';
 
   constructor(
     public state: PedState,
@@ -59,8 +75,26 @@ export class Ped {
     return this.state.mode !== 'ko';
   }
 
-  scare(x: number, z: number, cower: boolean) {
+  /** Hit reaction: short stun, then the ped's temper decides (fight back, flee or cower). */
+  hurt(attacker: string | null, x: number, z: number) {
+    const s = this.state;
     if (!this.alive || !this.ambient) return;
+    this.threat.x = x;
+    this.threat.z = z;
+    let next: PedMode = s.temper === 'fighter' ? 'fight' : s.temper === 'scared' ? 'cower' : 'flee';
+    // even tough guys run when nearly beaten
+    if (next === 'fight' && s.health < s.maxHealth * 0.25) next = 'flee';
+    if (next === 'fight' && !attacker) next = 'flee';
+    if (s.mode === 'fight' && next === 'fight') {
+      this.timer = 0.25; // keep fighting, tiny flinch
+    } else this.timer = 0.55;
+    this.afterStun = next;
+    s.target = next === 'fight' ? attacker : null;
+    s.mode = 'stun';
+  }
+
+  scare(x: number, z: number, cower: boolean) {
+    if (!this.alive || !this.ambient || this.state.mode === 'fight' || this.state.mode === 'stun') return;
     this.threat.x = x;
     this.threat.z = z;
     if (this.state.mode !== 'flee') {
@@ -97,6 +131,29 @@ export class Ped {
         this.timer -= DT;
         if (this.timer <= 0) s.mode = 'walk';
         break;
+      case 'stun':
+        s.speed = 0;
+        this.timer -= DT;
+        if (this.timer <= 0) {
+          s.mode = this.afterStun;
+          this.timer = this.afterStun === 'cower' ? 1.8 : 9;
+        }
+        break;
+      case 'fight': {
+        // movement only: the world decides targets and resolves punches
+        if (this.attackCooldown > 0) this.attackCooldown -= DT;
+        const dx = this.chase.x - s.x;
+        const dz = this.chase.z - s.z;
+        const d = Math.hypot(dx, dz);
+        s.facing = Math.atan2(-dx, -dz);
+        if (d > this.chase.stop) {
+          const step = Math.min(d - this.chase.stop, 4.6 * DT);
+          s.x += (dx / d) * step;
+          s.z += (dz / d) * step;
+          s.speed = 4.6;
+        } else s.speed = 0;
+        break;
+      }
       case 'cower':
         s.speed = 0;
         this.timer -= DT;

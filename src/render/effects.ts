@@ -18,6 +18,8 @@ interface Puff {
   life: number;
   max: number;
   color: THREE.Color;
+  /** Gravity (m/s²), for water and debris. */
+  g: number;
 }
 
 const _m = new THREE.Matrix4();
@@ -31,6 +33,8 @@ const C = {
   yellow: new THREE.Color(0xffd23f),
   white: new THREE.Color(0xffffff),
   dust: new THREE.Color(0xd8cdb8),
+  water: new THREE.Color(0x7fd6ff),
+  spark: new THREE.Color(0xfff2a0),
 };
 
 /**
@@ -56,7 +60,7 @@ export class Effects {
     this.puffMesh.frustumCulled = false;
     this.puffMesh.count = 0;
     this.puffMesh.setColorAt(0, C.white);
-    for (let i = 0; i < MAX_PUFFS; i++) this.puffs.push({ alive: false, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, size: 1, grow: 0, life: 0, max: 1, color: new THREE.Color() });
+    for (let i = 0; i < MAX_PUFFS; i++) this.puffs.push({ alive: false, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, size: 1, grow: 0, life: 0, max: 1, color: new THREE.Color(), g: 0 });
 
     this.tracerGeo = new THREE.BufferGeometry();
     this.tracerGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAX_TRACERS * 6), 3).setUsage(THREE.DynamicDrawUsage));
@@ -71,10 +75,10 @@ export class Effects {
     this.root.add(this.puffMesh, tracers, this.money);
   }
 
-  private spawn(x: number, y: number, z: number, vx: number, vy: number, vz: number, size: number, grow: number, life: number, color: THREE.Color) {
+  private spawn(x: number, y: number, z: number, vx: number, vy: number, vz: number, size: number, grow: number, life: number, color: THREE.Color, g = 0) {
     const p = this.puffs.find((q) => !q.alive);
     if (!p) return;
-    Object.assign(p, { alive: true, x, y, z, vx, vy, vz, size, grow, life, max: life });
+    Object.assign(p, { alive: true, x, y, z, vx, vy, vz, size, grow, life, max: life, g });
     p.color.copy(color);
   }
 
@@ -91,6 +95,9 @@ export class Effects {
         if (!e.hit) this.spawn(e.tx, e.ty, e.tz, 0, 0.5, 0, 0.15, 1.2, 0.3, C.dust);
         break;
       }
+      case 'break':
+        for (let k = 0; k < 8; k++) this.spawn(e.x, e.y, e.z, rnd(3), Math.random() * 4, rnd(3), 0.15, 0.8, 0.5, k % 2 ? C.dust : C.spark, 10);
+        break;
       case 'punch':
         for (let k = 0; k < 5; k++) this.spawn(e.x, e.y, e.z, rnd(3), rnd(3), rnd(3), 0.08, 0.4, 0.18, C.white);
         break;
@@ -102,6 +109,14 @@ export class Effects {
         for (let k = 0; k < 16; k++) this.spawn(e.x, e.y + 1, e.z, rnd(3), 2 + Math.random() * 4, rnd(3), 1.2, 2.5, 1.6 + Math.random(), C.dark);
         this.spawn(e.x, e.y + 1, e.z, 0, 0, 0, 2.5, 14, 0.25, C.yellow);
         break;
+    }
+  }
+
+  /** Water gushing from a broken hydrant. */
+  waterJet(x: number, z: number, left: number, dt: number) {
+    const rate = 40 * Math.min(1, left / 5);
+    for (let k = 0; k < rate * dt + (Math.random() < (rate * dt) % 1 ? 1 : 0); k++) {
+      this.spawn(x + rnd(0.1), 0.6, z + rnd(0.1), rnd(1.2), 9 + Math.random() * 3, rnd(1.2), 0.12, 0.5, 1.4, C.water, 18);
     }
   }
 
@@ -131,7 +146,9 @@ export class Effects {
         continue;
       }
       p.x += p.vx * dt;
+      p.vy -= p.g * dt;
       p.y += p.vy * dt;
+      if (p.g > 0 && p.y < 0.05) p.life = 0;
       p.z += p.vz * dt;
       p.vx *= 0.96;
       p.vz *= 0.96;

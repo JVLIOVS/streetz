@@ -150,7 +150,7 @@ export interface ParkingSpot {
   yaw: number;
 }
 
-export type PropKind = 'streetlight' | 'trafficlight' | 'bench' | 'trash' | 'hydrant' | 'dumpster' | 'bush';
+export type PropKind = 'streetlight' | 'trafficlight' | 'bench' | 'trash' | 'hydrant' | 'dumpster' | 'bush' | 'bollard';
 
 export interface PropDef {
   kind: PropKind;

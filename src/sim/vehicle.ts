@@ -83,7 +83,7 @@ export class Vehicle {
    * lateral grip (low grip = drift), gravity, moved with a character controller so it
    * slides along walls and climbs slopes. Returns the impact strength (m/s lost).
    */
-  update(controller: RAPIER_T.KinematicCharacterController, groundProbe: (x: number, z: number, y: number) => number | null): number {
+  update(controller: RAPIER_T.KinematicCharacterController, groundProbe: (x: number, z: number, y: number) => number | null, filterGroups?: number): number {
     const s = this.state;
     const sp = this.spec;
     const inp = s.wrecked ? { throttle: 0, steer: 0, handbrake: true } : this.input;
@@ -133,7 +133,7 @@ export class Vehicle {
     s.vy = this.grounded && s.vy <= 0 ? -2 : s.vy - 26 * DT;
 
     const desired = { x: s.vx * DT, y: s.vy * DT, z: s.vz * DT };
-    controller.computeColliderMovement(this.collider, desired);
+    controller.computeColliderMovement(this.collider, desired, undefined, filterGroups);
     const m = controller.computedMovement();
     const wasGrounded = this.grounded;
     this.grounded = controller.computedGrounded();

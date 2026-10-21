@@ -364,7 +364,7 @@ function dressedGeometry(look: HumanLook, t: Template): THREE.BufferGeometry {
 
 // --------------------------------------------------------------------------- view
 
-export type BaseAnim = 'idle' | 'walk' | 'run' | 'sprint' | 'jump' | 'fall' | 'ko' | 'drive' | 'cower' | 'wave' | 'aim';
+export type BaseAnim = 'idle' | 'walk' | 'run' | 'sprint' | 'jump' | 'fall' | 'ko' | 'drive' | 'cower' | 'wave' | 'aim' | 'guard';
 export type OverlayAnim = 'punch' | 'kick' | 'shoot' | 'hit' | 'interact';
 
 const BASE_CLIPS: Record<BaseAnim, { clip: string; loop: boolean; speed?: number }> = {
@@ -379,6 +379,7 @@ const BASE_CLIPS: Record<BaseAnim, { clip: string; loop: boolean; speed?: number
   cower: { clip: 'Crouching', loop: true },
   wave: { clip: 'Waving', loop: true },
   aim: { clip: 'Ranged_1H_Aiming', loop: true },
+  guard: { clip: 'Melee_Unarmed_Idle', loop: true },
 };
 const OVERLAY_CLIPS: Record<OverlayAnim, { clip: string; speed?: number }> = {
   punch: { clip: 'Melee_Unarmed_Attack_Punch_A', speed: 1.6 },

@@ -15,9 +15,9 @@ const params = new URLSearchParams(location.search);
 const debug = params.has('debug');
 
 const DENSITY: Record<QualityLevel, { peds: number; traffic: number; parkedRadius: number }> = {
-  low: { peds: 14, traffic: 8, parkedRadius: 55 },
-  medium: { peds: 22, traffic: 12, parkedRadius: 70 },
-  high: { peds: 30, traffic: 16, parkedRadius: 85 },
+  low: { peds: 24, traffic: 9, parkedRadius: 55 },
+  medium: { peds: 38, traffic: 13, parkedRadius: 70 },
+  high: { peds: 50, traffic: 18, parkedRadius: 85 },
 };
 
 async function boot() {
