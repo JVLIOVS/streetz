@@ -742,7 +742,7 @@ export class SimWorld {
     const airport = this.map.pois.find((q) => q.kind === 'airport');
     if (airport && Math.hypot(airport.x - s.x, airport.z - s.z) < 5) return { kind: 'travel', label: 'Voyager', target: airport.id };
     for (const ped of this.peds.values()) {
-      if (!ped.alive || ped.state.mode === 'flee' || ped.state.mode === 'cower') continue;
+      if (!ped.alive || ['flee', 'cower', 'fight', 'stun'].includes(ped.state.mode)) continue;
       if (Math.hypot(ped.state.x - s.x, ped.state.z - s.z) < 1.8) return { kind: 'talk', label: 'Parler', target: ped.state.id };
     }
     return null;

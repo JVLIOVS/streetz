@@ -53,7 +53,7 @@ async function buildCharacters() {
   }
   for (const t of root.listTextures()) t.dispose();
   await MeshoptSimplifier.ready;
-  await doc.transform(weld(), simplify({ simplifier: MeshoptSimplifier, ratio: 0.45, error: 0.01 }), resample(), prune(), dedup(), unpartition());
+  await doc.transform(weld(), simplify({ simplifier: MeshoptSimplifier, ratio: 0.3, error: 0.03 }), resample(), prune(), dedup(), unpartition());
   await io.write(OUT + 'characters.glb', doc);
   console.log('characters.glb', root.listAnimations().map((a) => a.getName()).join(', '));
 }

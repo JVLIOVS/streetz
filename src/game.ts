@@ -142,7 +142,7 @@ export class Game {
       return;
     }
     const s = ped.state;
-    const v = this.tmp.set(s.x, s.y + 2.25, s.z).project(this.view.cam.camera);
+    const v = this.tmp.set(s.x, s.y + 1.95, s.z).project(this.view.cam.camera);
     if (v.z > 1) {
       this.hud.setTargetBar(null);
       return;
