@@ -111,7 +111,7 @@ describe('vehicles', () => {
     run(w, 1, (t) => [act(t, 'use')]);
     expect(P(w).vehicle).toBe(car.state.id);
     expect(w.peds.size).toBe(peds + 1);
-    expect(w.wanted.level).toBeGreaterThanOrEqual(1);
+    expect(P(w).wanted).toBeGreaterThanOrEqual(1);
   });
 
   it('the 4x4 climbs the park hills', async () => {
@@ -197,15 +197,15 @@ describe('combat', () => {
     }
     expect(ped.alive).toBe(false);
     expect(P(w).ammo.pistol).toBeLessThan(ammo);
-    expect(w.wanted.level).toBeGreaterThanOrEqual(2);
+    expect(P(w).wanted).toBeGreaterThanOrEqual(2);
   });
 
   it('wanted stars fade when lying low', async () => {
     const w = await world();
-    w.wanted.level = 2;
-    w.wanted.cooldown = 25;
+    P(w).wanted = 2;
+    P(w).wantedCooldown = 25;
     run(w, 60 * 52);
-    expect(w.wanted.level).toBe(0);
+    expect(P(w).wanted).toBe(0);
   });
 });
 
@@ -230,7 +230,7 @@ describe('buildings', () => {
     run(w, 1, (t) => [act(t, 'use')]);
     run(w, 60 * 6);
     expect(P(w).money).toBeGreaterThan(money + 200);
-    expect(w.wanted.level).toBeGreaterThanOrEqual(2);
+    expect(P(w).wanted).toBeGreaterThanOrEqual(2);
     w.players.get('p1')!.teleport(room.exit.x, 0.2, room.exit.z + 0.2);
     run(w, 3);
     expect(P(w).context?.kind).toBe('exit_building');
