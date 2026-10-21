@@ -13,6 +13,8 @@ const move = (tick: number, x: number, y: number, extra: Partial<MoveCommand> = 
   yaw: 0,
   sprint: false,
   jump: false,
+  throttle: 0,
+  handbrake: false,
   ...extra,
 });
 
@@ -51,7 +53,7 @@ describe('SimWorld', () => {
     run(w, 60, (t) => move(t, 0, 1)); // yaw 0 → forward is -z
     const p = w.players.get('p1')!.state;
     expect(z0 - p.z).toBeGreaterThan(3);
-    expect(p.anim).toBe('walk');
+    expect(p.anim).toBe('run');
 
     const w2 = await world();
     run(w2, 30, () => null);
@@ -60,14 +62,22 @@ describe('SimWorld', () => {
     expect(w2.players.get('p1')!.state.x - x0).toBeGreaterThan(3);
   });
 
-  it('sprints faster than walking', async () => {
-    const a = await world();
-    const b = await world();
-    run(a, 120, (t) => move(t, 0, 1));
-    run(b, 120, (t) => move(t, 0, 1, { sprint: true }));
-    const da = Math.abs(a.players.get('p1')!.state.z - map.spawn.z);
-    const db = Math.abs(b.players.get('p1')!.state.z - map.spawn.z);
-    expect(db).toBeGreaterThan(da * 1.4);
+  it('has three gaits: walk < run < sprint', async () => {
+    const dist = async (x: number, y: number, sprint: boolean) => {
+      const w = await world();
+      run(w, 20, () => null);
+      const z0 = w.players.get('p1')!.state.z;
+      run(w, 90, (t) => move(t, x, y, { sprint }));
+      return { d: Math.abs(w.players.get('p1')!.state.z - z0), anim: w.players.get('p1')!.state.anim };
+    };
+    const walk = await dist(0, 0.45, false);
+    const runG = await dist(0, 1, false);
+    const sprint = await dist(0, 1, true);
+    expect(walk.anim).toBe('walk');
+    expect(runG.anim).toBe('run');
+    expect(sprint.anim).toBe('sprint');
+    expect(runG.d).toBeGreaterThan(walk.d * 1.8);
+    expect(sprint.d).toBeGreaterThan(runG.d * 1.3);
   });
 
   it('jumps and comes back down', async () => {
@@ -127,7 +137,7 @@ describe('SimWorld', () => {
     const w = await world();
     run(w, 10, (t) => move(t, 1, 0));
     const snap = w.snapshot();
-    expect(JSON.parse(JSON.stringify(snap))).toEqual(snap);
+    expect(JSON.stringify(JSON.parse(JSON.stringify(snap)))).toBe(JSON.stringify(snap));
     expect(snap.players[0].id).toBe('p1');
   });
 

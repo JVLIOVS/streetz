@@ -15,5 +15,9 @@ export const GROUP = {
   STATIC: 0x0001,
   PLAYER: 0x0002,
   QUERY: 0x0004,
+  PED: 0x0008,
+  VEHICLE: 0x0010,
+  /** Trees, fountains: block movement but not the camera. */
+  PROP: 0x0020,
 };
 export const groups = (membership: number, filter: number) => ((membership & 0xffff) << 16) | (filter & 0xffff);

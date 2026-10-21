@@ -22,12 +22,17 @@ export function buildStaticColliders(R: typeof RAPIER_T, world: RAPIER_T.World, 
     const h = b.h + b.roofH;
     add(R.ColliderDesc.cuboid(b.w / 2, h / 2, b.d / 2).setTranslation(b.x, h / 2, b.z));
   }
+  const prop = groups(GROUP.PROP, 0xffff);
+  const addProp = (desc: RAPIER_T.ColliderDesc) => {
+    world.createCollider(desc.setCollisionGroups(prop).setFriction(0.6), body);
+    count++;
+  };
   for (const t of map.trees) {
-    add(R.ColliderDesc.cylinder(1.5, 0.3 * t.s).setTranslation(t.x, t.y + 1.5, t.z));
+    addProp(R.ColliderDesc.cylinder(1.5, 0.3 * t.s).setTranslation(t.x, t.y + 1.5, t.z));
   }
   for (const f of map.fountains) {
-    add(R.ColliderDesc.cylinder(0.4, f.r).setTranslation(f.x, 0.4, f.z));
-    add(R.ColliderDesc.cylinder(1.6, 0.8).setTranslation(f.x, 1.6, f.z));
+    addProp(R.ColliderDesc.cylinder(0.4, f.r).setTranslation(f.x, 0.4, f.z));
+    addProp(R.ColliderDesc.cylinder(1.6, 0.8).setTranslation(f.x, 1.6, f.z));
   }
   if (map.terrain) {
     const t = map.terrain;

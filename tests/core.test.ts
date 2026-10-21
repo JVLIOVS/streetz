@@ -50,7 +50,7 @@ describe('FixedLoop', () => {
 describe('CommandQueue', () => {
   it('drains commands up to a tick and keeps the rest', () => {
     const q = new CommandQueue();
-    const mk = (tick: number): MoveCommand => ({ type: 'move', playerId: 'p', tick, x: 0, y: 1, yaw: 0, sprint: false, jump: false });
+    const mk = (tick: number): MoveCommand => ({ type: 'move', playerId: 'p', tick, x: 0, y: 1, yaw: 0, sprint: false, jump: false, throttle: 0, handbrake: false });
     q.push(mk(1));
     q.push(mk(2));
     q.push(mk(5));
@@ -58,7 +58,7 @@ describe('CommandQueue', () => {
     expect(q.size).toBe(1);
   });
   it('commands survive a JSON round trip (network-ready)', () => {
-    const c: MoveCommand = { type: 'move', playerId: 'p', tick: 3, x: 0.5, y: -1, yaw: 1.2, sprint: true, jump: false };
+    const c: MoveCommand = { type: 'move', playerId: 'p', tick: 3, x: 0.5, y: -1, yaw: 1.2, sprint: true, jump: false, throttle: 0, handbrake: false };
     expect(JSON.parse(JSON.stringify(c))).toEqual(c);
   });
 });

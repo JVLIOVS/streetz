@@ -1,8 +1,16 @@
 import type RAPIER_T from '@dimforge/rapier3d-compat';
 import type { MoveCommand } from '../core/commands';
 import { DT } from '../core/loop';
+import type { WeaponId } from '../data/weapons';
 
-export type PlayerAnim = 'idle' | 'walk' | 'run' | 'jump' | 'fall';
+export type PlayerAnim = 'idle' | 'walk' | 'run' | 'sprint' | 'jump' | 'fall' | 'drive' | 'ko';
+export type PlayerAction = 'punch' | 'kick' | 'shoot' | 'hit' | 'interact';
+
+export interface ContextAction {
+  kind: 'enter_vehicle' | 'steal_vehicle' | 'exit_vehicle' | 'enter_building' | 'exit_building' | 'rob' | 'talk' | 'travel';
+  label: string;
+  target: number | string;
+}
 
 /** Serializable player state (what a server would broadcast). */
 export interface PlayerState {
@@ -18,13 +26,30 @@ export interface PlayerState {
   grounded: boolean;
   anim: PlayerAnim;
   speed: number;
+  health: number;
+  armor: number;
+  money: number;
+  weapon: WeaponId;
+  ammo: Record<WeaponId, number>;
+  /** Vehicle id when driving, -1 on foot. */
+  vehicle: number;
+  /** Interior id when inside a building. */
+  interior: string | null;
+  /** Last one-shot action and a counter so the renderer can play it once. */
+  action: PlayerAction | null;
+  actionSeq: number;
+  /** Robbery progress 0..1 (or -1). */
+  robbery: number;
+  context: ContextAction | null;
+  dead: boolean;
 }
 
 export const PLAYER_TUNING = {
   radius: 0.35,
   halfHeight: 0.55, // capsule total height = 2 * (halfHeight + radius) = 1.8 m
-  walkSpeed: 4.6,
-  runSpeed: 8.6,
+  walkSpeed: 2.3,
+  runSpeed: 5.6,
+  sprintSpeed: 8.8,
   jumpSpeed: 8.2,
   gravity: 26,
   groundAccel: 14,
@@ -39,6 +64,13 @@ export class Player {
   prev = { x: 0, y: 0, z: 0, facing: 0 };
   input: MoveCommand | null = null;
   private jumpQueued = false;
+  attackCooldown = 0;
+  /** Pending melee hit (applied a few ticks after the punch starts). */
+  pendingHit = -1;
+  respawnTimer = 0;
+  robberyTarget: string | null = null;
+  robberyTime = 0;
+  lastRobbery = new Map<string, number>();
 
   constructor(
     id: string,
@@ -58,6 +90,18 @@ export class Player {
       grounded: false,
       anim: 'idle',
       speed: 0,
+      health: 100,
+      armor: 0,
+      money: 500,
+      weapon: 'fist',
+      ammo: { fist: 0, pistol: 48, rifle: 0 },
+      vehicle: -1,
+      interior: null,
+      action: null,
+      actionSeq: 0,
+      robbery: -1,
+      context: null,
+      dead: false,
     };
     this.savePrev();
   }
@@ -74,7 +118,7 @@ export class Player {
     this.prev.facing = this.state.facing;
   }
 
-  /** One fixed tick of character movement. */
+  /** One fixed tick of on-foot movement. */
   update(controller: RAPIER_T.KinematicCharacterController) {
     const T = PLAYER_TUNING;
     const s = this.state;
@@ -82,16 +126,17 @@ export class Player {
     let sx = inp?.x ?? 0;
     let sy = inp?.y ?? 0;
     const mag = Math.min(1, Math.hypot(sx, sy));
-    if (mag > 1e-3) {
-      sx /= Math.max(1, Math.hypot(sx, sy));
-      sy /= Math.max(1, Math.hypot(sx, sy));
+    if (mag > 1) {
+      sx /= mag;
+      sy /= mag;
     }
     const yaw = inp?.yaw ?? 0;
     // Camera-relative: forward = (-sin yaw, -cos yaw), right = (cos yaw, -sin yaw)
     const dirX = Math.cos(yaw) * sx - Math.sin(yaw) * sy;
     const dirZ = -Math.sin(yaw) * sx - Math.cos(yaw) * sy;
-    const sprint = !!inp?.sprint && mag > 0.2;
-    const maxSpeed = sprint ? T.runSpeed : T.walkSpeed * Math.min(1, mag * 1.25);
+    // Three gaits: light push = walk, full push = run, sprint button = sprint
+    const sprint = !!inp?.sprint && mag > 0.3;
+    const maxSpeed = s.dead ? 0 : sprint ? T.sprintSpeed : mag < 0.65 ? T.walkSpeed * Math.min(1, mag / 0.4) : T.runSpeed;
     const dl = Math.hypot(dirX, dirZ);
     const tx = dl > 1e-4 ? (dirX / dl) * maxSpeed : 0;
     const tz = dl > 1e-4 ? (dirZ / dl) * maxSpeed : 0;
@@ -101,7 +146,7 @@ export class Player {
     s.vx += (tx - s.vx) * k;
     s.vz += (tz - s.vz) * k;
 
-    if (this.jumpQueued && s.grounded) {
+    if (this.jumpQueued && s.grounded && !s.dead) {
       s.vy = T.jumpSpeed;
       s.grounded = false;
     } else if (s.grounded && s.vy <= 0) {
@@ -133,15 +178,21 @@ export class Player {
       const target = Math.atan2(-s.vx, -s.vz);
       s.facing = lerpAngle(s.facing, target, 1 - Math.exp(-T.turnRate * DT));
     }
-    s.anim = !s.grounded ? (s.vy > 0 ? 'jump' : 'fall') : hs > T.walkSpeed + 0.8 ? 'run' : hs > 0.4 ? 'walk' : 'idle';
+    if (s.dead) s.anim = 'ko';
+    else if (!s.grounded) s.anim = s.vy > 0 ? 'jump' : 'fall';
+    else if (hs > T.runSpeed + 0.8) s.anim = 'sprint';
+    else if (hs > T.walkSpeed + 0.6) s.anim = 'run';
+    else if (hs > 0.3) s.anim = 'walk';
+    else s.anim = 'idle';
   }
 
-  teleport(x: number, y: number, z: number) {
+  teleport(x: number, y: number, z: number, facing?: number) {
     const s = this.state;
     s.x = x;
     s.y = y;
     s.z = z;
     s.vx = s.vy = s.vz = 0;
+    if (facing !== undefined) s.facing = facing;
     this.body.setTranslation({ x, y, z }, true);
     this.body.setNextKinematicTranslation({ x, y, z });
     this.savePrev();
@@ -153,4 +204,11 @@ export function lerpAngle(a: number, b: number, t: number): number {
   if (d > Math.PI) d -= Math.PI * 2;
   if (d < -Math.PI) d += Math.PI * 2;
   return a + d * t;
+}
+
+export function angleDiff(a: number, b: number): number {
+  let d = (b - a) % (Math.PI * 2);
+  if (d > Math.PI) d -= Math.PI * 2;
+  if (d < -Math.PI) d += Math.PI * 2;
+  return d;
 }

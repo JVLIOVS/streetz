@@ -3,20 +3,42 @@
  * CommandQueue; in multiplayer the same objects will be sent to the authoritative server.
  */
 
+/** Continuous input, sent every tick. */
 export interface MoveCommand {
   type: 'move';
   playerId: string;
   tick: number;
-  /** Stick axes in [-1, 1], screen space: x = right, y = forward. */
+  /** Stick axes in [-1, 1], screen space: x = right, y = forward. In a vehicle x steers. */
   x: number;
   y: number;
   /** Camera yaw (radians) so movement is camera-relative without the sim knowing the camera. */
   yaw: number;
   sprint: boolean;
+  /** Jump pressed this tick (on foot). */
   jump: boolean;
+  /** Vehicle pedals: 1 accelerate, -1 brake/reverse, 0 none. */
+  throttle: number;
+  handbrake: boolean;
 }
 
-export type Command = MoveCommand;
+export type ActionKind =
+  /** Punch / shoot with the current weapon. */
+  | 'attack'
+  /** Contextual action: enter/exit vehicle, open door, rob, talk... */
+  | 'use'
+  /** Cycle weapons. */
+  | 'weapon'
+  | 'horn';
+
+/** One-shot action (button tap). */
+export interface ActionCommand {
+  type: 'action';
+  playerId: string;
+  tick: number;
+  action: ActionKind;
+}
+
+export type Command = MoveCommand | ActionCommand;
 
 export class CommandQueue {
   private items: Command[] = [];
