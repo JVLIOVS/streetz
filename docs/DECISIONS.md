@@ -18,3 +18,12 @@
 - 2026-10-21 — Périphérique au niveau du sol (2×2 voies, 22 m), fermé par des murs antibruit en bordure de map.
 - 2026-10-21 — playwright-core 1.56 (aligné sur le Chromium préinstallé) pour les tests headless.
 - 2026-10-21 — Déploiement via la branche `gh-pages` (poussée par le workflow) plutôt que la source « GitHub Actions » : aucun réglage manuel de Pages requis.
+- 2026-10-21 — Retour testeur « trop minimaliste » : on abandonne le perso en primitives pour le mannequin KayKit CC0 animé, habillé par code (couleurs par zone d'os + cheveux/casquette/visage fusionnés → 1 draw call par perso).
+- 2026-10-21 — Personnage simplifié à ~4 000 triangles au build (meshoptimizer) ; contours seulement < 18 m, ombres des PNJ < 25 m, animations des PNJ lointains à 10–20 Hz.
+- 2026-10-21 — Trois allures : joystick à moitié = marche (2,3 m/s), à fond = course (5,6 m/s), bouton Sprint = sprint (8,8 m/s).
+- 2026-10-21 — Véhicules : modèle arcade maison (vitesse avant/latérale, adhérence latérale, frein à main = dérapage) déplacé par un character controller Rapier (glisse le long des murs, grimpe les pentes, sauts conservés).
+- 2026-10-21 — Circulation à droite ; graphe de voies dérivé des routes ; trafic, piétons et voitures garées apparaissent autour du joueur (pools, densité selon la qualité).
+- 2026-10-21 — Intérieurs construits hors carte (x > 1000) et rejoints par la porte : une seule description en boîtes sert aux collisions (sim) et à l'affichage.
+- 2026-10-21 — Police pas encore présente : les étoiles montent et redescendent (25 s par étoile) ; l'IA de police arrive avec le jalon 3.
+- 2026-10-21 — Pas de lumière dynamique pour les explosions (coût mobile) : flash et particules instanciées.
+- 2026-10-21 — Le joueur est masqué dans les voitures fermées (la tête dépassait du toit), visible sur le scooter.

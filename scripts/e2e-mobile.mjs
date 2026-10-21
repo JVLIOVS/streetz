@@ -11,7 +11,7 @@ const quality = process.env.QUALITY || 'medium';
 let server = null;
 let base = process.env.BASE_URL;
 if (!base) {
-  server = spawn('npx', ['vite', 'preview', '--port', '4173', '--strictPort'], { stdio: 'pipe' });
+  server = spawn(process.execPath, ['node_modules/vite/bin/vite.js', 'preview', '--port', '4173', '--strictPort'], { stdio: 'pipe' });
   base = 'http://localhost:4173/';
   await new Promise((resolve, reject) => {
     const t = setTimeout(() => reject(new Error('preview server timeout')), 20000);
@@ -121,9 +121,63 @@ try {
     triangles: after.triangles,
     pixelRatio: after.pixelRatio,
     tick: after.tick,
+    peds: after.peds,
+    vehicles: after.vehicles,
   });
   if (moved < 10) fail(`player moved only ${moved.toFixed(1)} m with the joystick`);
   if (!['jump', 'fall'].includes(midAir.player.anim) && midAir.player.grounded) fail('jump button had no effect');
+  if (after.peds < 8) fail(`only ${after.peds} pedestrians`);
+  if (after.vehicles < 8) fail(`only ${after.vehicles} vehicles`);
+
+  // Punch button
+  const seq0 = (await stats()).player.actionSeq;
+  await page.locator('#btn-attack').tap();
+  await page.waitForTimeout(300);
+  if ((await stats()).player.actionSeq === seq0) fail('attack button had no effect');
+
+  // Walk up to the sports car parked next to the square, get in with the contextual button, drive, get out
+  await page.evaluate(() => {
+    const s = window.__streetz;
+    s.sim.players.get('local').teleport(-58, 0.3, -72.6, Math.PI);
+  });
+  await page.waitForTimeout(600);
+  const ctxLabel = await page.locator('#btn-action').textContent();
+  results.contextNearCar = ctxLabel?.trim();
+  if (!/MONTER/.test(ctxLabel ?? '')) fail(`expected "Monter" near the car, got "${ctxLabel}"`);
+  await page.locator('#btn-action').tap();
+  await page.waitForTimeout(400);
+  const inCar = await stats();
+  if (inCar.player.vehicle < 0) fail('could not get in the car');
+  const gas = await page.locator('#btn-gas').boundingBox();
+  await touch('touchStart', [{ x: gas.x + gas.width / 2, y: gas.y + gas.height / 2, id: 5 }]);
+  let topSpeed = 0;
+  for (let i = 0; i < 10; i++) {
+    await page.waitForTimeout(250);
+    topSpeed = Math.max(topSpeed, Math.abs((await stats()).player.speed));
+  }
+  await page.screenshot({ path: OUT + 'driving.png' });
+  await touch('touchEnd', []);
+  const driven = await stats();
+  driven.player.speed = topSpeed;
+  results.carSpeed = +topSpeed.toFixed(1);
+  if (topSpeed < 5) fail(`car too slow: ${driven.player.speed} held=${JSON.stringify(await page.evaluate(() => [window.__streetz.controls.held, window.__streetz.controls.state]))} pos=${driven.player.x.toFixed(1)},${driven.player.z.toFixed(1)}`);
+  await page.locator('#btn-action').tap();
+  await page.waitForTimeout(400);
+  if ((await stats()).player.vehicle >= 0) fail('could not get out of the car');
+
+  // Enter a shop through its door
+  await page.evaluate(() => {
+    const s = window.__streetz;
+    const d = s.sim.map.interiors.find((i) => i.kind === 'shop').door;
+    s.sim.players.get('local').teleport(d.x - Math.sin(d.yaw) * 1.4, 0.3, d.z - Math.cos(d.yaw) * 1.4, d.yaw + Math.PI);
+  });
+  await page.waitForTimeout(500);
+  await page.locator('#btn-action').tap();
+  await page.waitForTimeout(800);
+  const inside = await stats();
+  results.interior = inside.player.interior;
+  if (!inside.player.interior) fail('could not enter the shop');
+  await page.screenshot({ path: OUT + 'shop.png' });
 
   // Pause menu opens
   await page.locator('#btn-pause').tap();
