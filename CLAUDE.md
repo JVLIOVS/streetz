@@ -34,4 +34,5 @@ TypeScript + Vite + Three.js (0.169) + Rapier (`@dimforge/rapier3d-compat`). Tes
 `docs/PLAN.md` (plan/jalons), `docs/DECISIONS.md` (décisions en une ligne), `docs/CREDITS.md`, `docs/MULTIPLAYER.md`.
 
 ## État
-- Jalon 1 (Socle) : en cours.
+- Jalon 1 (Socle) : terminé en local (build, 24 tests unitaires, e2e headless OK). Déploiement en attente du dépôt GitHub `judubuisson13/streetz` (public, vide) que l'utilisateur doit créer ; ensuite : `git remote add origin …`, push sur `main`, activer Pages (Settings → Pages → Source : GitHub Actions).
+- Prochain : jalon 2 (ville complète + véhicules + PNJ + jour/nuit).
