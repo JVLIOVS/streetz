@@ -13,7 +13,7 @@ import { Ped, type PedState } from './peds';
 import { PROP_SPECS, PropField, type BrokenProp } from './props';
 import { GROUP, groups, initPhysics } from './physics';
 import { angleDiff, Player, PLAYER_TUNING, type ContextAction, type PlayerState } from './player';
-import { Vehicle, type VehicleState } from './vehicle';
+import { Vehicle, type VehicleNet, type VehicleState } from './vehicle';
 
 export interface PickupState {
   id: number;
@@ -24,6 +24,7 @@ export interface PickupState {
   amount: number;
 }
 
+/** @deprecated kept for reference: wanted level now lives on each player. */
 export interface WantedState {
   level: number;
   /** Seconds since the last reported crime. */
@@ -39,7 +40,6 @@ export interface WorldSnapshot {
   peds: PedState[];
   vehicles: VehicleState[];
   pickups: PickupState[];
-  wanted: WantedState;
   props: BrokenProp[];
 }
 
@@ -52,13 +52,32 @@ export type SimEvent =
   | { type: 'toast'; playerId: string; text: string }
   | { type: 'money'; playerId: string; amount: number }
   | { type: 'horn'; vehicle: number }
-  | { type: 'wanted'; level: number }
+  | { type: 'wanted'; playerId: string; level: number }
+  | { type: 'joined'; playerId: string; name: string }
+  | { type: 'left'; playerId: string; name: string }
   | { type: 'break'; x: number; y: number; z: number; kind: string; prop: number };
 
 export interface Density {
   peds: number;
   traffic: number;
   parkedRadius: number;
+}
+
+/** What a multiplayer guest sends about itself ~20 times per second. */
+export interface PlayerReport {
+  x: number;
+  y: number;
+  z: number;
+  vx: number;
+  vz: number;
+  f: number;
+  yaw: number;
+  anim: PlayerState['anim'];
+  g: boolean;
+  sp: number;
+  /** Last teleport applied. */
+  tp: number;
+  v?: VehicleNet & { dmg: number };
 }
 
 /** Something a player can hit. */
@@ -86,7 +105,8 @@ export class SimWorld {
   readonly peds = new Map<number, Ped>();
   readonly vehicles = new Map<number, Vehicle>();
   readonly pickups = new Map<number, PickupState>();
-  readonly wanted: WantedState = { level: 0, heat: 0, cooldown: 0 };
+  /** 'authority' runs everything (solo / host); 'replica' mirrors a host (multiplayer client). */
+  readonly role: 'authority' | 'replica';
   events: SimEvent[] = [];
   staticColliderCount = 0;
   density: Density = { peds: 22, traffic: 12, parkedRadius: 75 };
@@ -109,7 +129,9 @@ export class SimWorld {
     private R: typeof RAPIER_T,
     readonly physics: RAPIER_T.World,
     readonly map: MapData,
+    role: 'authority' | 'replica',
   ) {
+    this.role = role;
     this.rng = new Rng(map.seed ^ 0x5eed);
     this.controller = this.makeController(50, 0.45);
     this.carController = this.makeController(32, 0.25);
@@ -120,15 +142,36 @@ export class SimWorld {
     this.buildInteriors();
     this.props = new PropField(map.props);
     this.buildProps();
-    for (const f of map.featured) this.spawnVehicle(f.type as VehicleType, f.x, 0.3, f.z, f.yaw, 'none', false);
+    if (role === 'authority') for (const f of map.featured) this.spawnVehicle(f.type as VehicleType, f.x, 0.3, f.z, f.yaw, 'none', false);
     physics.step(); // build the query structures once
   }
 
-  static async create(map: MapData): Promise<SimWorld> {
+  static async create(map: MapData, role: 'authority' | 'replica' = 'authority'): Promise<SimWorld> {
     const R = await initPhysics();
     const physics = new R.World({ x: 0, y: -9.81 * 2, z: 0 });
     physics.timestep = 1 / 60;
-    return new SimWorld(R, physics, map);
+    return new SimWorld(R, physics, map, role);
+  }
+
+  /** Highest wanted level among players (traffic gets nervous). */
+  get maxWanted() {
+    let m = 0;
+    for (const p of this.players.values()) m = Math.max(m, p.state.wanted);
+    return m;
+  }
+
+  /** Authoritative teleport: clients see the bumped teleportSeq and move their own player. */
+  teleportPlayer(p: Player, x: number, y: number, z: number, facing?: number) {
+    p.teleport(x, y, z, facing);
+    p.state.teleportSeq++;
+  }
+
+  removePlayer(id: string) {
+    const p = this.players.get(id);
+    if (!p) return;
+    if (p.state.vehicle >= 0) this.leaveVehicle(p);
+    this.physics.removeRigidBody(p.body);
+    this.players.delete(id);
   }
 
   private makeController(climbDeg: number, step: number) {
@@ -157,9 +200,9 @@ export class SimWorld {
     return p;
   }
 
-  spawnPed(x: number, z: number, opts: { from?: number; to?: number; ambient?: boolean; mode?: PedState['mode']; facing?: number } = {}): Ped {
+  spawnPed(x: number, z: number, opts: { from?: number; to?: number; ambient?: boolean; mode?: PedState['mode']; facing?: number; id?: number } = {}): Ped {
     const R = this.R;
-    const id = this.nextId++;
+    const id = opts.id ?? this.nextId++;
     const body = this.physics.createRigidBody(R.RigidBodyDesc.kinematicPositionBased().setTranslation(x, 0, z));
     const collider = this.physics.createCollider(
       R.ColliderDesc.capsule(0.5, 0.32).setTranslation(0, 0.85, 0).setCollisionGroups(groups(GROUP.PED, GROUP.PLAYER | GROUP.QUERY)),
@@ -203,10 +246,10 @@ export class SimWorld {
     this.peds.delete(id);
   }
 
-  spawnVehicle(type: VehicleType, x: number, y: number, z: number, yaw: number, driver: string, ambient: boolean): Vehicle {
+  spawnVehicle(type: VehicleType, x: number, y: number, z: number, yaw: number, driver: string, ambient: boolean, forcedId?: number): Vehicle {
     const R = this.R;
     const sp = VEHICLES[type];
-    const id = this.nextId++;
+    const id = forcedId ?? this.nextId++;
     const body = this.physics.createRigidBody(
       R.RigidBodyDesc.kinematicPositionBased().setTranslation(x, y, z).setRotation({ w: Math.cos(yaw / 2), x: 0, y: Math.sin(yaw / 2), z: 0 }),
     );
@@ -270,6 +313,11 @@ export class SimWorld {
     }
   }
 
+  /** Multiplayer replica: mirror a prop broken on the host. */
+  applyBrokenProp(b: BrokenProp) {
+    if (this.props.applyRemote(b)) this.propColliders[b.id]?.setEnabled(false);
+  }
+
   /** Breaks a street prop with a push; returns true if it was intact. */
   breakProp(i: number, vx: number, vz: number, up = 2): boolean {
     if (!this.props.break(i, vx, vz, up)) return false;
@@ -292,7 +340,7 @@ export class SimWorld {
           body,
         );
       }
-      if (room.clerk) {
+      if (room.clerk && this.role === 'authority') {
         const clerk = this.spawnPed(room.clerk.x, room.clerk.z, { ambient: false, mode: 'shopkeeper', facing: Math.PI });
         this.clerks.set(def.id, clerk.state.id);
       }
@@ -303,6 +351,10 @@ export class SimWorld {
 
   /** Advance one fixed tick with the commands for this tick. */
   step(commands: readonly Command[]): void {
+    if (this.role === 'replica') {
+      this.stepReplica(commands);
+      return;
+    }
     for (const c of commands) {
       const p = this.players.get(c.playerId);
       if (!p) continue;
@@ -326,10 +378,135 @@ export class SimWorld {
     this.tick++;
   }
 
+  // ------------------------------------------------------------------ multiplayer
+
+  /**
+   * Replica tick (multiplayer client): only the local player (and the car they drive) are
+   * simulated; everything else eases towards the host's last snapshot.
+   */
+  private stepReplica(commands: readonly Command[]) {
+    for (const c of commands) if (c.type === 'move') this.players.get(c.playerId)?.setInput(c);
+    for (const p of this.players.values()) {
+      const s = p.state;
+      p.savePrev();
+      if (p.remote) {
+        this.followNet(p);
+        continue;
+      }
+      if (s.dead) continue;
+      const v = s.vehicle >= 0 ? this.vehicles.get(s.vehicle) : undefined;
+      if (v) {
+        const inp = p.input;
+        const stickThrottle = inp && Math.abs(inp.y) > 0.4 ? Math.sign(inp.y) : 0;
+        v.input = { throttle: inp ? inp.throttle || stickThrottle : 0, steer: inp ? inp.x : 0, handbrake: !!inp?.handbrake };
+        v.savePrev();
+        const ctrl = v.state.type === 'offroad' ? this.offroadController : this.carController;
+        const impact = v.update(ctrl, (x, z, y) => this.groundAt(x, z, y), groups(GROUP.VEHICLE, GROUP.STATIC | GROUP.VEHICLE | GROUP.PROP));
+        if (impact > 0) {
+          v.pendingDamage += (impact - 3) * 3.5;
+          this.events.push({ type: 'impact', x: v.state.x, y: v.state.y + 0.8, z: v.state.z, strength: impact });
+        }
+        if (Math.abs(v.state.speed) > 1.2) this.vehicleProps(v);
+        s.x = v.state.x;
+        s.y = v.state.y;
+        s.z = v.state.z;
+        s.facing = v.state.yaw;
+        s.speed = Math.abs(v.state.speed);
+        s.anim = 'drive';
+        continue;
+      }
+      p.update(this.controller);
+      if (s.y < this.map.killY) {
+        const sp = this.map.spawn;
+        p.teleport(sp.x, sp.y, sp.z);
+        this.events.push({ type: 'respawn', playerId: s.id, reason: 'drowned' });
+      }
+    }
+    const mine = new Set([...this.players.values()].filter((p) => !p.remote).map((p) => p.state.vehicle));
+    for (const v of this.vehicles.values()) {
+      if (mine.has(v.state.id)) continue;
+      v.savePrev();
+      v.followNet();
+    }
+    for (const ped of this.peds.values()) {
+      ped.savePrev();
+      ped.followNet();
+    }
+    this.props.update((x, z) => this.groundY(x, z));
+    this.physics.step();
+    this.tick++;
+  }
+
+  /** Remote player: glide towards the last reported position (dead reckoning between reports). */
+  private followNet(p: Player) {
+    const s = p.state;
+    const n = p.net;
+    if (!n.has) return;
+    n.x += n.vx * DT;
+    n.z += n.vz * DT;
+    const k = 0.35;
+    s.x += (n.x - s.x) * k;
+    s.y += (n.y - s.y) * k;
+    s.z += (n.z - s.z) * k;
+    let df = (n.facing - s.facing) % (Math.PI * 2);
+    if (df > Math.PI) df -= Math.PI * 2;
+    if (df < -Math.PI) df += Math.PI * 2;
+    s.facing += df * k;
+    if (Math.hypot(n.x - s.x, n.z - s.z) > 8) {
+      s.x = n.x;
+      s.y = n.y;
+      s.z = n.z;
+    }
+    p.body.setNextKinematicTranslation({ x: s.x, y: s.y, z: s.z });
+  }
+
+  /** Host side: position report from a remote player (ignored until they applied our last teleport). */
+  applyPlayerReport(id: string, r: PlayerReport) {
+    const p = this.players.get(id);
+    if (!p || r.tp < p.state.teleportSeq) return;
+    const s = p.state;
+    Object.assign(p.net, { x: r.x, y: r.y, z: r.z, facing: r.f, vx: r.vx, vz: r.vz, has: true });
+    s.vx = r.vx;
+    s.vz = r.vz;
+    s.anim = r.anim;
+    s.grounded = r.g;
+    s.speed = r.sp;
+    if (p.input) p.input.yaw = r.yaw;
+    else p.input = { type: 'move', playerId: id, tick: this.tick, x: 0, y: 0, yaw: r.yaw, sprint: false, jump: false, throttle: 0, handbrake: false };
+    if (r.v && s.vehicle === r.v.id) {
+      const v = this.vehicles.get(r.v.id);
+      if (v) {
+        v.setNet(r.v);
+        v.state.health -= r.v.dmg;
+      }
+    }
+  }
+
   private updatePlayer(p: Player) {
     const s = p.state;
     p.savePrev();
     if (p.attackCooldown > 0) p.attackCooldown -= DT;
+    if (p.remote) {
+      // Multiplayer guest: movement comes from their reports, the host resolves the rest
+      if (s.vehicle < 0 && !s.dead) this.followNet(p);
+      else if (s.vehicle >= 0) {
+        const v = this.vehicles.get(s.vehicle);
+        if (v) {
+          s.x = v.state.x;
+          s.y = v.state.y;
+          s.z = v.state.z;
+          s.facing = v.state.yaw;
+        }
+      }
+      if (s.dead) {
+        p.respawnTimer -= DT;
+        if (p.respawnTimer <= 0) this.respawnAtHospital(p);
+        return;
+      }
+      if (p.pendingHit > 0 && --p.pendingHit === 0) this.resolveMelee(p);
+      this.updateRobbery(p);
+      return;
+    }
     if (s.dead) {
       p.respawnTimer -= DT;
       s.anim = 'ko';
@@ -371,6 +548,19 @@ export class SimWorld {
   private updateVehicle(v: Vehicle) {
     const s = v.state;
     v.savePrev();
+    const remoteDriver = s.driver !== 'npc' && s.driver !== 'none' ? this.players.get(s.driver) : undefined;
+    if (remoteDriver?.remote) {
+      // driven by a guest: follow their reports, still hit people and props on the host
+      v.followNet();
+      if (Math.abs(s.speed) > 2.5) this.vehicleHits(v);
+      if (Math.abs(s.speed) > 1.2) this.vehicleProps(v);
+      if (!s.wrecked && s.health <= 0) {
+        if (s.fire < 0) s.fire = 4;
+        s.fire -= DT;
+        if (s.fire <= 0) this.explode(v);
+      }
+      return;
+    }
     if (s.driver === 'npc') this.driveAI(v);
     else if (s.driver === 'none') v.input = { throttle: 0, steer: 0, handbrake: true };
     const parkedStill = s.driver === 'none' && Math.abs(s.speed) < 0.05 && v.grounded && s.vy <= 0 && !s.wrecked;
@@ -396,7 +586,7 @@ export class SimWorld {
       if (p) {
         this.leaveVehicle(p);
         const sp = this.map.spawn;
-        p.teleport(sp.x, sp.y, sp.z);
+        this.teleportPlayer(p, sp.x, sp.y, sp.z);
         this.events.push({ type: 'respawn', playerId: p.state.id, reason: 'drowned' });
       }
     }
@@ -429,7 +619,7 @@ export class SimWorld {
     const desired = Math.atan2(-(tx - s.x), -(tz - s.z));
     const diff = angleDiff(s.yaw, desired);
     let target = lane.speed * (Math.abs(diff) > 0.35 ? 0.45 : 1);
-    if (this.wanted.level >= 3) target *= 1.15;
+    if (this.maxWanted >= 3) target *= 1.15;
     // Brake for anything in front
     const fx = -Math.sin(s.yaw);
     const fz = -Math.cos(s.yaw);
@@ -600,7 +790,7 @@ export class SimWorld {
         const def = this.interior(ctx.target as string)!;
         const room = this.rooms.get(def.id)!;
         s.interior = def.id;
-        p.teleport(room.spawn.x, 0.2, room.spawn.z, 0);
+        this.teleportPlayer(p, room.spawn.x, 0.2, room.spawn.z, 0);
         this.toast(p, def.name);
         break;
       }
@@ -611,7 +801,7 @@ export class SimWorld {
         s.robbery = -1;
         const fx = -Math.sin(def.door.yaw);
         const fz = -Math.cos(def.door.yaw);
-        p.teleport(def.door.x + fx * 1.6, 0.2, def.door.z + fz * 1.6, def.door.yaw);
+        this.teleportPlayer(p, def.door.x + fx * 1.6, 0.2, def.door.z + fz * 1.6, def.door.yaw);
         break;
       }
       case 'rob':
@@ -693,11 +883,11 @@ export class SimWorld {
       const x = v.state.x + rx * side * k;
       const z = v.state.z + rz * side * k;
       if (this.castStatic(v.state.x, v.state.y + 1, v.state.z, rx * k, 0, rz * k, side + 0.4) > side + 0.3) {
-        p.teleport(x, v.state.y + 0.3, z, v.state.yaw);
+        this.teleportPlayer(p, x, v.state.y + 0.3, z, v.state.yaw);
         return;
       }
     }
-    p.teleport(v.state.x, v.state.y + v.spec.height + 0.3, v.state.z, v.state.yaw);
+    this.teleportPlayer(p, v.state.x, v.state.y + v.spec.height + 0.3, v.state.z, v.state.yaw);
   }
 
   private computeContext(p: Player): ContextAction | null {
@@ -1059,13 +1249,13 @@ export class SimWorld {
     s.dead = false;
     s.interior = null;
     s.weapon = 'fist';
-    this.wanted.level = 0;
-    this.wanted.heat = 0;
+    s.wanted = 0;
+    s.wantedCooldown = 0;
     if (h) {
       const fx = -Math.sin(h.door.yaw);
       const fz = -Math.cos(h.door.yaw);
-      p.teleport(h.door.x + fx * 2, 0.3, h.door.z + fz * 2, h.door.yaw);
-    } else p.teleport(this.map.spawn.x, 1, this.map.spawn.z);
+      this.teleportPlayer(p, h.door.x + fx * 2, 0.3, h.door.z + fz * 2, h.door.yaw);
+    } else this.teleportPlayer(p, this.map.spawn.x, 1, this.map.spawn.z);
     this.events.push({ type: 'respawn', playerId: s.id, reason: 'hospital' });
     this.toast(p, `Hôpital Sainte-Aube : soins -${lost.toLocaleString('fr-FR')} €`);
   }
@@ -1083,43 +1273,42 @@ export class SimWorld {
       }
     }
     if (!witnessed) return;
-    const w = this.wanted;
-    const before = w.level;
+    const s = p.state;
+    const before = s.wanted;
     switch (kind) {
       case 'assault':
       case 'carjack':
       case 'gunshot':
       case 'hit_and_run':
-        w.level = Math.max(w.level, 1);
+        s.wanted = Math.max(s.wanted, 1);
         break;
       case 'shoot_person':
-        w.level = Math.max(w.level, 2);
+        s.wanted = Math.max(s.wanted, 2);
         break;
       case 'knockout':
-        w.level = Math.min(5, Math.max(2, w.level + 1));
+        s.wanted = Math.min(5, Math.max(2, s.wanted + 1));
         break;
       case 'robbery_shop':
-        w.level = Math.max(w.level, 2);
+        s.wanted = Math.max(s.wanted, 2);
         break;
       case 'robbery_big':
-        w.level = Math.max(w.level, 3);
+        s.wanted = Math.max(s.wanted, 3);
         break;
     }
-    w.heat = 0;
-    w.cooldown = WANTED_DECAY;
-    if (w.level !== before) this.events.push({ type: 'wanted', level: w.level });
-    void p;
+    s.wantedCooldown = WANTED_DECAY;
+    if (s.wanted !== before) this.events.push({ type: 'wanted', playerId: s.id, level: s.wanted });
   }
 
   private updateWanted() {
-    const w = this.wanted;
-    if (w.level === 0) return;
-    w.heat += DT;
-    w.cooldown -= DT;
-    if (w.cooldown <= 0) {
-      w.level--;
-      w.cooldown = WANTED_DECAY;
-      this.events.push({ type: 'wanted', level: w.level });
+    for (const p of this.players.values()) {
+      const s = p.state;
+      if (s.wanted === 0) continue;
+      s.wantedCooldown -= DT;
+      if (s.wantedCooldown <= 0) {
+        s.wanted--;
+        s.wantedCooldown = WANTED_DECAY;
+        this.events.push({ type: 'wanted', playerId: s.id, level: s.wanted });
+      }
     }
   }
 
@@ -1261,7 +1450,6 @@ export class SimWorld {
       peds: [...this.peds.values()].map((p) => ({ ...p.state })),
       vehicles: [...this.vehicles.values()].map((v) => ({ ...v.state })),
       pickups: [...this.pickups.values()].map((p) => ({ ...p })),
-      wanted: { ...this.wanted },
       props: this.props.snapshot(),
     };
   }

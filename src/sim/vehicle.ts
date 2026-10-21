@@ -40,6 +40,21 @@ export interface DriveInput {
   handbrake: boolean;
 }
 
+/** Networked vehicle pose (what a driver reports / a host broadcasts). */
+export interface VehicleNet {
+  id: number;
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+  pitch: number;
+  roll: number;
+  vx: number;
+  vz: number;
+  speed: number;
+  steer: number;
+}
+
 export interface Impact {
   strength: number;
 }
@@ -55,6 +70,9 @@ export class Vehicle {
   parkedSpot = -1;
   /** Ticks since a player last drove it (persistent while recent). */
   touchedTick = -1;
+  /** Multiplayer: last networked pose to glide towards, and damage to report to the host. */
+  net: VehicleNet | null = null;
+  pendingDamage = 0;
 
   constructor(
     public state: VehicleState,
@@ -170,6 +188,40 @@ export class Vehicle {
 
     const lost = before - after;
     return lost > 4 ? lost : 0;
+  }
+
+  setNet(n: VehicleNet) {
+    this.net = { ...n };
+  }
+
+  /** Glide towards the networked pose (dead reckoning with the reported velocity). */
+  followNet() {
+    const n = this.net;
+    if (!n) return;
+    const s = this.state;
+    n.x += n.vx * DT;
+    n.z += n.vz * DT;
+    const k = 0.35;
+    if (Math.hypot(n.x - s.x, n.z - s.z) > 10) {
+      s.x = n.x;
+      s.z = n.z;
+    }
+    s.x += (n.x - s.x) * k;
+    s.y += (n.y - s.y) * k;
+    s.z += (n.z - s.z) * k;
+    let dy = (n.yaw - s.yaw) % (Math.PI * 2);
+    if (dy > Math.PI) dy -= Math.PI * 2;
+    if (dy < -Math.PI) dy += Math.PI * 2;
+    s.yaw += dy * k;
+    s.pitch += (n.pitch - s.pitch) * k;
+    s.roll += (n.roll - s.roll) * k;
+    s.vx = n.vx;
+    s.vz = n.vz;
+    s.speed = n.speed;
+    s.steer = n.steer;
+    s.wheel += (s.speed * DT) / 0.38;
+    this.body.setNextKinematicTranslation({ x: s.x, y: s.y, z: s.z });
+    this.body.setNextKinematicRotation({ w: Math.cos(s.yaw / 2), x: 0, y: Math.sin(s.yaw / 2), z: 0 });
   }
 
   teleport(x: number, y: number, z: number, yaw: number) {

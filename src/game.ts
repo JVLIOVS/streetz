@@ -1,6 +1,6 @@
 import { Vector3 } from 'three';
 import type { Sound } from './audio/sound';
-import { CommandQueue, type MoveCommand } from './core/commands';
+import { CommandQueue, type ActionCommand, type MoveCommand } from './core/commands';
 import { FixedLoop } from './core/loop';
 import type { Controls } from './input/controls';
 import type { GameRenderer } from './render/renderer';
@@ -9,9 +9,19 @@ import type { Hud } from './ui/hud';
 
 export const LOCAL_PLAYER = 'local';
 
+/** Multiplayer hook (host or guest), see src/net/. */
+export interface NetSession {
+  /** Before the sim tick: the host injects guests' actions into the queue. */
+  beforeStep(tick: number, queue: CommandQueue): void;
+  /** A local action: a guest sends it to the host instead of running it locally (returns true). */
+  onLocalAction(cmd: ActionCommand): boolean;
+  /** After the sim tick: snapshots (host) or position reports (guest). */
+  afterStep(tick: number): void;
+}
+
 /**
- * Glue between input → commands → sim → render/HUD/sound. In multiplayer the CommandQueue
- * would also be sent to the server and the sim would reconcile with its snapshots.
+ * Glue between input → commands → sim → render/HUD/sound. In multiplayer the session
+ * forwards commands and snapshots between the host and the guests.
  */
 export class Game {
   readonly queue = new CommandQueue();
@@ -24,6 +34,7 @@ export class Game {
   private raf = 0;
   private lastWanted = 0;
   onSave?: () => void;
+  net: NetSession | null = null;
 
   constructor(
     readonly sim: SimWorld,
@@ -32,6 +43,7 @@ export class Game {
     readonly hud: Hud,
     readonly sound: Sound,
     private debug: boolean,
+    readonly localId: string = LOCAL_PLAYER,
   ) {
     this.loop = new FixedLoop(
       (tick) => this.step(tick),
@@ -40,7 +52,7 @@ export class Game {
   }
 
   get player() {
-    return this.sim.players.get(LOCAL_PLAYER)!.state;
+    return this.sim.players.get(this.localId)!.state;
   }
 
   start() {
@@ -57,7 +69,8 @@ export class Game {
   }
 
   setPaused(p: boolean) {
-    this.paused = p;
+    // in multiplayer the world keeps running behind the menu
+    this.paused = p && !this.net;
     if (p) this.sound.setEngine(false, 0, 0);
     if (!p) this.loop.resetClock();
   }
@@ -70,7 +83,7 @@ export class Game {
     const brake = h.brake || k.brake;
     const cmd: MoveCommand = {
       type: 'move',
-      playerId: LOCAL_PLAYER,
+      playerId: this.localId,
       tick,
       x: s.moveX,
       y: s.moveY,
@@ -81,20 +94,23 @@ export class Game {
       handbrake: h.handbrake || k.handbrake,
     };
     this.queue.push(cmd);
-    for (const a of this.controls.takeActions()) this.queue.push({ type: 'action', playerId: LOCAL_PLAYER, tick, action: a });
+    const actions: ActionCommand[] = this.controls.takeActions().map((a) => ({ type: 'action', playerId: this.localId, tick, action: a }));
     // Holding the trigger keeps attacking (the sim enforces the weapon's rate of fire)
-    if ((h.attack || k.attack) && this.player.vehicle < 0) this.queue.push({ type: 'action', playerId: LOCAL_PLAYER, tick, action: 'attack' });
+    if ((h.attack || k.attack) && this.player.vehicle < 0 && tick % 4 === 0) actions.push({ type: 'action', playerId: this.localId, tick, action: 'attack' });
+    for (const a of actions) if (!this.net?.onLocalAction(a)) this.queue.push(a);
+    this.net?.beforeStep(tick, this.queue);
     this.sim.step(this.queue.drain(tick));
+    this.net?.afterStep(tick);
     const me = this.player;
     for (const e of this.sim.drainEvents()) {
       this.view.handleEvent(e);
       const d = 'x' in e ? Math.hypot((e as { x: number }).x - me.x, (e as { z: number }).z - me.z) : 0;
       switch (e.type) {
         case 'toast':
-          if (e.playerId === LOCAL_PLAYER) this.hud.toast(e.text);
+          if (e.playerId === this.localId) this.hud.toast(e.text);
           break;
         case 'respawn':
-          if (e.playerId === LOCAL_PLAYER) {
+          if (e.playerId === this.localId) {
             if (e.reason === 'drowned') this.hud.toast('Plouf ! Retour sur la terre ferme');
             this.onSave?.();
           }
@@ -118,13 +134,20 @@ export class Game {
           if (e.vehicle === me.vehicle) this.sound.horn();
           break;
         case 'money':
-          if (e.playerId === LOCAL_PLAYER) {
+          if (e.playerId === this.localId) {
             this.sound.cash();
             this.hud.toast(`+${e.amount.toLocaleString('fr-FR')} €`, 1.2);
             this.onSave?.();
           }
           break;
+        case 'joined':
+          this.hud.toast(`${e.name} a rejoint la partie`);
+          break;
+        case 'left':
+          this.hud.toast(`${e.name} a quitté la partie`);
+          break;
         case 'wanted':
+          if (e.playerId !== this.localId) break;
           if (e.level > this.lastWanted) this.sound.alert();
           this.lastWanted = e.level;
           break;
@@ -150,11 +173,23 @@ export class Game {
     this.hud.setTargetBar({ x: ((v.x + 1) / 2) * innerWidth, y: ((1 - v.y) / 2) * innerHeight, ratio: s.health / s.maxHealth });
   }
 
+  private updateNameTags(me: { x: number; z: number; interior: string | null }) {
+    const tags: { id: string; name: string; x: number; y: number }[] = [];
+    for (const p of this.sim.players.values()) {
+      const s = p.state;
+      if (s.id === this.localId || s.interior !== me.interior || Math.hypot(s.x - me.x, s.z - me.z) > 70) continue;
+      const v = this.tmp.set(s.x, s.y + 2.3, s.z).project(this.view.cam.camera);
+      if (v.z > 1) continue;
+      tags.push({ id: s.id, name: s.name, x: ((v.x + 1) / 2) * innerWidth, y: ((1 - v.y) / 2) * innerHeight });
+    }
+    this.hud.setNameTags(tags);
+  }
+
   private render(alpha: number, dt: number) {
     this.controls.update(dt);
     const d = this.controls.takeCameraDelta();
     if (d.yaw || d.pitch) this.view.cam.rotate(d.yaw, d.pitch);
-    this.view.render(LOCAL_PLAYER, alpha, dt, this.controls.state.moveY);
+    this.view.render(this.localId, alpha, dt, this.controls.state.moveY);
     const me = this.player;
     const v = me.vehicle >= 0 ? this.sim.vehicles.get(me.vehicle) : undefined;
     this.sound.setEngine(!!v && !v.state.wrecked, v?.state.speed ?? 0, v && v.input.throttle > 0 ? 1 : 0);
@@ -175,14 +210,14 @@ export class Game {
     this.hud.update(dt);
     this.hud.updatePlayer(me);
     this.updateTargetBar(me.lastHit, me.lastHitTick);
+    if (this.sim.players.size > 1) this.updateNameTags(me);
     this.hudTimer -= dt;
     if (this.hudTimer <= 0) {
       this.hudTimer = 1 / 20;
       this.hud.minimap.update(me.x, me.z, me.facing, this.view.cam.yaw, this.sim);
       this.hud.updateZone(me.x, me.z, me.interior);
       this.hud.setMoney(me.money);
-      const w = this.sim.wanted;
-      this.hud.setStars(w.level, w.level > 0 && w.cooldown < 8);
+      this.hud.setStars(me.wanted, me.wanted > 0 && me.wantedCooldown < 8);
     }
   }
 }

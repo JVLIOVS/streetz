@@ -53,6 +53,8 @@ export class Ped {
   pendingHit = -1;
   /** What to do once the hit stun wears off. */
   afterStun: PedMode = 'flee';
+  /** Multiplayer replica: last position from the host. */
+  net: { x: number; y: number; z: number; facing: number } | null = null;
 
   constructor(
     public state: PedState,
@@ -196,6 +198,26 @@ export class Ped {
         break;
       }
     }
+    this.body.setNextKinematicTranslation({ x: s.x, y: s.y, z: s.z });
+  }
+
+  /** Replica: glide towards the host's position. */
+  followNet() {
+    const n = this.net;
+    if (!n) return;
+    const s = this.state;
+    const k = 0.3;
+    if (Math.hypot(n.x - s.x, n.z - s.z) > 6) {
+      s.x = n.x;
+      s.z = n.z;
+    }
+    s.x += (n.x - s.x) * k;
+    s.y += (n.y - s.y) * k;
+    s.z += (n.z - s.z) * k;
+    let df = (n.facing - s.facing) % (Math.PI * 2);
+    if (df > Math.PI) df -= Math.PI * 2;
+    if (df < -Math.PI) df += Math.PI * 2;
+    s.facing += df * k;
     this.body.setNextKinematicTranslation({ x: s.x, y: s.y, z: s.z });
   }
 

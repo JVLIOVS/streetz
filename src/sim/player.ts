@@ -45,6 +45,14 @@ export interface PlayerState {
   /** Last pedestrian hit, for the target health bar. */
   lastHit: number;
   lastHitTick: number;
+  /** Wanted level (stars) and seconds before the next star is lost. */
+  wanted: number;
+  wantedCooldown: number;
+  /** Incremented by the authority on every teleport (doors, respawn…): clients apply it once. */
+  teleportSeq: number;
+  /** Multiplayer: nickname and outfit seed (-1 = default look). */
+  name: string;
+  look: number;
 }
 
 export const PLAYER_TUNING = {
@@ -74,6 +82,10 @@ export class Player {
   meleeLock: unknown = null;
   lungeTicks = 0;
   respawnTimer = 0;
+  /** Multiplayer: this player's position comes from network reports, not from local physics. */
+  remote = false;
+  /** Last reported position (remote players). */
+  net = { x: 0, y: 0, z: 0, facing: 0, vx: 0, vz: 0, has: false };
   robberyTarget: string | null = null;
   robberyTime = 0;
   lastRobbery = new Map<string, number>();
@@ -110,6 +122,11 @@ export class Player {
       dead: false,
       lastHit: -1,
       lastHitTick: -1,
+      wanted: 0,
+      wantedCooldown: 0,
+      teleportSeq: 0,
+      name: id,
+      look: -1,
     };
     this.savePrev();
   }

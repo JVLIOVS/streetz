@@ -8,11 +8,13 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --port 4173 --strictPort",
     "test": "vitest run",
-    "e2e": "node scripts/e2e-mobile.mjs"
+    "e2e": "node scripts/e2e-mobile.mjs",
+    "e2e:multi": "node scripts/e2e-multi.mjs"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.14.0",
-    "three": "0.169.0"
+    "three": "0.169.0",
+    "trystero": "^0.26.0"
   },
   "devDependencies": {
     "@gltf-transform/core": "^4.1.1",

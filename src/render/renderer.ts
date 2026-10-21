@@ -5,12 +5,18 @@ import type { GameAssets } from './assets';
 import { ThirdPersonCamera } from './camera';
 import { CityView } from './city';
 import { Effects } from './effects';
-import { DEFAULT_LOOK, HumanView, initHumans, type BaseAnim } from './human';
+import { DEFAULT_LOOK, HumanView, initHumans, randomLook, type BaseAnim } from './human';
 import { InteriorsView } from './interiors';
 import { sharedUniforms, skyMaterial } from './materials';
 import { PedRenderer } from './peds';
 import { AdaptiveResolution, QUALITY, type QualityLevel, type QualityPreset } from './quality';
 import { VehicleRenderer } from './vehicles';
+
+interface PlayerSlot {
+  view: HumanView;
+  seq: number;
+  weapon: string;
+}
 
 const SUN_DIR = new THREE.Vector3(-0.45, 0.8, 0.35).normalize();
 const SKY_TOP = new THREE.Color(0x3c8dff);
@@ -24,9 +30,10 @@ export class GameRenderer {
   readonly adaptive: AdaptiveResolution;
   private city: CityView;
   private sun: THREE.DirectionalLight;
-  private player: HumanView;
-  private playerSeq = 0;
-  private playerWeapon = '';
+  private player: PlayerSlot;
+  /** Other players (multiplayer). */
+  private others = new Map<string, PlayerSlot>();
+  private playerLook = -1;
   private lastInterior: string | null = null;
   private sky: THREE.Mesh;
   private preset: QualityPreset;
@@ -80,9 +87,9 @@ export class GameRenderer {
     this.interiors = new InteriorsView(map);
     this.scene.add(this.vehicles.root, this.peds.root, this.effects.root, this.interiors.root);
 
-    this.player = new HumanView(DEFAULT_LOOK);
-    this.player.setOutline(true);
-    this.scene.add(this.player.root);
+    this.player = { view: new HumanView(DEFAULT_LOOK), seq: 0, weapon: '' };
+    this.player.view.setOutline(true);
+    this.scene.add(this.player.view.root);
 
     this.resize();
     addEventListener('resize', () => this.resize());
@@ -183,12 +190,20 @@ export class GameRenderer {
       }
       cx = x;
       cz = z;
+      if (s.look !== this.playerLook) {
+        // your own outfit (multiplayer guests get a random one, the same the others see)
+        this.playerLook = s.look;
+        this.player.view.dispose();
+        this.player = { view: new HumanView(s.look >= 0 ? randomLook(s.look) : DEFAULT_LOOK), seq: s.actionSeq, weapon: '' };
+        this.player.view.setOutline(true);
+        this.scene.add(this.player.view.root);
+      }
       if (s.interior !== this.lastInterior) {
         // went through a door: put the camera behind the player again
         this.lastInterior = s.interior;
         this.cam.snap(facing);
       }
-      this.updatePlayerView(p, x, y, z, facing, dt);
+      this.updatePlayerView(this.player, p, x, y, z, facing, dt);
       this.cam.update(x, y, z, facing, s.speed, forwardInput, dt, driving ? 'vehicle' : 'foot', driving?.state.speed ?? 0);
       this.interiors.show(s.interior);
 
@@ -207,6 +222,7 @@ export class GameRenderer {
         this.city.updateVisibility(x, z, this.preset.viewDistance, this.preset.lodDistance);
       }
     }
+    this.syncOthers(playerId, alpha, dt);
     const dynDist = Math.min(this.preset.viewDistance, 160);
     this.vehicles.sync(this.sim.vehicles, alpha, p?.state.vehicle ?? -1, cx, cz, dynDist);
     this.peds.sync(this.sim.peds, alpha, dt, cx, cz, Math.min(dynDist, 75));
@@ -222,9 +238,35 @@ export class GameRenderer {
     this.renderer.render(this.scene, this.cam.camera);
   }
 
-  private updatePlayerView(p: NonNullable<ReturnType<SimWorld['players']['get']>>, x: number, y: number, z: number, facing: number, dt: number) {
+  /** Other players: one dressed human each (their outfit seed), created / removed with them. */
+  private syncOthers(localId: string, alpha: number, dt: number) {
+    for (const [id, slot] of this.others) {
+      if (!this.sim.players.has(id)) {
+        slot.view.dispose();
+        this.others.delete(id);
+      }
+    }
+    for (const p of this.sim.players.values()) {
+      const s = p.state;
+      if (s.id === localId) continue;
+      let slot = this.others.get(s.id);
+      if (!slot) {
+        slot = { view: new HumanView(s.look >= 0 ? randomLook(s.look) : DEFAULT_LOOK), seq: s.actionSeq, weapon: '' };
+        slot.view.setOutline(true);
+        this.scene.add(slot.view.root);
+        this.others.set(s.id, slot);
+      }
+      const x = p.prev.x + (s.x - p.prev.x) * alpha;
+      const y = p.prev.y + (s.y - p.prev.y) * alpha;
+      const z = p.prev.z + (s.z - p.prev.z) * alpha;
+      this.updatePlayerView(slot, p, x, y, z, s.facing, dt);
+      if (s.interior !== this.sim.players.get(localId)?.state.interior) slot.view.root.visible = false;
+    }
+  }
+
+  private updatePlayerView(slot: PlayerSlot, p: NonNullable<ReturnType<SimWorld['players']['get']>>, x: number, y: number, z: number, facing: number, dt: number) {
     const s = p.state;
-    const view = this.player;
+    const view = slot.view;
     const driving = s.vehicle >= 0 ? this.vehicles.views.get(s.vehicle) : undefined;
     if (driving) {
       // Sit in the car (visible through the windows), on the left seat
@@ -247,12 +289,12 @@ export class GameRenderer {
       else if (anim === 'run') view.setSpeedScale(Math.max(0.8, s.speed / 5.6));
     }
     const weapon = s.vehicle >= 0 ? 'none' : s.weapon === 'fist' ? 'none' : s.weapon;
-    if (weapon !== this.playerWeapon) {
-      this.playerWeapon = weapon;
+    if (weapon !== slot.weapon) {
+      slot.weapon = weapon;
       view.setWeapon(weapon as 'none' | 'pistol' | 'rifle');
     }
-    if (s.actionSeq !== this.playerSeq) {
-      this.playerSeq = s.actionSeq;
+    if (s.actionSeq !== slot.seq) {
+      slot.seq = s.actionSeq;
       if (s.action && !s.dead) view.playOverlay(s.action);
     }
     view.update(dt);

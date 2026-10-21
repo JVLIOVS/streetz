@@ -86,6 +86,36 @@ export class Hud {
     if (this.changed('ko', s.dead)) this.ko.classList.toggle('hidden', !s.dead);
   }
 
+  private tags = new Map<string, HTMLElement>();
+
+  /** Nicknames floating above the other players. */
+  setNameTags(tags: { id: string; name: string; x: number; y: number }[]) {
+    const keep = new Set(tags.map((t) => t.id));
+    for (const [id, el] of this.tags) {
+      if (!keep.has(id)) {
+        el.remove();
+        this.tags.delete(id);
+      }
+    }
+    for (const t of tags) {
+      let el = this.tags.get(t.id);
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'name-tag';
+        $('hud').appendChild(el);
+        this.tags.set(t.id, el);
+      }
+      if (el.textContent !== t.name) el.textContent = t.name;
+      el.style.transform = `translate(${t.x.toFixed(0)}px, ${t.y.toFixed(0)}px) translate(-50%, -100%)`;
+    }
+  }
+
+  setPlayers(count: number, code: string | null) {
+    const el = $('players');
+    el.classList.toggle('hidden', !code);
+    el.textContent = code ? `👥 ${count} · ${code}` : '';
+  }
+
   /** Floating health bar at screen position (x, y) in px, or hidden when null. */
   setTargetBar(pos: { x: number; y: number; ratio: number } | null) {
     if (this.changed('tbar', !!pos)) this.targetHp.classList.toggle('hidden', !pos);

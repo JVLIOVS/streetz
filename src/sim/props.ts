@@ -126,6 +126,20 @@ export class PropField {
     return true;
   }
 
+  /** Multiplayer replica: take the host's pose for a broken prop. Returns true if it just broke. */
+  applyRemote(b: BrokenProp): boolean {
+    let d = this.broken.get(b.id);
+    const isNew = !d;
+    if (!d) {
+      this.break(b.id, 0, 0, 0);
+      d = this.broken.get(b.id)!;
+    }
+    Object.assign(d, b);
+    d.vx = d.vy = d.vz = d.tiltV = d.spinV = 0;
+    d.resting = true; // the host animates it
+    return isNew;
+  }
+
   /** Ballistics for moving debris. ground(x, z) gives the floor height. */
   update(ground: (x: number, z: number) => number) {
     for (const d of this.broken.values()) {

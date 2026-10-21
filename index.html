@@ -33,6 +33,7 @@
         <button id="btn-weapon" class="pill"><span id="weapon-icon">✊</span><span id="weapon-ammo"></span></button>
       </div>
       <button id="btn-pause" class="ui-btn" aria-label="Pause">II</button>
+      <div id="players" class="hidden"></div>
       <div id="fps"></div>
       <div id="toast"></div>
       <div id="robbery" class="hidden"><div class="lbl">BRAQUAGE</div><div class="bar"><i></i></div></div>
@@ -68,7 +69,7 @@
           <button data-q="low">Bas</button><button data-q="medium">Moyen</button><button data-q="high">Haut</button>
         </div>
         <button id="btn-resume" class="cta">REPRENDRE</button>
-        <p class="hint">Prototype · version test 2</p>
+        <p class="hint">Prototype · version test 3</p>
       </div>
     </div>
 
@@ -76,7 +77,20 @@
       <div class="logo">STREET<span>Z</span></div>
       <div class="tag">Belleplace · prototype</div>
       <div id="loading">Chargement…</div>
-      <button id="btn-play" class="cta hidden">JOUER</button>
+      <div id="menu" class="hidden">
+        <button id="btn-play" class="cta">SOLO</button>
+        <button id="btn-multi" class="cta alt">MULTIJOUEUR</button>
+      </div>
+      <div id="multi" class="hidden">
+        <input id="nick" maxlength="14" placeholder="Ton pseudo" autocomplete="off" />
+        <button id="btn-host" class="cta small">CRÉER UNE PARTIE</button>
+        <div class="join-row">
+          <input id="code" maxlength="4" placeholder="CODE" autocomplete="off" autocapitalize="characters" />
+          <button id="btn-join" class="cta small alt">REJOINDRE</button>
+        </div>
+        <button id="btn-back" class="link">← retour</button>
+      </div>
+      <div id="net-status"></div>
       <div class="legal">18+ · Violence fictive</div>
     </div>
 
