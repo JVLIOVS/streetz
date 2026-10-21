@@ -24,19 +24,28 @@ export class ThirdPersonCamera {
     this.camera = new THREE.PerspectiveCamera(62, aspect, 0.3, 1200);
   }
 
+  /** Jump straight behind the player (after a teleport). */
+  snap(yaw: number) {
+    this.yaw = yaw;
+    this.pitch = 0.28;
+    this.initialized = false;
+  }
+
   rotate(dYaw: number, dPitch: number) {
     this.yaw += dYaw;
     this.pitch = Math.min(1.1, Math.max(-0.25, this.pitch + dPitch));
     this.sinceDrag = 0;
   }
 
-  update(px: number, py: number, pz: number, facing: number, speed: number, forwardInput: number, dt: number) {
+  update(px: number, py: number, pz: number, facing: number, speed: number, forwardInput: number, dt: number, mode: 'foot' | 'vehicle' = 'foot', vehicleSpeed = 0) {
+    const inCar = mode === 'vehicle';
     const tx = px;
-    const ty = py + 1.55;
+    const ty = py + (inCar ? 2.0 : 1.55);
     const tz = pz;
     if (!this.initialized) {
       this.target.set(tx, ty, tz);
       this.yaw = facing;
+      this.dist = 5.2;
       this.initialized = true;
     }
     const kf = 1 - Math.exp(-14 * dt);
@@ -46,14 +55,16 @@ export class ThirdPersonCamera {
 
     // Auto-recenter behind the player when moving forward and not touching the camera
     this.sinceDrag += dt;
-    if (this.sinceDrag > 1.2 && speed > 1 && forwardInput > 0.3) {
+    const recenter = inCar ? this.sinceDrag > 0.8 && vehicleSpeed > 2 : this.sinceDrag > 1.2 && speed > 1 && forwardInput > 0.3;
+    if (recenter) {
       let d = (facing - this.yaw) % (Math.PI * 2);
       if (d > Math.PI) d -= Math.PI * 2;
       if (d < -Math.PI) d += Math.PI * 2;
-      this.yaw += d * (1 - Math.exp(-1.2 * forwardInput * dt));
+      this.yaw += d * (1 - Math.exp(-(inCar ? 3 : 1.2 * forwardInput) * dt));
+      if (inCar) this.pitch += (0.22 - this.pitch) * (1 - Math.exp(-2 * dt));
     }
 
-    const wanted = 5.2 + Math.min(1.5, speed * 0.12);
+    const wanted = inCar ? 7.5 + Math.min(4, Math.abs(vehicleSpeed) * 0.12) : 5.2 + Math.min(1.5, speed * 0.12);
     _dir.set(Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), Math.cos(this.yaw) * Math.cos(this.pitch));
     const hit = this.collider.castStatic(this.target.x, this.target.y, this.target.z, _dir.x, _dir.y, _dir.z, wanted + 0.4);
     const allowed = Math.max(1.2, hit - 0.4);

@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import type { MapData } from '../maps/types';
+import type { GameAssets } from './assets';
+import { buildChunkDetails, buildSigns } from './details';
 import { buildingMaterial, roadMaterial, roofMaterial, toon, waterMaterial } from './materials';
 
 export const CHUNK_SIZE = 125;
@@ -29,7 +31,7 @@ export class CityView {
   private buildingMat = buildingMaterial();
   private roofMat = roofMaterial();
 
-  constructor(map: MapData, opts: { shadows: boolean }) {
+  constructor(map: MapData, opts: { shadows: boolean }, assets: GameAssets) {
     this.root.name = 'city';
     const n = Math.ceil((map.half * 2) / CHUNK_SIZE);
     const grid: Chunk[][] = [];
@@ -55,6 +57,21 @@ export class CityView {
     };
 
     this.buildBuildings(map, chunkOf, opts.shadows);
+    const chunkKey = (x: number, z: number) => {
+      const c = chunkOf(x, z);
+      return this.chunks.indexOf(c);
+    };
+    for (const [k, m] of buildChunkDetails(map, assets, chunkKey)) {
+      const c = this.chunks[k];
+      for (const mesh of [m.props, m.details]) {
+        if (!mesh) continue;
+        mesh.castShadow = opts.shadows;
+        mesh.receiveShadow = opts.shadows;
+        c.group.add(mesh);
+        c.detail.push(mesh);
+      }
+    }
+    this.root.add(buildSigns(map));
     this.buildTrees(map, chunkOf, opts.shadows);
     this.root.add(this.buildSolids(map, opts.shadows));
     this.root.add(this.buildRoads(map, opts.shadows));
