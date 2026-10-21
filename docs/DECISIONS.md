@@ -27,3 +27,8 @@
 - 2026-10-21 — Police pas encore présente : les étoiles montent et redescendent (25 s par étoile) ; l'IA de police arrive avec le jalon 3.
 - 2026-10-21 — Pas de lumière dynamique pour les explosions (coût mobile) : flash et particules instanciées.
 - 2026-10-21 — Le joueur est masqué dans les voitures fermées (la tête dépassait du toit), visible sur le scooter.
+- 2026-10-22 — Bagarres : verrouillage automatique sur la cible la plus proche (3,4 m) + élan ; tempéraments des piétons (33 % ripostent, 20 % se cachent puis fuient, le reste fuit) ; argent aléatoire (5–90 €, 12 % ont 150–600 €).
+- 2026-10-22 — Mobilier cassable : collisions pour les piétons/joueurs, les voitures passent au travers en le cassant (perte de vitesse) ; débris simulés en balistique simple ; bouches d'incendie qui jaillissent 25 s ; ajout de potelets et de feux à tous les carrefours.
+- 2026-10-22 — Multijoueur sans serveur payant : P2P WebRTC (trystero/Nostr), l'hôte fait autorité, les invités font autorité sur leur propre position (contrôles fluides). Passage à un serveur dédié (Colyseus) prévu pour une version publique.
+- 2026-10-22 — Étoiles de recherche par joueur (plus une valeur globale).
+- 2026-10-22 — Personnage simplifié à 2 200 triangles pour supporter ~40 piétons (qualité Moyen : 38 piétons, 13 voitures en circulation).

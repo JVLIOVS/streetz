@@ -13,12 +13,14 @@ TypeScript + Vite + Three.js (0.169) + Rapier (`@dimforge/rapier3d-compat`). Tes
 - `npm run build` — typecheck + build dans `dist/`
 - `npm test` — tests unitaires de la simulation
 - `npm run e2e` — build déjà fait requis : lance `vite preview`, ouvre le jeu en 844×390 tactile, joystick, coup, voiture (monter/conduire/sortir), entrée en boutique, mesure FPS, capture `scripts/out/*.png`
-- URL de debug : `?debug` affiche stats (draw calls, triangles), `?quality=low|medium|high`
+- `npm run e2e:multi` — deux téléphones dans le même navigateur (`?net=local`) : créer/rejoindre, mouvements et coups relayés
+- URL de debug : `?debug` affiche stats (draw calls, triangles), `?quality=low|medium|high`, `?net=local` (multijoueur entre onglets)
 
 ## Règles d'architecture (ne pas casser)
 - `src/sim/` : **aucun import** de `three` ni du DOM. Simulation pure, pas fixe 60 Hz, état sérialisable (`snapshot()`).
 - Toute action joueur = une `Command` sérialisable (`src/core/commands.ts`) poussée dans la `CommandQueue`. Jamais de mutation directe de la sim depuis l'UI/le rendu.
 - `src/render/` lit la sim, ne l'écrit pas (raycast en lecture autorisé).
+- `src/net/` est la seule couche (hors commandes) qui écrit dans la sim : rapports d'invités côté hôte, recopie des instantanés côté invité (`role: 'replica'`).
 - Données de map dans `src/maps/<id>/`, chargées par `import()` dans `src/maps/registry.ts`. Missions/armes/véhicules/gangs en données dans `src/data/`.
 - Génération procédurale déterministe (RNG à graine `src/core/rng.ts`).
 - Perf : instancing par chunk, pools d'objets, pas d'allocation dans les boucles chaudes (réutiliser les `Vector3` temporaires).
@@ -36,5 +38,6 @@ TypeScript + Vite + Three.js (0.169) + Rapier (`@dimforge/rapier3d-compat`). Tes
 ## État
 - Jalon 1 (Socle) : terminé en local (build, 24 tests unitaires, e2e headless OK). Dépôt `JVLIOVS/streetz`, jeu en ligne sur https://jvliovs.github.io/streetz/ (déployé par GitHub Actions à chaque push sur `main`).
 - Version test 2 (après retour testeur « trop minimaliste, ville vide ») : persos KayKit animés, piétons, trafic, voitures garées, 7 véhicules conduisibles, combat poing/pistolet + visée assistée, étoiles, 12 bâtiments ouverts (supérettes braquables, banque, bijouterie…), mobilier urbain, sons synthétisés.
+- Version test 3 : bagarres (verrouillage, PNJ qui ripostent, barre de vie, butin aléatoire), plus de piétons, mobilier cassable (lampadaires, feux, potelets, bouches d'incendie…), multijoueur P2P 2–10 joueurs (`src/net/`, voir `docs/MULTIPLAYER.md`).
 - Reste : police (IA, barrages, arrestation), jour/nuit + néons, missions, braquage complet, gangs/territoires, éditeur de perso, boutique, tutoriel.
 - Assets : sources CC0 dans `assets-src/`, `node scripts/build-assets.mjs` → `public/assets/`.

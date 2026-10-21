@@ -15,3 +15,4 @@ Les fichiers sources sont dans `assets-src/` (avec leurs licences) ; `node scrip
 | Moteur 3D | three.js | MIT |
 | Physique | Rapier (@dimforge/rapier3d-compat) | Apache-2.0 |
 | Optimisation des modèles (build) | glTF-Transform, meshoptimizer | MIT |
+| Multijoueur pair-à-pair | trystero | MIT |

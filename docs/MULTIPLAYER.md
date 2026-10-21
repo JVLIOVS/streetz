@@ -1,4 +1,19 @@
-# STREETZ — Architecture multijoueur cible (v2)
+# STREETZ — Architecture multijoueur
+
+## Ce qui tourne déjà (prototype, version test 3)
+- **Pair-à-pair, sans serveur** : WebRTC via la bibliothèque `trystero` (stratégie Nostr : des relais publics gratuits servent uniquement à se trouver, ensuite les téléphones se parlent directement). Code : `src/net/`.
+- **Hôte = celui qui crée la partie** (code à 4 caractères). Son téléphone fait tourner la simulation autoritaire (`SimWorld` rôle `authority`) : piétons, trafic, combats, argent, étoiles, objets cassés.
+- **Invités (jusqu'à 9)** : `SimWorld` rôle `replica`. Ils simulent eux-mêmes leur perso et la voiture qu'ils conduisent (contrôles instantanés), envoient leur position ~20×/s, et envoient leurs actions (frapper, tirer, monter, braquer…) que l'hôte résout. Le reste du monde est recopié depuis les instantanés de l'hôte (12×/s, zone d'intérêt de 130 m, positions au cm, entités en tableaux de nombres) puis lissé.
+- Téléportations décidées par l'hôte (portes, hôpital, sortie de voiture) : compteur `teleportSeq` ; l'hôte ignore les positions d'un invité tant qu'il n'a pas appliqué la dernière.
+- Étoiles de recherche par joueur. PvP actif : on peut se frapper / se tirer dessus.
+- Test automatique : `npm run build && npm run e2e:multi` (deux téléphones dans le même navigateur, transport local `?net=local`).
+
+### Limites connues du prototype
+- Si l'hôte quitte, la partie s'arrête (pas de migration d'hôte).
+- Positions des invités non vérifiées par l'hôte (confiance) : suffisant entre potes, pas pour du public.
+- ~10–20 % des réseaux mobiles bloquent le WebRTC direct sans serveur relais TURN : à prévoir avec un serveur dédié.
+
+## Architecture cible (version publique)
 
 La v1 est solo, mais le code est structuré pour que la simulation puisse être déplacée sur un serveur sans réécriture.
 
