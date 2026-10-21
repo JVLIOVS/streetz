@@ -17,3 +17,4 @@
 - 2026-10-21 — Quais à -3,5 m, eau à -4,5 m, ponts au niveau de la rue : on peut passer sous les ponts à pied ; tomber à l'eau ramène au point de départ (en attendant l'hôpital au jalon 3).
 - 2026-10-21 — Périphérique au niveau du sol (2×2 voies, 22 m), fermé par des murs antibruit en bordure de map.
 - 2026-10-21 — playwright-core 1.56 (aligné sur le Chromium préinstallé) pour les tests headless.
+- 2026-10-21 — Déploiement via la branche `gh-pages` (poussée par le workflow) plutôt que la source « GitHub Actions » : aucun réglage manuel de Pages requis.
