@@ -12,8 +12,12 @@
 import { Rng } from '../../core/rng';
 import {
   BUILDING_STYLE,
+  type BlockDef,
   type BuildingDef,
   type FountainDef,
+  type InteriorDef,
+  type ParkingSpot,
+  type PropDef,
   type MapData,
   type PoiDef,
   type RoadDef,
@@ -111,6 +115,25 @@ export function buildParisMap(seed = 1789): MapData {
   const trees: TreeDef[] = [];
   const fountains: FountainDef[] = [];
   const pois: PoiDef[] = [];
+  const blocks: BlockDef[] = [];
+  const interiors: InteriorDef[] = [];
+  const parking: ParkingSpot[] = [];
+  const props: PropDef[] = [];
+  const INTERIOR_SIZE: Record<InteriorDef['kind'], [number, number]> = {
+    shop: [14, 12],
+    bank: [24, 18],
+    jewelry: [14, 12],
+    police: [18, 14],
+    hospital: [18, 14],
+    hideout: [14, 12],
+  };
+  const SHOP_NAMES = ['Supérette Miam', 'Proxi Lune', 'Épicerie Chez Momo', '8 à Minuit', 'Mini Prix Bellevue'];
+  const addInterior = (kind: InteriorDef['kind'], name: string, sign: string, signColor: number, door: InteriorDef['door']) => {
+    const [w, d] = INTERIOR_SIZE[kind];
+    const id = `${kind}-${interiors.length}`;
+    interiors.push({ id, kind, name, door, origin: { x: 1100 + interiors.length * 50, z: 0 }, w, d, sign, signColor });
+    return id;
+  };
 
   // ---------------------------------------------------------------- ground
   const groundSlab = (z0: number, z1: number, top: number, kind: SolidDef['kind'], color: number) => {
@@ -271,17 +294,14 @@ export function buildParisMap(seed = 1789): MapData {
       const bz1 = z1 - SIDEWALK;
 
       const place = placeCenters.find((p) => blockContains(x0, z0, x1, z1, p));
-      if (place) {
-        makePlace(bx0, bz0, bx1, bz1, place.name);
-        continue;
-      }
       const special = specials.find((p) => blockContains(x0, z0, x1, z1, p));
-      if (special) {
-        makeSpecial(bx0, bz0, bx1, bz1, special);
-        continue;
-      }
-      if (inRect(cx, cz, CITES)) fillCites(bx0, bz0, bx1, bz1);
-      else if (inRect(cx, cz, COMMERCIAL)) fillCommercial(bx0, bz0, bx1, bz1);
+      const kind: BlockDef['kind'] = place ? 'place' : special ? 'special' : inRect(cx, cz, CITES) ? 'cites' : inRect(cx, cz, COMMERCIAL) ? 'commercial' : 'haussmann';
+      blocks.push({ x0, z0, x1, z1, kind });
+      streetFurniture(x0, z0, x1, z1, kind);
+      if (place) makePlace(bx0, bz0, bx1, bz1, place.name);
+      else if (special) makeSpecial(bx0, bz0, bx1, bz1, special);
+      else if (kind === 'cites') fillCites(bx0, bz0, bx1, bz1);
+      else if (kind === 'commercial') fillCommercial(bx0, bz0, bx1, bz1);
       else fillHaussmann(bx0, bz0, bx1, bz1);
     }
   }
@@ -394,8 +414,12 @@ export function buildParisMap(seed = 1789): MapData {
         }
       }
     }
-    // Supérettes are tagged as POIs (to rob later)
-    pois.push({ id: `shop-${pois.length}`, kind: 'shop', name: 'Supérette Miam', x: (x0 + x1) / 2, z: z0 - 1 });
+    // The first street-facing shop of the block is an enterable supérette
+    const name = SHOP_NAMES[interiors.length % SHOP_NAMES.length];
+    const mid = (cuts[0] + cuts[1]) / 2;
+    const door = along ? { x: mid, z: z0, yaw: 0 } : { x: x0, z: mid, yaw: Math.PI / 2 };
+    const id = addInterior('shop', name, name.toUpperCase(), 0x7dff7a, door);
+    pois.push({ id, kind: 'shop', name, x: door.x, z: door.z });
   }
 
   function makeSpecial(x0: number, z0: number, x1: number, z1: number, s: Special) {
@@ -412,8 +436,46 @@ export function buildParisMap(seed = 1789): MapData {
       pushBuilding(x0 + m, z0 + m, x1 - m, z1 - m, s.h, s.kind === 'bank' ? 3 : 1.5, style, s.color, s.kind === 'bank' ? 0x3c4a66 : 0x8d8f99);
       solids.push(plaza(x0, z0, x1, z1, COLORS.plaza));
     }
-    // Entrance on the south side (towards -z), on the sidewalk
-    pois.push({ id: s.id, kind: s.kind, name: s.name, x: (x0 + x1) / 2, z: z0 - 1 });
+    // Entrance on the south facade (towards -z)
+    const door = { x: (x0 + x1) / 2, z: z0 + m, yaw: 0 };
+    const enterable: Partial<Record<Special['kind'], [string, number]>> = {
+      bank: ['BANQUE LUMIÈRE', 0x7de3ff],
+      jewelry: ['BIJOUTERIE SAPHIR', 0xd59bff],
+      police: ['POLICE', 0x5aa2ff],
+      hospital: ['HÔPITAL', 0xff5d6c],
+      hideout: ['LA PLANQUE', 0xffd23f],
+    };
+    const e = enterable[s.kind];
+    if (e) addInterior(s.kind as InteriorDef['kind'], s.name, e[0], e[1], door);
+    pois.push({ id: s.id, kind: s.kind, name: s.name, x: door.x, z: door.z - 1 });
+  }
+
+  /** Street lights, hydrants, bins and benches along the sidewalk of a block. */
+  function streetFurniture(x0: number, z0: number, x1: number, z1: number, kind: BlockDef['kind']) {
+    const inset = 0.9;
+    const edges: { a: [number, number]; b: [number, number]; yaw: number }[] = [
+      { a: [x0, z0 + inset], b: [x1, z0 + inset], yaw: -Math.PI / 2 },
+      { a: [x0, z1 - inset], b: [x1, z1 - inset], yaw: Math.PI / 2 },
+      { a: [x0 + inset, z0], b: [x0 + inset, z1], yaw: 0 },
+      { a: [x1 - inset, z0], b: [x1 - inset, z1], yaw: Math.PI },
+    ];
+    for (const e of edges) {
+      const len = Math.hypot(e.b[0] - e.a[0], e.b[1] - e.a[1]);
+      const n = Math.max(1, Math.floor(len / 26));
+      for (let k = 0; k < n; k++) {
+        const t = (k + 0.5) / n;
+        const x = e.a[0] + (e.b[0] - e.a[0]) * t;
+        const z = e.a[1] + (e.b[1] - e.a[1]) * t;
+        props.push({ kind: 'streetlight', x, z, yaw: e.yaw });
+      }
+      // a hydrant or a bin here and there
+      const t = rng.range(0.15, 0.85);
+      const px = e.a[0] + (e.b[0] - e.a[0]) * t;
+      const pz = e.a[1] + (e.b[1] - e.a[1]) * t;
+      if (rng.chance(0.35)) props.push({ kind: 'hydrant', x: px, z: pz, yaw: e.yaw });
+      else if (rng.chance(0.4)) props.push({ kind: 'trash', x: px, z: pz, yaw: e.yaw });
+    }
+    if (kind === 'cites' && rng.chance(0.7)) props.push({ kind: 'dumpster', x: x0 + 6, z: z1 - 6, yaw: 0 });
   }
 
   function makePlace(x0: number, z0: number, x1: number, z1: number, name: string) {
@@ -421,6 +483,12 @@ export function buildParisMap(seed = 1789): MapData {
     const cx = (x0 + x1) / 2;
     const cz = (z0 + z1) / 2;
     fountains.push({ x: cx, z: cz, r: 5 });
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
+      const r = 9;
+      props.push({ kind: 'bench', x: cx + Math.cos(a) * r, z: cz + Math.sin(a) * r, yaw: -a + Math.PI / 2 });
+      props.push({ kind: 'bush', x: cx + Math.cos(a + 0.4) * (r + 2), z: cz + Math.sin(a + 0.4) * (r + 2), yaw: a });
+    }
     pois.push({ id: `fountain-${fountains.length}`, kind: 'fountain', name, x: cx, z: cz });
     // Ring of trees around the fountain
     const n = 10;
@@ -468,6 +536,47 @@ export function buildParisMap(seed = 1789): MapData {
     trees.push({ x, y, z, s: rng.range(1, 1.6) });
   }
 
+  // ---------------------------------------------------------------- parking & traffic lights
+  for (const r of roads) {
+    if (r.kind !== 'street' && r.kind !== 'boulevard') continue;
+    const along = r.axis === 'z' ? r.d : r.w;
+    const width = r.axis === 'z' ? r.w : r.d;
+    const off = width / 2 - 1.0;
+    for (let t = 9; t < along - 9; t += 7) {
+      for (const side of [-1, 1]) {
+        if (!rng.chance(0.3)) continue;
+        if (r.axis === 'z') {
+          // Driving +z keeps to the -x side: cars parked there face +z (yaw π)
+          parking.push({ x: r.x + side * off, z: r.z - r.d / 2 + t, yaw: side < 0 ? Math.PI : 0 });
+        } else {
+          parking.push({ x: r.x - r.w / 2 + t, z: r.z + side * off, yaw: side > 0 ? -Math.PI / 2 : Math.PI / 2 });
+        }
+      }
+    }
+  }
+  for (const r of roads) {
+    if (r.kind !== 'intersection' || r.w < 20 || r.d < 20 || r.w > 23) continue;
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      props.push({ kind: 'trafficlight', x: r.x + sx * (r.w / 2 + 1), z: r.z + sz * (r.d / 2 + 1), yaw: Math.atan2(sx, sz) });
+    }
+  }
+
+  // Keep entrances clear of street furniture
+  for (let i = props.length - 1; i >= 0; i--) {
+    if (interiors.some((d) => Math.hypot(d.door.x - props[i].x, d.door.z - props[i].z) < 3.5)) props.splice(i, 1);
+  }
+
+  // Hand-placed vehicles next to the spawn square and at the park entrance; keep their lanes clear
+  const FEATURED = [
+    { type: 'sports', x: -58, z: -75, yaw: -Math.PI / 2 },
+    { type: 'offroad', x: -75, z: -50, yaw: 0 },
+    { type: 'moto', x: -75, z: -28, yaw: 0 },
+    { type: 'offroad', x: 178, z: 217, yaw: -Math.PI / 2 },
+  ];
+  for (let i = parking.length - 1; i >= 0; i--) {
+    if (FEATURED.some((f) => Math.hypot(f.x - parking[i].x, f.z - parking[i].z) < 30)) parking.splice(i, 1);
+  }
+
   const zones: ZoneDef[] = [
     { id: 'cites', name: 'Cité des Tilleuls', kind: 'cites', ...CITES },
     { id: 'commercial', name: 'Quartier Saphir', kind: 'commercial', ...COMMERCIAL },
@@ -482,7 +591,7 @@ export function buildParisMap(seed = 1789): MapData {
     name: 'Paris — Belleplace',
     half: HALF,
     seed,
-    spawn: { x: -40, y: 1, z: -62, yaw: Math.PI },
+    spawn: { x: -40, y: 1, z: -52, yaw: Math.PI },
     buildings,
     roads,
     solids,
@@ -492,6 +601,11 @@ export function buildParisMap(seed = 1789): MapData {
     fountains,
     pois,
     zones,
+    blocks,
+    interiors,
+    parking,
+    props,
+    featured: FEATURED,
     killY: RIVER.waterY - 1.5,
   };
 }

@@ -116,6 +116,49 @@ export interface WaterDef {
   y: number;
 }
 
+/** Asphalt-free city block (sidewalk included). Pedestrians walk around it. */
+export interface BlockDef {
+  x0: number;
+  z0: number;
+  x1: number;
+  z1: number;
+  kind: 'haussmann' | 'cites' | 'commercial' | 'place' | 'special';
+}
+
+export type InteriorKind = 'shop' | 'bank' | 'jewelry' | 'police' | 'hospital' | 'hideout';
+
+/**
+ * Enterable building. The room itself is built off-map at `origin` (x > 1000) and
+ * the player is teleported through the door.
+ */
+export interface InteriorDef {
+  id: string;
+  kind: InteriorKind;
+  name: string;
+  /** Door on the facade; yaw = direction you face when walking out (0 = -z). */
+  door: { x: number; z: number; yaw: number };
+  origin: { x: number; z: number };
+  w: number;
+  d: number;
+  sign: string;
+  signColor: number;
+}
+
+export interface ParkingSpot {
+  x: number;
+  z: number;
+  yaw: number;
+}
+
+export type PropKind = 'streetlight' | 'trafficlight' | 'bench' | 'trash' | 'hydrant' | 'dumpster' | 'bush';
+
+export interface PropDef {
+  kind: PropKind;
+  x: number;
+  z: number;
+  yaw: number;
+}
+
 export interface MapData {
   id: string;
   name: string;
@@ -132,6 +175,12 @@ export interface MapData {
   fountains: FountainDef[];
   pois: PoiDef[];
   zones: ZoneDef[];
+  blocks: BlockDef[];
+  interiors: InteriorDef[];
+  parking: ParkingSpot[];
+  props: PropDef[];
+  /** Hand-placed vehicles (always present): type ids from src/data/vehicles.ts. */
+  featured: { type: string; x: number; z: number; yaw: number }[];
   /** Below this y the player is considered drowned / out of the world. */
   killY: number;
 }
