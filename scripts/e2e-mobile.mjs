@@ -179,6 +179,21 @@ try {
   if (!inside.player.interior) fail('could not enter the shop');
   await page.screenshot({ path: OUT + 'shop.png' });
 
+  // Start the first mission from its marker: the objective banner appears
+  await page.evaluate(() => {
+    const s = window.__streetz;
+    const p = s.sim.players.get('local');
+    p.state.interior = null;
+    const g = s.sim.missions.givers[0];
+    p.teleport(g.x, 0.3, g.z, 0);
+  });
+  await page.waitForTimeout(600);
+  await page.locator('#btn-action').tap();
+  await page.waitForTimeout(800);
+  results.mission = await page.locator('#objective .obj-txt').textContent();
+  if (!(await page.locator('#objective').isVisible())) fail('mission did not start');
+  await page.screenshot({ path: OUT + 'mission.png' });
+
   // Pause menu opens
   await page.locator('#btn-pause').tap();
   if (!(await page.locator('#pause').isVisible())) fail('pause menu did not open');

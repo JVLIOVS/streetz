@@ -3,7 +3,7 @@ import type { NetSession } from '../game';
 import { sanitize } from '../core/save';
 import { applyProfile } from '../sim/player';
 import type { SimEvent, SimWorld } from '../sim/world';
-import { AOI, MAX_PLAYERS, packPed, packPickup, packPlayer, packProp, packVehicle, SNAPSHOT_EVERY, type GuestMessage, type HostMessage } from './protocol';
+import { AOI, MAX_PLAYERS, packHeli, packPed, packPickup, packPlayer, packProp, packVehicle, SNAPSHOT_EVERY, type GuestMessage, type HostMessage } from './protocol';
 import type { Transport } from './transport';
 
 interface Guest {
@@ -23,21 +23,29 @@ export class NetHost implements NetSession {
   private pending: ActionCommand[] = [];
   private events: SimEvent[] = [];
   onPlayersChange?: (count: number) => void;
+  /** Public rooms: another host was elected at the same time and wins. */
+  onYield?: () => void;
 
   constructor(
     private t: Transport,
     private sim: SimWorld,
     readonly code: string,
   ) {
-    t.onMessage = (m, from) => this.onMessage(m as GuestMessage, from);
+    t.onMessage = (m, from) => this.onMessage(m as GuestMessage | { t: 'hosting' }, from);
     t.onLeave = (peer) => this.drop(peer);
+    t.onJoin = (peer) => t.send({ t: 'hosting' } satisfies HostMessage, peer);
+    t.send({ t: 'hosting' } satisfies HostMessage);
   }
 
   get playerCount() {
     return this.guests.size + 1;
   }
 
-  private onMessage(m: GuestMessage, from: string) {
+  private onMessage(m: GuestMessage | { t: 'hosting' }, from: string) {
+    if (m.t === 'hosting') {
+      if (from < this.t.selfId) this.onYield?.();
+      return;
+    }
     if (m.t === 'join') {
       if (this.guests.has(from)) return;
       if (this.guests.size + 1 >= MAX_PLAYERS) {
@@ -113,13 +121,15 @@ export class NetHost implements NetSession {
         X.push(packProp(d));
         if (d.resting && d.spray <= 0) g.sentProps.add(id);
       }
+      const H: number[][] = [];
+      for (const h of this.sim.police.helis.values()) if (near(h.state.x, h.state.z, AOI + 80)) H.push(packHeli(h.state));
       const E = this.events.filter((e) => {
         if ('playerId' in e && (e.type === 'toast' || e.type === 'money' || e.type === 'respawn')) return e.playerId === g.peer;
         if ('x' in e) return near((e as { x: number }).x, (e as { z: number }).z, AOI + 30);
         if (e.type === 'shot') return near(e.fx, e.fz, AOI + 30);
         return true;
       });
-      this.t.send({ t: 'snap', k: tick, P, D, V, K, X, E } satisfies HostMessage, g.peer);
+      this.t.send({ t: 'snap', k: tick, P, D, V, K, X, H, E } satisfies HostMessage, g.peer);
     }
     this.events = [];
   }

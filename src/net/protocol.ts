@@ -5,6 +5,7 @@ import type { PlayerState } from '../sim/player';
 import type { BrokenProp } from '../sim/props';
 import type { VehicleState } from '../sim/vehicle';
 import type { PickupState, PlayerReport, SimEvent } from '../sim/world';
+import type { HeliState } from '../sim/police';
 import type { Profile } from '../core/save';
 
 /**
@@ -21,7 +22,9 @@ export const AOI = 130;
 export type HostMessage =
   | { t: 'welcome'; id: string; host: string; tick: number }
   | { t: 'full' }
-  | { t: 'snap'; k: number; P: NetPlayer[]; D: number[][]; V: number[][]; K: number[][]; X: number[][]; E: SimEvent[] };
+  /** Sent by a host to every peer it meets: two hosts in one public room → the larger id steps down. */
+  | { t: 'hosting' }
+  | { t: 'snap'; k: number; P: NetPlayer[]; D: number[][]; V: number[][]; K: number[][]; X: number[][]; H?: number[][]; E: SimEvent[] };
 
 export type GuestMessage = { t: 'join'; name: string; look: number; profile?: Profile } | ({ t: 'st'; a: { k: ActionKind; arg?: string }[] } & PlayerReport);
 
@@ -198,4 +201,8 @@ export function packPickup(p: PickupState): number[] {
 
 export function packProp(p: BrokenProp): number[] {
   return [p.id, q(p.x), q(p.y), q(p.z), q(p.tilt), q(p.ax), q(p.az), q(p.spin), q(p.spray)];
+}
+
+export function packHeli(h: HeliState): number[] {
+  return [h.id, q(h.x), q(h.y), q(h.z), q(h.yaw), Math.round(h.health), q(h.down), h.army ? 1 : 0];
 }

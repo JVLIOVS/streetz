@@ -450,6 +450,17 @@ export class SimWorld {
       ped.savePrev();
       ped.followNet();
     }
+    for (const h of this.police.helis.values()) {
+      h.savePrev();
+      const n = h.net;
+      if (!n) continue;
+      const hs = h.state;
+      hs.x += (n.x - hs.x) * 0.25;
+      hs.y += (n.y - hs.y) * 0.25;
+      hs.z += (n.z - hs.z) * 0.25;
+      hs.yaw += angleDiff(hs.yaw, n.yaw) * 0.25;
+      hs.rotor += DT * (hs.down < 0 ? 40 : 10);
+    }
     this.props.update((x, z) => this.groundY(x, z));
     this.physics.step();
     this.tick++;

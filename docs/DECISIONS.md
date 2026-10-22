@@ -32,3 +32,9 @@
 - 2026-10-22 — Multijoueur sans serveur payant : P2P WebRTC (trystero/Nostr), l'hôte fait autorité, les invités font autorité sur leur propre position (contrôles fluides). Passage à un serveur dédié (Colyseus) prévu pour une version publique.
 - 2026-10-22 — Étoiles de recherche par joueur (plus une valeur globale).
 - 2026-10-22 — Personnage simplifié à 2 200 triangles pour supporter ~40 piétons (qualité Moyen : 38 piétons, 13 voitures en circulation).
+- 2026-10-22 — Police graduelle par données (`src/data/police.ts`) : 1★ agent à pied avec matraque (arrestation au corps à corps), 2★ pistolets + voitures, 3★ hélicoptère, 4★ barrages + RAID, 5★ armée (camion, soldats, hélico qui tire). Pour s'échapper : sortir de la zone de recherche (cercle sur la mini-carte) et rester invisible 8 s, ou repeindre la voiture au garage.
+- 2026-10-22 — Armes en données (`src/data/weapons.ts`) achetées à l'armurerie ; munitions perdues en cas d'arrestation ; gilet pare-balles qui absorbe 70 % des dégâts.
+- 2026-10-22 — Profil du joueur (argent, armes, tenues, garage, appartements, réputation, missions) sauvegardé sur le téléphone toutes les 5 s et envoyé à l'hôte en multijoueur : la progression suit le joueur dans toutes les parties.
+- 2026-10-22 — Missions en données (`src/data/missions.ts`), déroulées par étapes par `src/sim/missions.ts` ; débloquées l'une après l'autre ; rejouables à moitié prix. Échec si K.O., arrêté, chrono dépassé ou témoin tué.
+- 2026-10-22 — Monde ouvert sans serveur : salles publiques fixes avec élection d'hôte (le plus petit identifiant gagne) et reconnexion automatique ; un serveur dédié reste nécessaire pour un monde vraiment persistant.
+- 2026-10-22 — L'IA des voitures ne freine plus pour les voitures garées parallèles (elle bloquait certaines rues).

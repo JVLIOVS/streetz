@@ -2,6 +2,7 @@ import type { ActionCommand, ActionKind } from '../core/commands';
 import type { Profile } from '../core/save';
 import type { NetSession } from '../game';
 import type { Player } from '../sim/player';
+import { Heli } from '../sim/police';
 import type { SimWorld } from '../sim/world';
 import { REPORT_EVERY, unpackPed, vehicleTypeOf, type GuestMessage, type HostMessage, type NetPlayer } from './protocol';
 import type { Transport } from './transport';
@@ -182,6 +183,21 @@ export class NetClient implements NetSession {
         this.seenV.delete(id);
       }
     }
+
+    // --- police helicopters
+    const helis = new Set<number>();
+    for (const [id, x, y, z, yaw, health, down, army] of m.H ?? []) {
+      helis.add(id);
+      let h = sim.police.helis.get(id);
+      if (!h) {
+        h = new Heli({ id, x, y, z, yaw, health, down, army: army === 1, rotor: 0 });
+        sim.police.helis.set(id, h);
+      }
+      h.net = { x, y, z, yaw };
+      h.state.health = health;
+      h.state.down = down;
+    }
+    for (const id of [...sim.police.helis.keys()]) if (!helis.has(id)) sim.police.helis.delete(id);
 
     // --- money on the ground, broken props
     sim.pickups.clear();

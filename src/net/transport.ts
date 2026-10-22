@@ -43,13 +43,16 @@ export function joinLocalRoom(code: string): Transport {
   const selfId = Math.random().toString(36).slice(2, 10);
   const ch = new BroadcastChannel(`streetz-${code}`);
   const peers = new Set<string>();
+  let open = true;
   const t: Transport = {
     selfId,
     onJoin: () => {},
     onLeave: () => {},
     onMessage: () => {},
-    send: (msg, to) => ch.postMessage({ k: 'msg', from: selfId, to, msg }),
+    send: (msg, to) => open && ch.postMessage({ k: 'msg', from: selfId, to, msg }),
     leave: () => {
+      if (!open) return;
+      open = false;
       ch.postMessage({ k: 'bye', from: selfId });
       ch.close();
     },

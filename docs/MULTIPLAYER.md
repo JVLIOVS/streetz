@@ -1,6 +1,10 @@
 # STREETZ — Architecture multijoueur
 
-## Ce qui tourne déjà (prototype, version test 3)
+## Ce qui tourne déjà (prototype, version test 4)
+- **Deux façons de jouer à plusieurs** : *Monde ouvert* (salles publiques `PUB1`…`PUB6`, 10 joueurs chacune : on rejoint la première qui a de la place, le premier arrivé devient l'hôte) et *Partie privée* (code à 4 caractères).
+- **Élection de l'hôte (monde ouvert)** : on tente de rejoindre (8 s) ; sans réponse on devient hôte. Si deux hôtes naissent en même temps, chacun annonce `hosting` et celui dont l'identifiant est le plus grand se retire puis revient en invité. Si l'hôte part, les invités sauvegardent et se reconnectent automatiquement (`?auto=public`) : un nouvel hôte est élu. La progression (argent, armes, garage, missions) est gardée, la position et les PNJ repartent de zéro.
+- **Missions partagées** : les entités de mission (bande à tabasser, témoin, voiture à détruire) sont des entités normales de l'hôte, visibles par tous ; les autres joueurs voient « 🎯 nom de la mission » sous le pseudo et un message quand quelqu'un lance une mission : on peut aider (taper la bande) ou saboter (abattre le témoin).
+- Hélicoptères de police recopiés chez les invités (tableau `H` des instantanés).
 - **Pair-à-pair, sans serveur** : WebRTC via la bibliothèque `trystero` (stratégie Nostr : des relais publics gratuits servent uniquement à se trouver, ensuite les téléphones se parlent directement). Code : `src/net/`.
 - **Hôte = celui qui crée la partie** (code à 4 caractères). Son téléphone fait tourner la simulation autoritaire (`SimWorld` rôle `authority`) : piétons, trafic, combats, argent, étoiles, objets cassés.
 - **Invités (jusqu'à 9)** : `SimWorld` rôle `replica`. Ils simulent eux-mêmes leur perso et la voiture qu'ils conduisent (contrôles instantanés), envoient leur position ~20×/s, et envoient leurs actions (frapper, tirer, monter, braquer…) que l'hôte résout. Le reste du monde est recopié depuis les instantanés de l'hôte (12×/s, zone d'intérêt de 130 m, positions au cm, entités en tableaux de nombres) puis lissé.
@@ -9,7 +13,8 @@
 - Test automatique : `npm run build && npm run e2e:multi` (deux téléphones dans le même navigateur, transport local `?net=local`).
 
 ### Limites connues du prototype
-- Si l'hôte quitte, la partie s'arrête (pas de migration d'hôte).
+- Partie privée : si l'hôte quitte, la partie s'arrête. Monde ouvert : reconnexion automatique, mais le monde (PNJ, voitures, positions) repart de zéro.
+- Le « monde ouvert » sans serveur reste fragile : un vrai monde persistant avec des centaines de joueurs demande un serveur dédié toujours allumé (Colyseus sur un petit VPS, ~5–10 €/mois), voir plus bas.
 - Positions des invités non vérifiées par l'hôte (confiance) : suffisant entre potes, pas pour du public.
 - ~10–20 % des réseaux mobiles bloquent le WebRTC direct sans serveur relais TURN : à prévoir avec un serveur dédié.
 

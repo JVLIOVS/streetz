@@ -27,7 +27,17 @@ const DENSITY: Record<QualityLevel, { peds: number; traffic: number; parkedRadiu
   high: { peds: 50, traffic: 18, parkedRadius: 85 },
 };
 
-type Mode = { kind: 'solo' } | { kind: 'host'; t: Transport; code: string } | { kind: 'guest'; t: Transport; code: string; id: string; host: string };
+/** `public`: the shared open world (rooms PUB1, PUB2…, the first player there hosts). */
+type Mode = { kind: 'solo' } | { kind: 'host'; t: Transport; code: string; public?: boolean } | { kind: 'guest'; t: Transport; code: string; id: string; host: string; public?: boolean };
+
+const PUBLIC_SHARDS = 6;
+
+/** Reloads straight into the open world (host left, or two hosts elected at once). */
+function rejoinPublic() {
+  const q = new URLSearchParams(location.search);
+  q.set('auto', 'public');
+  location.replace(`${location.pathname}?${q}`);
+}
 
 async function boot() {
   const save = loadSave();
@@ -75,6 +85,38 @@ async function boot() {
   };
 
   $('btn-play').addEventListener('click', () => start({ kind: 'solo' }));
+  /** Open world: join the first public room with a host and room left, or host an empty one. */
+  const joinPublic = async () => {
+    if (busy) return;
+    busy = true;
+    void enterFullscreen();
+    try {
+      for (let shard = 1; shard <= PUBLIC_SHARDS; shard++) {
+        const code = `PUB${shard}`;
+        netStatus.textContent = shard === 1 ? 'Recherche des joueurs en ligne…' : `Serveur ${shard - 1} plein, essai du serveur ${shard}…`;
+        const t = await join(code);
+        try {
+          const { id, host } = await NetClient.connect(t, name(), myLook, loadSave().profile, localNet ? 2500 : 8000);
+          busy = false;
+          return await start({ kind: 'guest', t, code, id, host, public: true });
+        } catch (err) {
+          if (String((err as Error).message).includes('pleine')) {
+            t.leave();
+            continue;
+          }
+          // nobody hosts this room yet: you do
+          busy = false;
+          return await start({ kind: 'host', t, code, public: true });
+        }
+      }
+      netStatus.textContent = 'Tous les serveurs sont pleins, réessaie plus tard';
+    } catch (err) {
+      netStatus.textContent = `Erreur : ${(err as Error).message}`;
+    }
+    busy = false;
+  };
+  $('btn-public').addEventListener('click', () => void joinPublic());
+  if (params.get('auto') === 'public') void joinPublic();
   $('btn-multi').addEventListener('click', () => {
     $('menu').classList.add('hidden');
     $('multi').classList.remove('hidden');
@@ -140,19 +182,33 @@ async function launch(map: MapData, assets: GameAssets, quality: QualityLevel, s
   let net: NetSession | null = null;
   if (mode.kind === 'host') {
     const host = new NetHost(mode.t, sim, mode.code);
-    host.onPlayersChange = (n) => hud.setPlayers(n, mode.code);
-    hud.setPlayers(1, mode.code);
+    const label = mode.public ? `🌍 ${mode.code.slice(3)}` : mode.code;
+    host.onPlayersChange = (n) => hud.setPlayers(n, label);
+    host.onYield = () => {
+      persist();
+      host.close();
+      rejoinPublic();
+    };
+    hud.setPlayers(1, label);
     net = host;
   } else if (mode.kind === 'guest') {
     const client = new NetClient(mode.t, sim, localId, mode.host);
     client.onHostLost = () => {
+      persist();
+      if (mode.public) {
+        // the open world goes on: elect a new host among those still here
+        hud.toast('L’hôte est parti : reconnexion au monde ouvert…', 4);
+        setTimeout(rejoinPublic, 1500);
+        return;
+      }
       game.setPaused(true);
       $('ko').textContent = 'PARTIE TERMINÉE';
       $('ko').classList.remove('hidden');
       setTimeout(() => location.reload(), 4000);
     };
-    hud.setPlayers(1, mode.code);
-    setInterval(() => hud.setPlayers(sim.players.size, mode.code), 1000);
+    const label = mode.public ? `🌍 ${mode.code.slice(3)}` : mode.code;
+    hud.setPlayers(1, label);
+    setInterval(() => hud.setPlayers(sim.players.size, label), 1000);
     net = client;
   }
   game.net = net;
@@ -218,7 +274,8 @@ async function launch(map: MapData, assets: GameAssets, quality: QualityLevel, s
   sound.start();
   $('start').classList.add('hidden');
   game.start();
-  if (mode.kind === 'host') hud.toast(`Partie ${mode.code} : donne ce code à tes potes !`, 6);
+  if (mode.kind !== 'solo' && mode.public) hud.toast(mode.kind === 'host' ? 'Monde ouvert : tu es le premier, les autres te rejoignent ici' : `Monde ouvert : ${sim.players.size} joueurs connectés`, 4);
+  else if (mode.kind === 'host') hud.toast(`Partie ${mode.code} : donne ce code à tes potes !`, 6);
   else if (mode.kind === 'guest') hud.toast(`Connecté à la partie ${mode.code}`, 3);
   else hud.toast('Joystick à gauche · glisse à droite pour la caméra', 3.5);
 

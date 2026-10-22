@@ -89,6 +89,28 @@ try {
 
   await alice.screenshot({ path: OUT + 'multi-alice.png' });
   await bob.screenshot({ path: OUT + 'multi-bob.png' });
+  await alice.close();
+  await bob.close();
+
+  // Open world: Carol and Dave tap "MONDE OUVERT" at the same time. Both may elect
+  // themselves host; the duplicate host must step down and rejoin as a guest.
+  const carol = await ctx.newPage();
+  const dave = await ctx.newPage();
+  for (const [n, p] of [['carol', carol], ['dave', dave]]) {
+    p.on('pageerror', (e) => fail(`${n} pageerror: ${e.message}`));
+    await p.goto(base);
+    await p.locator('#btn-public').waitFor({ state: 'visible', timeout: 60000 });
+  }
+  await Promise.all([carol.locator('#btn-public').tap(), dave.locator('#btn-public').tap()]);
+  let pub = null;
+  for (let i = 0; i < 40; i++) {
+    await carol.waitForTimeout(1000);
+    pub = await Promise.all([carol, dave].map((p) => p.evaluate(() => window.__streetz && { players: window.__streetz.sim.players.size, role: window.__streetz.sim.role }).catch(() => null)));
+    if (pub.every((x) => x && x.players === 2)) break;
+  }
+  results.openWorld = pub;
+  if (!pub.every((x) => x && x.players === 2)) fail(`open world: ${JSON.stringify(pub)}`);
+  else if (pub.filter((x) => x.role === 'authority').length !== 1) fail(`open world needs exactly one host: ${JSON.stringify(pub)}`);
 } catch (e) {
   fail(String(e?.stack || e));
 } finally {

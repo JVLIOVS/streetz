@@ -12,8 +12,8 @@ TypeScript + Vite + Three.js (0.169) + Rapier (`@dimforge/rapier3d-compat`). Tes
 - `npm run dev` — serveur de dev (http://localhost:5173)
 - `npm run build` — typecheck + build dans `dist/`
 - `npm test` — tests unitaires de la simulation
-- `npm run e2e` — build déjà fait requis : lance `vite preview`, ouvre le jeu en 844×390 tactile, joystick, coup, voiture (monter/conduire/sortir), entrée en boutique, mesure FPS, capture `scripts/out/*.png`
-- `npm run e2e:multi` — deux téléphones dans le même navigateur (`?net=local`) : créer/rejoindre, mouvements et coups relayés
+- `npm run e2e` — build déjà fait requis : lance `vite preview`, ouvre le jeu en 844×390 tactile, joystick, coup, voiture (monter/conduire/sortir), entrée en boutique, lancement d'une mission, mesure FPS, capture `scripts/out/*.png`
+- `npm run e2e:multi` — téléphones dans le même navigateur (`?net=local`) : créer/rejoindre, mouvements et coups relayés, puis monde ouvert (deux joueurs en même temps → un seul hôte)
 - URL de debug : `?debug` affiche stats (draw calls, triangles), `?quality=low|medium|high`, `?net=local` (multijoueur entre onglets)
 
 ## Règles d'architecture (ne pas casser)
@@ -39,5 +39,6 @@ TypeScript + Vite + Three.js (0.169) + Rapier (`@dimforge/rapier3d-compat`). Tes
 - Jalon 1 (Socle) : terminé en local (build, 24 tests unitaires, e2e headless OK). Dépôt `JVLIOVS/streetz`, jeu en ligne sur https://jvliovs.github.io/streetz/ (déployé par GitHub Actions à chaque push sur `main`).
 - Version test 2 (après retour testeur « trop minimaliste, ville vide ») : persos KayKit animés, piétons, trafic, voitures garées, 7 véhicules conduisibles, combat poing/pistolet + visée assistée, étoiles, 12 bâtiments ouverts (supérettes braquables, banque, bijouterie…), mobilier urbain, sons synthétisés.
 - Version test 3 : bagarres (verrouillage, PNJ qui ripostent, barre de vie, butin aléatoire), plus de piétons, mobilier cassable (lampadaires, feux, potelets, bouches d'incendie…), multijoueur P2P 2–10 joueurs (`src/net/`, voir `docs/MULTIPLAYER.md`).
-- Reste : police (IA, barrages, arrestation), jour/nuit + néons, missions, braquage complet, gangs/territoires, éditeur de perso, boutique, tutoriel.
+- Version test 4 : police graduelle (agent → voitures → hélico → barrages/RAID → armée, arrestation, zone de recherche), armes (couteau, matraque, batte, pistolet, mitraillette, fusil à pompe, fusil) + armurerie + gilet, boutique de sapes, concession, appartements, planque (garde-robe, garage perso), sauvegarde du profil, 5 missions (`src/data/missions.ts`, `src/sim/missions.ts`), monde ouvert public (salles `PUB1..6`, élection d'hôte) + parties privées par code, scooter plus doux.
+- Reste : serveur dédié pour un vrai monde persistant (à décider avec l'utilisateur : hébergement payant), jour/nuit + néons, gangs/territoires, éditeur de perso, tutoriel, bouclier.
 - Assets : sources CC0 dans `assets-src/`, `node scripts/build-assets.mjs` → `public/assets/`.
