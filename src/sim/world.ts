@@ -19,6 +19,7 @@ import { ContractSystem } from './contracts';
 import { REPAINT_PRICE } from '../data/police';
 import { levelOf, requiredLevel } from '../data/progression';
 import { GOLD_PAINT } from '../data/contracts';
+import { businessById, bizStock } from '../data/business';
 import { GROUP, groups, initPhysics } from './physics';
 import { angleDiff, Player, PLAYER_TUNING, type ContextAction, type PlayerState } from './player';
 import { Vehicle, type VehicleNet, type VehicleState } from './vehicle';
@@ -891,6 +892,9 @@ export class SimWorld {
       case 'garage_out':
         this.garageOut(p, Number(arg));
         break;
+      case 'collect':
+        if (arg) this.collectBusiness(p, arg);
+        break;
       case 'mission':
         if (arg === 'abort') this.missions.abort(p);
         else if (arg) this.missions.start(p, arg);
@@ -1082,6 +1086,7 @@ export class SimWorld {
       if (Math.hypot(s.x - room.exit.x, s.z - room.exit.z) < 2.4) return { kind: 'exit_building', label: 'Sortir', target: s.interior };
       if (room.wardrobe && Math.hypot(s.x - room.wardrobe.x, s.z - room.wardrobe.z) < 2) return { kind: 'wardrobe', label: 'Garde-robe', target: def.id };
       if (room.garage && Math.hypot(s.x - room.garage.x, s.z - room.garage.z) < 2) return { kind: 'garage', label: 'Mon garage', target: def.id };
+      if (room.office && Math.hypot(s.x - room.office.x, s.z - room.office.z) < 2) return { kind: 'business', label: 'Mes business', target: def.id };
       if (room.counter && Math.hypot(s.x - room.counter.x, s.z - room.counter.z) < 3) {
         const clerk = this.peds.get(this.clerks.get(def.id) ?? -1);
         if (clerk?.alive && (def.kind === 'gunshop' || def.kind === 'clothes' || def.kind === 'dealer')) return { kind: 'shop', label: 'Acheter', target: def.kind };
@@ -1186,6 +1191,11 @@ export class SimWorld {
       if (!pay(o.price, VEHICLES[o.type].name)) return;
       s.garage.push({ type: o.type, paint: this.rng.int(0, 7) });
       this.toast(p, `${VEHICLES[o.type].name} livrée à ta planque`);
+    } else if (kind === 'biz' && inside === 'hideout') {
+      const b = businessById(id);
+      if (!b || s.biz.some((x) => x.id === id) || !pay(b.price, b.name)) return;
+      s.biz.push({ id, stock: 0, last: this.now });
+      this.toast(p, `${b.name} : ça tourne ! ${b.rate.toLocaleString('fr-FR')} €/h, à encaisser ici`);
     } else if (kind === 'home' && id in APARTMENT_PRICES) {
       if (s.homes.includes(id)) return;
       const def = this.interior(id);
@@ -1194,6 +1204,21 @@ export class SimWorld {
       s.homes.push(id);
       this.toast(p, `Bienvenue chez toi : ${def.name} !`);
     }
+  }
+
+  /** Cash in a business's production (at the hideout laptop). */
+  private collectBusiness(p: Player, id: string) {
+    const s = p.state;
+    const room = s.interior ? this.rooms.get(s.interior) : undefined;
+    const b = s.biz.find((x) => x.id === id);
+    if (!b || !room?.office || Math.hypot(s.x - room.office.x, s.z - room.office.z) > 3) return;
+    const amount = bizStock(b, this.now);
+    b.stock = 0;
+    b.last = this.now;
+    if (amount <= 0) return;
+    s.money += amount;
+    this.events.push({ type: 'money', playerId: s.id, amount });
+    this.progress.addXp(p, Math.round(amount / 100));
   }
 
   private wear(p: Player, id: string) {
@@ -1218,6 +1243,7 @@ export class SimWorld {
     this.leaveVehicle(p);
     this.removeVehicle(v.state.id);
     this.toast(p, `${v.spec.name} rangée au garage`);
+    this.missions.onStore(p);
   }
 
   /** Take a stored vehicle out: you step outside, already at the wheel. */

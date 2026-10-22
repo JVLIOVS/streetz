@@ -156,7 +156,7 @@ Pour vendre quoi que ce soit, il faut d'abord :
 
 ## 5. Ordre de réalisation proposé
 
-**Phase 1 — rendre le jeu « collant », sans argent réel** (possible tout de suite, sans serveur) :
+**Phase 1 — rendre le jeu « collant », sans argent réel** — ✅ faite (version test 5) :
 1. Le jus (arrêt sur image, tremblement d'écran, ralenti, vibrations) et le compteur de CHAOS.
 2. Les niveaux 1–100 avec barre d'XP et déblocages visibles.
 3. Les contrats du jour générés au hasard, le receleur, la série de connexions.

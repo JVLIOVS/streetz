@@ -1019,3 +1019,21 @@ body {
   height: 100%;
   background: #ffd23f;
 }
+
+/* Session recap in the pause menu */
+#recap {
+  margin: 4px 0 10px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  font-weight: 800;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: left;
+}
+#recap b {
+  color: #ffd23f;
+}
+#recap .goal {
+  color: #7dff7a;
+}

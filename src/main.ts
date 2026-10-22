@@ -252,6 +252,7 @@ async function launch(map: MapData, assets: GameAssets, quality: QualityLevel, s
   const markQuality = () => qButtons.forEach((b) => b.classList.toggle('on', b.dataset.q === view.quality));
   markQuality();
   tap($('btn-pause'), () => {
+    $('recap').innerHTML = game.recapHtml();
     game.setPaused(true);
     pause.classList.remove('hidden');
   });
@@ -272,6 +273,7 @@ async function launch(map: MapData, assets: GameAssets, quality: QualityLevel, s
   });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
+      $('recap').innerHTML = game.recapHtml();
       game.setPaused(true);
       pause.classList.remove('hidden');
       sound.suspend();

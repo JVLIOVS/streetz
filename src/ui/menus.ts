@@ -4,8 +4,9 @@ import { VEHICLES } from '../data/vehicles';
 import { ARMOR_PRICE, WEAPON_ORDER, WEAPONS } from '../data/weapons';
 import type { PlayerState } from '../sim/player';
 import { levelOf, requiredLevel } from '../data/progression';
+import { BUSINESSES, bizCap, bizStock } from '../data/business';
 
-export type MenuKind = 'gunshop' | 'clothes' | 'dealer' | 'wardrobe' | 'garage';
+export type MenuKind = 'gunshop' | 'clothes' | 'dealer' | 'wardrobe' | 'garage' | 'business';
 
 interface Row {
   label: string;
@@ -68,12 +69,12 @@ export class MenuPanel {
   update(s: PlayerState) {
     if (!this.kind) return;
     // walking away from the counter / wardrobe closes the panel
-    const still = s.context && ((this.kind === 'wardrobe' && s.context.kind === 'wardrobe') || (this.kind === 'garage' && s.context.kind === 'garage') || (s.context.kind === 'shop' && s.context.target === this.kind));
+    const still = s.context && ((this.kind === 'wardrobe' && s.context.kind === 'wardrobe') || (this.kind === 'garage' && s.context.kind === 'garage') || (this.kind === 'business' && s.context.kind === 'business') || (s.context.kind === 'shop' && s.context.target === this.kind));
     if (!still) {
       this.close();
       return;
     }
-    const key = JSON.stringify([s.rep, s.money, s.weapons, s.ammo, s.armor, s.clothes, s.outfit, s.garage]);
+    const key = JSON.stringify([this.kind === 'business' ? Math.floor(Date.now() / 3000) : 0, s.biz, s.rep, s.money, s.weapons, s.ammo, s.armor, s.clothes, s.outfit, s.garage]);
     if (key === this.lastKey) return;
     this.lastKey = key;
     const { title, rows } = this.rows(this.kind, s);
@@ -149,6 +150,17 @@ export class MenuPanel {
         const rows: Row[] = [...owned, ...free].map((c) => ({ label: c.name, sub: slotName(c.slot), button: 'Porter', action: { action: 'wear', arg: c.id } }));
         if (owned.length === 0) rows.unshift({ label: 'Ta garde-robe est vide', sub: 'Achète des sapes à la Boutique Swagg 👕', button: '—', disabled: true });
         return { title: 'Garde-robe', rows };
+      }
+      case 'business': {
+        const now = Math.floor(Date.now() / 1000);
+        const rows: Row[] = BUSINESSES.map((b) => {
+          const own = s.biz.find((x) => x.id === b.id);
+          if (!own) return { label: b.name, sub: `Rapporte ${euro(b.rate)}/h, même quand tu n'es pas là`, button: euro(b.price), disabled: s.money < b.price, action: { action: 'buy', arg: `biz:${b.id}` } };
+          const stock = bizStock(own, now);
+          const full = stock >= bizCap(b.id);
+          return { label: `${b.name}${full ? ' · PLEIN ⚠' : ''}`, sub: `${euro(stock)} / ${euro(bizCap(b.id))} · ${euro(b.rate)}/h`, button: 'Encaisser', disabled: stock <= 0, on: true, action: { action: 'collect', arg: b.id } };
+        });
+        return { title: 'Mes business', rows };
       }
       case 'garage': {
         const rows: Row[] = s.garage.map((g, i) => ({ label: VEHICLES[g.type].name, sub: 'Sortir et partir avec', button: 'Sortir', action: { action: 'garage_out', arg: String(i) } }));

@@ -8,6 +8,7 @@ import type { SimWorld } from './sim/world';
 import type { Hud } from './ui/hud';
 import { MenuPanel, type MenuKind } from './ui/menus';
 import { missionById } from './data/missions';
+import { levelProgress, nextUnlock } from './data/progression';
 
 export const LOCAL_PLAYER = 'local';
 
@@ -108,7 +109,7 @@ export class Game {
     for (const a of this.controls.takeActions()) {
       // contextual "use" on a counter / wardrobe / garage opens a menu instead
       const ctx = this.player.context;
-      if (a === 'use' && ctx && (ctx.kind === 'shop' || ctx.kind === 'wardrobe' || ctx.kind === 'garage')) {
+      if (a === 'use' && ctx && (ctx.kind === 'shop' || ctx.kind === 'wardrobe' || ctx.kind === 'garage' || ctx.kind === 'business')) {
         this.menu.open(ctx.kind === 'shop' ? (ctx.target as MenuKind) : ctx.kind);
         continue;
       }
@@ -166,7 +167,10 @@ export class Game {
           }
           break;
         case 'dmg':
-          if (e.playerId === this.localId) this.onHit(e.x, e.y, e.z, e.amount, e.ko);
+          if (e.playerId === this.localId) {
+            this.onHit(e.x, e.y, e.z, e.amount, e.ko);
+            if (e.ko) this.session.kos++;
+          }
           break;
         case 'chaos':
           if (e.playerId === this.localId) {
@@ -176,6 +180,7 @@ export class Game {
           break;
         case 'chaosEnd':
           if (e.playerId === this.localId) {
+            this.session.best = Math.max(this.session.best, e.score);
             this.hud.chaosCashed(e.score, e.cash);
             if (e.cash > 0) this.sound.cash();
           }
@@ -190,6 +195,7 @@ export class Game {
           break;
         case 'contract':
           if (e.playerId === this.localId) {
+            if (!e.all) this.session.contracts++;
             if (e.all) this.sound.fanfare();
             else this.sound.cash();
             this.onSave?.();
@@ -197,6 +203,7 @@ export class Game {
           break;
         case 'crate':
           if (e.playerId === this.localId) {
+            this.session.crates++;
             this.hud.toast(`📦 Colis surprise : ${e.text}`, e.rare ? 3.5 : 2);
             if (e.rare) {
               this.sound.fanfare();
@@ -238,6 +245,28 @@ export class Game {
 
   private tmp = new Vector3();
   private slowmo = 0;
+  /** This session's stats, for the recap in the pause menu. */
+  private session = { money: -1, xp: 0, level: 1, kos: 0, contracts: 0, crates: 0, best: 0, start: performance.now() };
+
+  /** "This session" summary + the next goal (shown when pausing). */
+  recapHtml(): string {
+    const s = this.player;
+    const ss = this.session;
+    const lp = levelProgress(s.rep);
+    const earned = s.money - ss.money;
+    const min = Math.max(1, Math.round((performance.now() - ss.start) / 60000));
+    const lines = [
+      `Cette session (${min} min) : <b>${earned >= 0 ? '+' : ''}${earned.toLocaleString('fr-FR')} €</b> · <b>+${(s.rep - ss.xp).toLocaleString('fr-FR')} XP</b>`,
+      `Niveau <b>${ss.level} → ${lp.level}</b> · ${ss.kos} K.O. · meilleur combo <b>${ss.best.toLocaleString('fr-FR')}</b>`,
+      `Contrats réussis : <b>${ss.contracts}</b> · colis trouvés : <b>${ss.crates}</b>`,
+    ];
+    const left = lp.need - lp.cur;
+    const next = nextUnlock(lp.level);
+    lines.push(`<span class="goal">Plus que ${left} XP pour le niveau ${lp.level + 1}${next && next.level === lp.level + 1 ? ` (${next.label})` : ''}</span>`);
+    const todo = s.contracts.filter((c) => c.progress < c.goal).length;
+    if (todo) lines.push(`<span class="goal">📋 ${todo} contrat${todo > 1 ? 's' : ''} du jour à finir</span>`);
+    return lines.join('<br>');
+  }
   private lastHealth = 100;
 
   private vibrate(pattern: number | number[]) {
@@ -329,6 +358,11 @@ export class Game {
       );
     }
     this.hud.update(dt);
+    if (this.session.money < 0) {
+      this.session.money = me.money;
+      this.session.xp = me.rep;
+      this.session.level = levelProgress(me.rep).level;
+    }
     this.hud.updatePlayer(me);
     this.hud.updateProgress(me);
     if (me.health < this.lastHealth - 1) {

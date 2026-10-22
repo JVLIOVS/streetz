@@ -179,6 +179,19 @@ try {
   if (!inside.player.interior) fail('could not enter the shop');
   await page.screenshot({ path: OUT + 'shop.png' });
 
+  // New players get the tutorial first
+  results.tutorial = await page.locator('#objective .obj-txt').textContent();
+  if (!results.tutorial) fail('tutorial did not start');
+  await page.locator('#objective .obj-x').tap();
+  await page.waitForTimeout(400);
+  // Progression panel (level, daily contracts, streak, fence)
+  await page.locator('#btn-level').tap();
+  await page.waitForTimeout(400);
+  results.contracts = await page.locator('#progress-panel .pp-row').count();
+  if (results.contracts < 4) fail('progression panel is empty');
+  await page.screenshot({ path: OUT + 'progress.png' });
+  await page.locator('#progress-panel .pp-close').tap();
+
   // Start the first mission from its marker: the objective banner appears
   await page.evaluate(() => {
     const s = window.__streetz;

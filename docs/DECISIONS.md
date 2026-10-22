@@ -38,3 +38,9 @@
 - 2026-10-22 — Missions en données (`src/data/missions.ts`), déroulées par étapes par `src/sim/missions.ts` ; débloquées l'une après l'autre ; rejouables à moitié prix. Échec si K.O., arrêté, chrono dépassé ou témoin tué.
 - 2026-10-22 — Monde ouvert sans serveur : salles publiques fixes avec élection d'hôte (le plus petit identifiant gagne) et reconnexion automatique ; un serveur dédié reste nécessaire pour un monde vraiment persistant.
 - 2026-10-22 — L'IA des voitures ne freine plus pour les voitures garées parallèles (elle bloquait certaines rues).
+- 2026-10-22 — Rétention, phase 1 (voir `docs/GAME_DESIGN.md`) : XP = champ `rep` du profil, niveaux 1–100 (`80 + 40·niveau` XP par niveau, départ à 30 XP), déblocages listés dans `src/data/progression.ts` et appliqués par la sim (achats refusés sous le niveau requis).
+- 2026-10-22 — Compteur de chaos : chaque méfait remplit un combo ×1→×5 (palier tous les 4 méfaits), encaissé après 4,5 s de calme (0,5 €/point + XP) ; perdu si K.O. ou arrêté. Cascades en voiture (dérapage, saut) détectées par la sim.
+- 2026-10-22 — Contrats du jour générés à partir du numéro du jour (mêmes pour tout le monde) ; la sim ne lit jamais l'horloge : `SimWorld.day` / `SimWorld.now` sont fournis par le jeu. Série de connexion : un jour manqué fait reculer d'un cran au lieu de remettre à zéro.
+- 2026-10-22 — Effets de ralenti / arrêt sur image uniquement en solo (en multijoueur le monde ne peut pas ralentir pour un seul joueur) ; tremblement d'écran et vibrations partout.
+- 2026-10-22 — Business de planque : production calculée à partir de l'heure réelle (fonctionne hors ligne), plafonnée à 8 h pour donner envie de revenir.
+- 2026-10-22 — Instantanés réseau : les champs privés (inventaire, contrats, business…) ne sont envoyés qu'à leur propriétaire.

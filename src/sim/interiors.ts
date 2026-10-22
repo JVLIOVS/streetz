@@ -30,6 +30,8 @@ export interface RoomLayout {
   /** Hideouts: change outfit here / take out a stored vehicle here. */
   wardrobe: { x: number; z: number } | null;
   garage: { x: number; z: number } | null;
+  /** Hideout only: laptop to run the businesses. */
+  office: { x: number; z: number } | null;
 }
 
 const PALETTE: Record<InteriorDef['kind'], { floor: number; wall: number; trim: number; counter: number }> = {
@@ -139,10 +141,19 @@ export function roomLayout(def: InteriorDef): RoomLayout {
     boxes.push({ x: ox - w / 2 + 0.55, y: 1.6, z: oz + 2.5, sx: 0.05, sy: 0.6, sz: 0.7, color: 0x5ee8ff, deco: true });
     garage = { x: ox - w / 2 + 1.4, z: oz + 2.5 };
   }
+  let office: RoomLayout['office'] = null;
+  if (def.kind === 'hideout') {
+    const x = ox + w / 2 - 1.3;
+    const z = oz - d / 2 + 1.2;
+    boxes.push({ x, y: 0.4, z, sx: 1.8, sy: 0.8, sz: 0.9, color: 0x3b2516 }); // desk
+    boxes.push({ x, y: 1.0, z: z - 0.15, sx: 0.7, sy: 0.45, sz: 0.05, color: 0x7dff7a, deco: true }); // laptop screen
+    office = { x, z: z + 1.3 };
+  }
   return {
     boxes,
     wardrobe,
     garage,
+    office,
     spawn: { x: ox, z: oz + d / 2 - 1.8 },
     exit: { x: ox, z: oz + d / 2 - 0.6 },
     counter,

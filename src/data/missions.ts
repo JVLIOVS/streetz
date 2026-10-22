@@ -37,12 +37,30 @@ export interface MissionDef {
   x: number;
   z: number;
   requires?: string;
+  /** Started automatically (tutorial), no marker on the map. */
+  auto?: boolean;
   reward: number;
   rep: number;
   steps: MissionStep[];
 }
 
 export const MISSIONS: MissionDef[] = [
+  {
+    id: 'tuto',
+    name: 'Bienvenue à Belleplace',
+    giver: 'Momo',
+    pitch: 'Nouveau dans le quartier ? Montre-moi ce que tu vaux.',
+    x: 0,
+    z: 0,
+    auto: true,
+    reward: 500,
+    rep: 100,
+    steps: [
+      { kind: 'ko', text: 'Mets un passant K.O. (bouton rouge)' },
+      { kind: 'drive', text: 'Vole une voiture (approche-toi, bouton Monter)' },
+      { kind: 'store', text: 'Fonce à ta planque et gare-la : elle sera à toi' },
+    ],
+  },
   {
     id: 'colis',
     name: 'Colis express',

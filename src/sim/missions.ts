@@ -41,7 +41,7 @@ export class MissionSystem {
   private runs = new Map<string, Run>();
 
   constructor(private w: SimWorld) {
-    this.givers = MISSIONS.map((m) => {
+    this.givers = MISSIONS.filter((m) => !m.auto).map((m) => {
       const n = w.walk[w.nearestWalkNode(m.x, m.z)];
       return { id: m.id, x: n.x, z: n.z };
     });
@@ -67,8 +67,8 @@ export class MissionSystem {
     const def = missionById(id);
     const s = p.state;
     if (!def || s.mission || s.dead) return;
-    const g = this.givers.find((q) => q.id === id)!;
-    if (Math.hypot(g.x - s.x, g.z - s.z) > GIVER_RADIUS + 3) return;
+    const g = this.givers.find((q) => q.id === id);
+    if (!def.auto && (!g || Math.hypot(g.x - s.x, g.z - s.z) > GIVER_RADIUS + 3)) return;
     if (!this.unlocked(p, def)) {
       this.w.toast(p, `🔒 Termine d’abord « ${missionById(def.requires!)!.name} »`);
       return;
@@ -84,6 +84,11 @@ export class MissionSystem {
     const s = p.state;
     const run = this.runs.get(s.id);
     if (!run) return;
+    if (run.def.auto) {
+      // skipping the tutorial is fine, it never comes back
+      s.tutorialDone = true;
+      reason = 'Tutoriel passé';
+    }
     this.cleanup(run);
     this.runs.delete(s.id);
     this.reset(p);
@@ -112,7 +117,20 @@ export class MissionSystem {
     if (step?.kind === 'rob' && this.door(step.interior)?.id === interior) this.next(p);
   }
 
+  /** Called by the world when a player parks a car in their garage. */
+  onStore(p: Player) {
+    const run = this.runs.get(p.state.id);
+    if (run?.def.steps[run.step]?.kind === 'store') this.next(p);
+  }
+
   update() {
+    // new players: the tutorial starts by itself
+    if (this.w.tick % 60 === 0) {
+      for (const p of this.w.players.values()) {
+        const s = p.state;
+        if (!s.tutorialDone && !s.mission && !s.dead && !s.interior) this.start(p, 'tuto');
+      }
+    }
     for (const [id, run] of [...this.runs]) {
       const p = this.w.players.get(id);
       if (!p) {
@@ -155,11 +173,16 @@ export class MissionSystem {
     this.w.progress.addXp(p, rep);
     this.w.contracts.track(p, 'mission', 1);
     if (!replay) s.missionsDone.push(run.def.id);
+    if (run.def.auto) s.tutorialDone = true;
     this.cleanup(run);
     this.runs.delete(s.id);
     this.reset(p);
     this.w.events.push({ type: 'money', playerId: s.id, amount: money });
     this.w.events.push({ type: 'mission', playerId: s.id, name: run.def.name, state: 'done' });
+    if (run.def.auto) {
+      this.w.toast(p, `✔ Bien joué ! +${money} € · Missions = marqueurs « ! » jaunes · contrats du jour = 📋 sous la carte`);
+      return;
+    }
     const nextDef = MISSIONS.find((m) => m.requires === run.def.id);
     this.w.toast(p, `✔ MISSION RÉUSSIE · +${money.toLocaleString('fr-FR')} € · +${rep} rep${nextDef && !replay ? ` — nouvelle mission : ${nextDef.name}` : ''}`);
   }
@@ -274,6 +297,44 @@ export class MissionSystem {
         s.waypoint = null;
         if (s.wanted === 0) this.next(p);
         break;
+      case 'ko': {
+        // point at the closest passer-by
+        let best: Ped | null = null;
+        let bd = 40;
+        for (const ped of this.w.peds.values()) {
+          if (!ped.alive || ped.state.role !== 'civ' || ped.state.mode === 'shopkeeper') continue;
+          const d = Math.hypot(ped.state.x - s.x, ped.state.z - s.z);
+          if (d < bd) {
+            bd = d;
+            best = ped;
+          }
+        }
+        s.missionTargets = best ? [best.state.id] : [];
+        s.waypoint = null;
+        break;
+      }
+      case 'drive': {
+        if (s.vehicle >= 0) return this.next(p);
+        let best: number | null = null;
+        let bd = 80;
+        for (const v of this.w.vehicles.values()) {
+          if (v.state.wrecked || v.police || (v.state.driver !== 'none' && v.state.driver !== 'npc')) continue;
+          const d = Math.hypot(v.state.x - s.x, v.state.z - s.z);
+          if (d < bd) {
+            bd = d;
+            best = v.state.id;
+          }
+        }
+        s.missionTargets = best !== null ? [best] : [];
+        s.waypoint = null;
+        break;
+      }
+      case 'store': {
+        const d = this.door('hideout');
+        s.waypoint = d ? [d.door.x, d.door.z] : null;
+        s.objective = s.vehicle >= 0 ? step.text : 'Reprends une voiture et fonce à ta planque';
+        break;
+      }
     }
   }
 

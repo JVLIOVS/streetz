@@ -1,5 +1,6 @@
 import { ALL_CONTRACTS_BONUS, dailyContracts, FENCE_PRICES, FENCE_SCRAP, FENCE_SPOT, GOLD_PAINT, GOLD_PRICE, STREAK_CLOTH, STREAK_REWARDS, type ContractStat } from '../data/contracts';
 import { VEHICLES, type VehicleType } from '../data/vehicles';
+import { bizStock } from '../data/business';
 import type { ContextAction, Player } from './player';
 import type { SimWorld } from './world';
 
@@ -13,6 +14,7 @@ const ORDERS = Object.keys(FENCE_PRICES) as VehicleType[];
 export class ContractSystem {
   /** Fence drop-off point, on the road. */
   readonly fence: { x: number; z: number };
+  private notified = new Set<string>();
 
   constructor(private w: SimWorld) {
     let best = { x: FENCE_SPOT.x, z: FENCE_SPOT.z };
@@ -40,6 +42,12 @@ export class ContractSystem {
         s.contracts = dailyContracts(this.w.day);
       }
       if (s.streakDay !== this.w.day) this.login(p);
+      // businesses produced while you were away: come and collect
+      if (this.w.now > 0 && !this.notified.has(s.id) && s.biz.length) {
+        this.notified.add(s.id);
+        const total = s.biz.reduce((a, b) => a + bizStock(b, this.w.now), 0);
+        if (total > 0) this.w.toast(p, `💼 Tes business ont produit ${total.toLocaleString('fr-FR')} € : passe les encaisser à ta planque`);
+      }
     }
   }
 
