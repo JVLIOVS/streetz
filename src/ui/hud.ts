@@ -5,7 +5,6 @@ import { Minimap } from './minimap';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
-const WEAPON_ICON = { fist: '✊', pistol: '🔫', rifle: '💥' } as const;
 
 /** DOM HUD: mini-map, health, wanted stars, money, weapon, contextual buttons, toasts. */
 export class Hud {
@@ -64,13 +63,13 @@ export class Hud {
     }
     const w = s.weapon;
     if (this.changed('weapon', w)) {
-      this.weaponIcon.textContent = WEAPON_ICON[w];
-      this.attackIcon.textContent = WEAPON_ICON[w];
-      this.attackLbl.textContent = w === 'fist' ? 'FRAPPER' : 'TIRER';
-      this.attackBtn.classList.toggle('gun', w !== 'fist');
+      this.weaponIcon.textContent = WEAPONS[w].icon;
+      this.attackIcon.textContent = WEAPONS[w].icon;
+      this.attackLbl.textContent = WEAPONS[w].melee ? 'FRAPPER' : 'TIRER';
+      this.attackBtn.classList.toggle('gun', !WEAPONS[w].melee);
     }
-    const ammo = w === 'fist' ? '' : String(s.ammo[w]);
-    if (this.changed('ammo', ammo)) this.weaponAmmo.textContent = ammo ? `${ammo}` : WEAPONS.fist.name;
+    const ammo = WEAPONS[w].melee ? WEAPONS[w].name : String(s.ammo[w]);
+    if (this.changed('ammo', ammo)) this.weaponAmmo.textContent = ammo;
     const driving = s.vehicle >= 0;
     if (this.changed('driving', driving)) {
       this.foot.classList.toggle('hidden', driving);

@@ -3,7 +3,8 @@ import type { Command, MoveCommand } from '../core/commands';
 import { DT } from '../core/loop';
 import { Rng } from '../core/rng';
 import { TRAFFIC_MIX, VEHICLES, type VehicleType } from '../data/vehicles';
-import { WEAPON_ORDER, WEAPONS, type WeaponId } from '../data/weapons';
+import { APARTMENT_PRICES, CLOTHES, GARAGE_SLOTS, VEHICLE_OFFERS } from '../data/shop';
+import { ARMOR_PRICE, WEAPON_ORDER, WEAPONS, type WeaponId } from '../data/weapons';
 import { terrainHeight } from '../maps/terrain';
 import type { InteriorDef, MapData } from '../maps/types';
 import { buildStaticColliders } from './colliders';
@@ -370,7 +371,7 @@ export class SimWorld {
       const p = this.players.get(c.playerId);
       if (!p) continue;
       if (c.type === 'move') p.setInput(c);
-      else this.handleAction(p, c.action);
+      else this.handleAction(p, c.action, c.arg);
     }
     for (const p of this.players.values()) this.updatePlayer(p);
     for (const v of this.vehicles.values()) this.updateVehicle(v);
@@ -791,8 +792,7 @@ export class SimWorld {
     const s = p.state;
     const fine = Math.floor(s.money * 0.15);
     s.money -= fine;
-    s.ammo.pistol = 0;
-    s.ammo.rifle = 0;
+    for (const w of WEAPON_ORDER) if (!WEAPONS[w].melee) s.ammo[w] = 0;
     s.weapon = 'fist';
     this.clearWanted(p);
     s.robbery = -1;
@@ -809,7 +809,7 @@ export class SimWorld {
 
   // ------------------------------------------------------------------ actions
 
-  private handleAction(p: Player, action: string) {
+  private handleAction(p: Player, action: string, arg?: string) {
     const s = p.state;
     if (s.dead) return;
     switch (action) {
@@ -820,13 +820,22 @@ export class SimWorld {
         const i = WEAPON_ORDER.indexOf(s.weapon);
         for (let k = 1; k <= WEAPON_ORDER.length; k++) {
           const w = WEAPON_ORDER[(i + k) % WEAPON_ORDER.length];
-          if (w === 'fist' || s.ammo[w] > 0) {
+          if (s.weapons.includes(w) && (WEAPONS[w].melee || s.ammo[w] > 0)) {
             s.weapon = w;
             break;
           }
         }
         break;
       }
+      case 'buy':
+        if (arg) this.buy(p, arg);
+        break;
+      case 'wear':
+        if (arg) this.wear(p, arg);
+        break;
+      case 'garage_out':
+        this.garageOut(p, Number(arg));
+        break;
       case 'horn':
         if (s.vehicle >= 0) {
           const v = this.vehicles.get(s.vehicle);
@@ -910,6 +919,12 @@ export class SimWorld {
       case 'travel':
         this.toast(p, '✈ Bientôt disponible : Amérique latine, Afrique, Île, Asie');
         break;
+      case 'buy_home':
+        this.buy(p, `home:${ctx.target}`);
+        break;
+      case 'store_vehicle':
+        this.storeVehicle(p);
+        break;
     }
   }
 
@@ -982,6 +997,9 @@ export class SimWorld {
     const s = p.state;
     if (s.dead) return null;
     if (s.vehicle >= 0) {
+      const home = this.homeNear(p, 16);
+      const v = this.vehicles.get(s.vehicle);
+      if (home && v && !v.police && v.state.type !== 'army') return { kind: 'store_vehicle', label: 'Garer au garage', target: home.id };
       const garage = this.map.pois.find((q) => q.kind === 'garage');
       if (garage && s.wanted > 0 && Math.hypot(garage.x - s.x, garage.z - s.z) < 14) return { kind: 'repaint', label: `Repeindre · ${REPAINT_PRICE} €`, target: s.vehicle };
       return { kind: 'exit_vehicle', label: 'Sortir', target: s.vehicle };
@@ -990,8 +1008,11 @@ export class SimWorld {
       const room = this.rooms.get(s.interior)!;
       const def = this.interior(s.interior)!;
       if (Math.hypot(s.x - room.exit.x, s.z - room.exit.z) < 2.4) return { kind: 'exit_building', label: 'Sortir', target: s.interior };
+      if (room.wardrobe && Math.hypot(s.x - room.wardrobe.x, s.z - room.wardrobe.z) < 2) return { kind: 'wardrobe', label: 'Garde-robe', target: def.id };
+      if (room.garage && Math.hypot(s.x - room.garage.x, s.z - room.garage.z) < 2) return { kind: 'garage', label: 'Mon garage', target: def.id };
       if (room.counter && Math.hypot(s.x - room.counter.x, s.z - room.counter.z) < 3) {
         const clerk = this.peds.get(this.clerks.get(def.id) ?? -1);
+        if (clerk?.alive && (def.kind === 'gunshop' || def.kind === 'clothes' || def.kind === 'dealer')) return { kind: 'shop', label: 'Acheter', target: def.kind };
         const robbable = ['shop', 'bank', 'jewelry'].includes(def.kind);
         const last = p.lastRobbery.get(def.id) ?? -1e9;
         if (robbable && s.weapon !== 'fist' && clerk?.alive && p.robberyTarget === null && this.tick - last > 60 * 120) {
@@ -1019,7 +1040,11 @@ export class SimWorld {
         : { kind: 'enter_vehicle', label: `Monter · ${name}`, target: best.state.id };
     }
     for (const def of this.map.interiors) {
-      if (Math.hypot(def.door.x - s.x, def.door.z - s.z) < 2.6) return { kind: 'enter_building', label: 'Entrer', target: def.id };
+      if (Math.hypot(def.door.x - s.x, def.door.z - s.z) >= 2.6) continue;
+      if (def.kind === 'apartment' && !s.homes.includes(def.id)) {
+        return { kind: 'buy_home', label: `Acheter · ${(APARTMENT_PRICES[def.id] ?? 0).toLocaleString('fr-FR')} €`, target: def.id };
+      }
+      return { kind: 'enter_building', label: 'Entrer', target: def.id };
     }
     const airport = this.map.pois.find((q) => q.kind === 'airport');
     if (airport && Math.hypot(airport.x - s.x, airport.z - s.z) < 5) return { kind: 'travel', label: 'Voyager', target: airport.id };
@@ -1028,6 +1053,109 @@ export class SimWorld {
       if (Math.hypot(ped.state.x - s.x, ped.state.z - s.z) < 1.8) return { kind: 'talk', label: 'Parler', target: ped.state.id };
     }
     return null;
+  }
+
+  /** An owned home (hideout / bought apartment) whose door is within r. */
+  private homeNear(p: Player, r: number): InteriorDef | undefined {
+    return this.map.interiors.find((d) => p.state.homes.includes(d.kind === 'hideout' ? 'hideout' : d.id) && (d.kind === 'hideout' || d.kind === 'apartment') && Math.hypot(d.door.x - p.state.x, d.door.z - p.state.z) < r);
+  }
+
+  /** Purchases: weapons, ammo, vest (gun shop), clothes, cars (dealer), apartments. */
+  private buy(p: Player, item: string) {
+    const s = p.state;
+    const [kind, id] = item.split(':');
+    const inside = s.interior ? this.interior(s.interior)?.kind : undefined;
+    const pay = (price: number, what: string) => {
+      if (s.money < price) {
+        this.toast(p, `Pas assez d'argent (${price.toLocaleString('fr-FR')} €)`);
+        return false;
+      }
+      s.money -= price;
+      this.toast(p, `${what} : -${price.toLocaleString('fr-FR')} €`);
+      return true;
+    };
+    if (kind === 'weapon' && inside === 'gunshop' && id in WEAPONS) {
+      const w = id as WeaponId;
+      const spec = WEAPONS[w];
+      if (s.weapons.includes(w) || spec.price <= 0 || !pay(spec.price, spec.name)) return;
+      s.weapons.push(w);
+      s.ammo[w] += spec.ammoPack;
+      s.weapon = w;
+    } else if (kind === 'ammo' && inside === 'gunshop' && id in WEAPONS) {
+      const w = id as WeaponId;
+      const spec = WEAPONS[w];
+      if (!s.weapons.includes(w) || spec.melee || !pay(spec.ammoPrice, `Munitions ${spec.name}`)) return;
+      s.ammo[w] += spec.ammoPack;
+    } else if (kind === 'armor' && inside === 'gunshop') {
+      if (s.armor >= 100 || !pay(ARMOR_PRICE, 'Gilet pare-balles')) return;
+      s.armor = 100;
+    } else if (kind === 'cloth' && inside === 'clothes') {
+      const c = CLOTHES.find((x) => x.id === id);
+      if (!c) return;
+      if (!s.clothes.includes(c.id)) {
+        if (!pay(c.price, c.name)) return;
+        s.clothes.push(c.id);
+      }
+      s.outfit = { ...s.outfit, ...c.set };
+    } else if (kind === 'car' && inside === 'dealer') {
+      const o = VEHICLE_OFFERS.find((x) => x.type === id);
+      if (!o) return;
+      if (s.garage.length >= GARAGE_SLOTS) {
+        this.toast(p, 'Ton garage est plein');
+        return;
+      }
+      if (!pay(o.price, VEHICLES[o.type].name)) return;
+      s.garage.push({ type: o.type, paint: this.rng.int(0, 7) });
+      this.toast(p, `${VEHICLES[o.type].name} livrée à ta planque`);
+    } else if (kind === 'home' && id in APARTMENT_PRICES) {
+      if (s.homes.includes(id)) return;
+      const def = this.interior(id);
+      if (!def || Math.hypot(def.door.x - s.x, def.door.z - s.z) > 4) return;
+      if (!pay(APARTMENT_PRICES[id], def.name)) return;
+      s.homes.push(id);
+      this.toast(p, `Bienvenue chez toi : ${def.name} !`);
+    }
+  }
+
+  private wear(p: Player, id: string) {
+    const s = p.state;
+    const def = s.interior ? this.interior(s.interior) : undefined;
+    const c = CLOTHES.find((x) => x.id === id);
+    if (!c || !def || (def.kind !== 'hideout' && def.kind !== 'apartment' && def.kind !== 'clothes')) return;
+    if (c.price > 0 && !s.clothes.includes(id)) return;
+    s.outfit = { ...s.outfit, ...c.set };
+  }
+
+  /** Drive a vehicle into your home garage: it is kept (max GARAGE_SLOTS). */
+  private storeVehicle(p: Player) {
+    const s = p.state;
+    const v = this.vehicles.get(s.vehicle);
+    if (!v) return;
+    if (s.garage.length >= GARAGE_SLOTS) {
+      this.toast(p, `Garage plein (${GARAGE_SLOTS} véhicules)`);
+      return;
+    }
+    s.garage.push({ type: v.state.type, paint: v.state.paint });
+    this.leaveVehicle(p);
+    this.removeVehicle(v.state.id);
+    this.toast(p, `${v.spec.name} rangée au garage`);
+  }
+
+  /** Take a stored vehicle out: you step outside, already at the wheel. */
+  private garageOut(p: Player, index: number) {
+    const s = p.state;
+    const def = s.interior ? this.interior(s.interior) : undefined;
+    const slot = s.garage[index];
+    if (!def || !slot || (def.kind !== 'hideout' && def.kind !== 'apartment')) return;
+    s.garage.splice(index, 1);
+    const fx = -Math.sin(def.door.yaw);
+    const fz = -Math.cos(def.door.yaw);
+    s.interior = null;
+    const v = this.spawnVehicle(slot.type, def.door.x + fx * 8, 0.4, def.door.z + fz * 8, def.door.yaw + Math.PI / 2, 'none', false);
+    v.state.paint = slot.paint;
+    v.touchedTick = this.tick;
+    this.teleportPlayer(p, v.state.x, 0.4, v.state.z, def.door.yaw);
+    this.enterVehicle(p, v.state.id);
   }
 
   private interior(id: string): InteriorDef | undefined {
@@ -1074,7 +1202,7 @@ export class SimWorld {
     p.attackCooldown = spec.cooldown;
     s.actionSeq++;
     if (spec.melee) {
-      s.action = s.actionSeq % 3 === 0 ? 'kick' : 'punch';
+      s.action = weapon === 'fist' ? (s.actionSeq % 3 === 0 ? 'kick' : 'punch') : spec.anim === 'stab' ? 'stab' : 'swing';
       // Melee assist: lock on the closest target around and lunge at it
       const target = this.meleeTarget(p, 3.4);
       p.meleeLock = target;
@@ -1093,11 +1221,12 @@ export class SimWorld {
       p.pendingHit = 7;
       return;
     }
-    const aimYaw = s.speed > 0.5 ? s.facing : p.input?.yaw ?? s.facing;
+    // auto-aim in the camera's field of view (where the player is looking)
+    const aimYaw = p.input?.yaw ?? s.facing;
     const target = this.autoAim(p, aimYaw, spec.range, spec.aimCone);
     if (target) s.facing = Math.atan2(-(target.x - s.x), -(target.z - s.z));
     else if (s.speed < 0.5) s.facing = aimYaw;
-    s.action = 'shoot';
+    s.action = spec.anim === 'shoot2' ? 'shoot2' : 'shoot';
     s.ammo[weapon]--;
     const fx = s.x - Math.sin(s.facing) * 0.6;
     const fy = s.y + 1.35;
@@ -1128,7 +1257,11 @@ export class SimWorld {
       ty = 0.6;
     } else if (target) {
       hit = true;
-      this.hitTarget(p, target, spec.damage, false);
+      // shotguns: all pellets hit up close, fewer far away
+      const d = Math.hypot(tx - s.x, tz - s.z);
+      const dmg = spec.pellets ? spec.damage * spec.pellets * Math.max(0.15, Math.min(1, 1.25 - d / spec.range)) : spec.damage;
+      this.hitTarget(p, target, dmg, false);
+      if (spec.pellets) for (let k = 1; k < 4; k++) this.events.push({ type: 'shot', fx, fy, fz, tx: tx + this.rng.range(-1, 1), ty: ty + this.rng.range(-0.5, 0.5), tz: tz + this.rng.range(-1, 1), hit: false });
     }
     this.events.push({ type: 'shot', fx, fy, fz, tx, ty, tz, hit });
     this.crime(p, 'gunshot', s.x, s.z, null, true);
@@ -1247,7 +1380,12 @@ export class SimWorld {
       t.ped.kvz = fz * 2.2;
     }
     this.events.push({ type: 'punch', x: cur.x, y: cur.y + 1.3, z: cur.z });
-    this.hitTarget(p, t, s.action === 'kick' ? WEAPONS.fist.damage * 1.3 : WEAPONS.fist.damage, true);
+    const spec = WEAPONS[s.weapon].melee ? WEAPONS[s.weapon] : WEAPONS.fist;
+    if (t.ped && spec.knock) {
+      t.ped.kvx = fx * spec.knock;
+      t.ped.kvz = fz * spec.knock;
+    }
+    this.hitTarget(p, t, s.action === 'kick' ? spec.damage * 1.3 : spec.damage, true);
     for (const o of this.peds.values()) if (o !== t.ped && Math.hypot(o.state.x - s.x, o.state.z - s.z) < 14) o.scare(s.x, s.z, false);
   }
 
@@ -1264,7 +1402,7 @@ export class SimWorld {
         if (s.wanted === 0 || (wasAlive && !t.ped.alive) || !melee) this.crime(p, 'attack_cop', t.ped.state.x, t.ped.state.z, null, true);
         else this.police.reported(p, s.x, s.z);
         if (t.ped.police) t.ped.police.target = s.id;
-      } else this.crime(p, t.ped.alive ? (melee ? 'assault' : 'shoot_person') : 'knockout', t.ped.state.x, t.ped.state.z, t.ped);
+      } else this.crime(p, t.ped.alive ? (melee ? 'assault' : 'shoot_person') : 'knockout', t.ped.state.x, t.ped.state.z, t.ped, !melee);
     } else if (t.player) {
       this.damagePlayer(t.player, damage * 0.8);
     } else if (t.vehicle) t.vehicle.state.health -= damage * 0.8;

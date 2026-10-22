@@ -86,7 +86,11 @@ export type PoiKind =
   | 'shop'
   | 'airport'
   | 'hideout'
-  | 'fountain';
+  | 'fountain'
+  | 'gunshop'
+  | 'clothes'
+  | 'dealer'
+  | 'apartment';
 
 export interface PoiDef {
   id: string;
@@ -125,7 +129,7 @@ export interface BlockDef {
   kind: 'haussmann' | 'cites' | 'commercial' | 'place' | 'special';
 }
 
-export type InteriorKind = 'shop' | 'bank' | 'jewelry' | 'police' | 'hospital' | 'hideout';
+export type InteriorKind = 'shop' | 'bank' | 'jewelry' | 'police' | 'hospital' | 'hideout' | 'gunshop' | 'clothes' | 'dealer' | 'apartment';
 
 /**
  * Enterable building. The room itself is built off-map at `origin` (x > 1000) and

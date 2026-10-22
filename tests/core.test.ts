@@ -68,9 +68,9 @@ describe('save', () => {
     const store = new Map<string, string>();
     const storage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) };
     const s = defaultSave();
-    s.progress.money = 1234;
+    s.profile.money = 1234;
     writeSave(s, storage);
-    expect(loadSave(storage).progress.money).toBe(1234);
+    expect(loadSave(storage).profile.money).toBe(1234);
     store.set('streetz.save', '{oops');
     expect(loadSave(storage)).toEqual(defaultSave());
   });

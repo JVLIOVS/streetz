@@ -1,6 +1,7 @@
 import './ui/style.css';
 import { Sound } from './audio/sound';
 import { loadSave, writeSave } from './core/save';
+import { applyProfile, profileOf } from './sim/player';
 import { Game, LOCAL_PLAYER, type NetSession } from './game';
 import { Controls } from './input/controls';
 import { loadMap } from './maps/registry';
@@ -103,7 +104,7 @@ async function boot() {
     netStatus.textContent = `Connexion à la partie ${code}…`;
     try {
       const t = await join(code);
-      const { id, host } = await NetClient.connect(t, name(), myLook);
+      const { id, host } = await NetClient.connect(t, name(), myLook, loadSave().profile);
       busy = false;
       await start({ kind: 'guest', t, code, id, host });
     } catch (err) {
@@ -118,7 +119,7 @@ async function launch(map: MapData, assets: GameAssets, quality: QualityLevel, s
   sim.density = DENSITY[quality];
   const localId = mode.kind === 'solo' ? LOCAL_PLAYER : mode.kind === 'host' ? mode.t.selfId : mode.id;
   const me = sim.addPlayer(localId);
-  me.state.money = mode.kind === 'solo' ? save.progress.money : 500;
+  applyProfile(me.state, save.profile);
   me.state.name = playerName;
   me.state.look = look;
 
@@ -128,12 +129,13 @@ async function launch(map: MapData, assets: GameAssets, quality: QualityLevel, s
   const hud = new Hud(map);
   const sound = new Sound();
   const game = new Game(sim, view, controls, hud, sound, debug, localId);
+  // your progression is saved on this phone in every mode (solo, host or guest)
   const persist = () => {
-    if (mode.kind !== 'solo') return; // multiplayer money lives in the session
-    save.progress.money = game.player.money;
+    save.profile = profileOf(game.player);
     writeSave(save);
   };
   game.onSave = persist;
+  setInterval(persist, 5000);
 
   let net: NetSession | null = null;
   if (mode.kind === 'host') {

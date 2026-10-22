@@ -6,6 +6,7 @@ import type { Controls } from './input/controls';
 import type { GameRenderer } from './render/renderer';
 import type { SimWorld } from './sim/world';
 import type { Hud } from './ui/hud';
+import { MenuPanel, type MenuKind } from './ui/menus';
 
 export const LOCAL_PLAYER = 'local';
 
@@ -35,6 +36,9 @@ export class Game {
   private lastWanted = 0;
   onSave?: () => void;
   net: NetSession | null = null;
+  readonly menu: MenuPanel;
+  /** Commands from menus (shop, wardrobe, garage), sent with the next tick. */
+  private menuActions: { action: ActionCommand['action']; arg: string }[] = [];
 
   constructor(
     readonly sim: SimWorld,
@@ -45,6 +49,10 @@ export class Game {
     private debug: boolean,
     readonly localId: string = LOCAL_PLAYER,
   ) {
+    this.menu = new MenuPanel(
+      (action, arg) => this.menuActions.push({ action, arg }),
+      () => {},
+    );
     this.loop = new FixedLoop(
       (tick) => this.step(tick),
       (alpha, dt) => this.render(alpha, dt),
@@ -94,7 +102,18 @@ export class Game {
       handbrake: h.handbrake || k.handbrake,
     };
     this.queue.push(cmd);
-    const actions: ActionCommand[] = this.controls.takeActions().map((a) => ({ type: 'action', playerId: this.localId, tick, action: a }));
+    const actions: ActionCommand[] = [];
+    for (const a of this.controls.takeActions()) {
+      // contextual "use" on a counter / wardrobe / garage opens a menu instead
+      const ctx = this.player.context;
+      if (a === 'use' && ctx && (ctx.kind === 'shop' || ctx.kind === 'wardrobe' || ctx.kind === 'garage')) {
+        this.menu.open(ctx.kind === 'shop' ? (ctx.target as MenuKind) : ctx.kind);
+        continue;
+      }
+      actions.push({ type: 'action', playerId: this.localId, tick, action: a });
+    }
+    for (const m of this.menuActions) actions.push({ type: 'action', playerId: this.localId, tick, action: m.action, arg: m.arg });
+    this.menuActions = [];
     // Holding the trigger keeps attacking (the sim enforces the weapon's rate of fire)
     if ((h.attack || k.attack) && this.player.vehicle < 0 && tick % 4 === 0) actions.push({ type: 'action', playerId: this.localId, tick, action: 'attack' });
     for (const a of actions) if (!this.net?.onLocalAction(a)) this.queue.push(a);
@@ -222,6 +241,7 @@ export class Game {
     }
     this.hud.update(dt);
     this.hud.updatePlayer(me);
+    this.menu.update(me);
     this.updateTargetBar(me.lastHit, me.lastHitTick);
     if (this.sim.players.size > 1) this.updateNameTags(me);
     this.hudTimer -= dt;

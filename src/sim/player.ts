@@ -1,13 +1,32 @@
 import type RAPIER_T from '@dimforge/rapier3d-compat';
 import type { MoveCommand } from '../core/commands';
 import { DT } from '../core/loop';
+import type { Profile } from '../core/save';
+import type { Outfit } from '../data/shop';
+import type { VehicleType } from '../data/vehicles';
 import type { WeaponId } from '../data/weapons';
 
 export type PlayerAnim = 'idle' | 'walk' | 'run' | 'sprint' | 'jump' | 'fall' | 'drive' | 'ko';
-export type PlayerAction = 'punch' | 'kick' | 'shoot' | 'hit' | 'interact';
+export type PlayerAction = 'punch' | 'kick' | 'shoot' | 'shoot2' | 'stab' | 'swing' | 'hit' | 'interact';
 
 export interface ContextAction {
-  kind: 'enter_vehicle' | 'steal_vehicle' | 'exit_vehicle' | 'enter_building' | 'exit_building' | 'rob' | 'talk' | 'travel' | 'repaint';
+  kind:
+    | 'enter_vehicle'
+    | 'steal_vehicle'
+    | 'exit_vehicle'
+    | 'enter_building'
+    | 'exit_building'
+    | 'rob'
+    | 'talk'
+    | 'travel'
+    | 'repaint'
+    /** These open a menu on the client (shop list, wardrobe, garage). */
+    | 'shop'
+    | 'wardrobe'
+    | 'garage'
+    | 'buy_home'
+    | 'store_vehicle'
+    | 'mission';
   label: string;
   target: number | string;
 }
@@ -30,7 +49,24 @@ export interface PlayerState {
   armor: number;
   money: number;
   weapon: WeaponId;
+  /** Weapons owned (fists always). */
+  weapons: WeaponId[];
   ammo: Record<WeaponId, number>;
+  /** Clothes worn (overrides of the generated look) and owned. */
+  outfit: Outfit;
+  clothes: string[];
+  /** Vehicles stored in the garage, and homes owned (the hideout is always yours). */
+  garage: { type: VehicleType; paint: number }[];
+  homes: string[];
+  /** Reputation points (missions); level = 1 + floor(rep / 100). */
+  rep: number;
+  /** Story missions completed, and the one in progress (id) with its step. */
+  missionsDone: string[];
+  mission: string | null;
+  missionStep: number;
+  /** One-line objective of the current mission, and its countdown (s, -1 = none). */
+  objective: string;
+  missionTimer: number;
   /** Vehicle id when driving, -1 on foot. */
   vehicle: number;
   /** Interior id when inside a building. */
@@ -122,7 +158,18 @@ export class Player {
       armor: 0,
       money: 500,
       weapon: 'fist',
-      ammo: { fist: 0, pistol: 48, rifle: 0 },
+      weapons: ['fist'],
+      ammo: { fist: 0, knife: 0, baton: 0, bat: 0, pistol: 0, smg: 0, shotgun: 0, rifle: 0 },
+      outfit: {},
+      clothes: [],
+      garage: [],
+      homes: ['hideout'],
+      rep: 0,
+      missionsDone: [],
+      mission: null,
+      missionStep: 0,
+      objective: '',
+      missionTimer: -1,
       vehicle: -1,
       interior: null,
       action: null,
@@ -259,4 +306,34 @@ export function angleDiff(a: number, b: number): number {
   if (d > Math.PI) d -= Math.PI * 2;
   if (d < -Math.PI) d += Math.PI * 2;
   return d;
+}
+
+/** Loads a saved profile into a player. */
+export function applyProfile(s: PlayerState, p: Profile) {
+  s.money = p.money;
+  s.weapons = [...p.weapons];
+  for (const k of Object.keys(s.ammo) as WeaponId[]) s.ammo[k] = Math.max(0, Number(p.ammo[k]) || 0);
+  s.armor = p.armor;
+  s.outfit = { ...p.outfit };
+  s.clothes = [...p.clothes];
+  s.garage = p.garage.map((g) => ({ ...g }));
+  s.homes = [...p.homes];
+  s.rep = p.rep;
+  s.missionsDone = [...p.missions];
+}
+
+/** What gets saved from a player. */
+export function profileOf(s: PlayerState): Profile {
+  return {
+    money: s.money,
+    weapons: [...s.weapons],
+    ammo: { ...s.ammo },
+    armor: Math.round(s.armor),
+    outfit: { ...s.outfit },
+    clothes: [...s.clothes],
+    garage: s.garage.map((g) => ({ ...g })),
+    homes: [...s.homes],
+    rep: s.rep,
+    missions: [...s.missionsDone],
+  };
 }

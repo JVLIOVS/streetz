@@ -127,11 +127,15 @@ export function buildParisMap(seed = 1789): MapData {
     police: [18, 14],
     hospital: [18, 14],
     hideout: [14, 12],
+    gunshop: [14, 12],
+    clothes: [16, 12],
+    dealer: [24, 18],
+    apartment: [16, 14],
   };
   const SHOP_NAMES = ['Supérette Miam', 'Proxi Lune', 'Épicerie Chez Momo', '8 à Minuit', 'Mini Prix Bellevue'];
-  const addInterior = (kind: InteriorDef['kind'], name: string, sign: string, signColor: number, door: InteriorDef['door']) => {
+  const addInterior = (kind: InteriorDef['kind'], name: string, sign: string, signColor: number, door: InteriorDef['door'], fixedId?: string) => {
     const [w, d] = INTERIOR_SIZE[kind];
-    const id = `${kind}-${interiors.length}`;
+    const id = fixedId ?? `${kind}-${interiors.length}`;
     interiors.push({ id, kind, name, door, origin: { x: 1100 + interiors.length * 50, z: 0 }, w, d, sign, signColor });
     return id;
   };
@@ -273,6 +277,11 @@ export function buildParisMap(seed = 1789): MapData {
     { x: 190, z: -117, kind: 'jewelry', id: 'jewelry', name: 'Bijouterie Saphir', color: 0x7a4fd6, h: 12 },
     { x: -340, z: -340, kind: 'hideout', id: 'hideout', name: 'La Planque', color: 0x8a6d4f, h: 10 },
     { x: -420, z: 420, kind: 'airport', id: 'airport', name: 'Aéroport Porte-d’Or', color: 0xcfe6ff, h: 14 },
+    { x: 115, z: -43, kind: 'gunshop', id: 'gunshop', name: 'Armurerie Calibre', color: 0x4a4f5c, h: 9 },
+    { x: 190, z: -43, kind: 'clothes', id: 'clothes', name: 'Boutique Swagg', color: 0xff7eb6, h: 11 },
+    { x: 270, z: -190, kind: 'dealer', id: 'dealer', name: 'Concession Bolide', color: 0xf2f2f2, h: 9 },
+    { x: -117, z: 250, kind: 'apartment', id: 'apartment_rive', name: 'Appart Rive Haute', color: 0xf0d9b5, h: 20 },
+    { x: 43, z: 330, kind: 'apartment', id: 'apartment_loft', name: 'Loft du Parc', color: 0xb5d8f0, h: 24 },
   ];
 
   const blockContains = (bx0: number, bz0: number, bx1: number, bz1: number, p: { x: number; z: number }) =>
@@ -445,9 +454,13 @@ export function buildParisMap(seed = 1789): MapData {
       police: ['POLICE', 0x5aa2ff],
       hospital: ['HÔPITAL', 0xff5d6c],
       hideout: ['LA PLANQUE', 0xffd23f],
+      gunshop: ['ARMURERIE', 0xff7a3d],
+      clothes: ['BOUTIQUE SWAGG', 0xff7eb6],
+      dealer: ['CONCESSION BOLIDE', 0x5ee8ff],
+      apartment: ['À VENDRE', 0x7dff7a],
     };
     const e = enterable[s.kind];
-    if (e) addInterior(s.kind as InteriorDef['kind'], s.name, e[0], e[1], door);
+    if (e) addInterior(s.kind as InteriorDef['kind'], s.name, e[0], e[1], door, s.kind === 'apartment' ? s.id : undefined);
     pois.push({ id: s.id, kind: s.kind, name: s.name, x: door.x, z: door.z - 1 });
   }
 

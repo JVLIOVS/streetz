@@ -5,6 +5,7 @@ import type { PlayerState } from '../sim/player';
 import type { BrokenProp } from '../sim/props';
 import type { VehicleState } from '../sim/vehicle';
 import type { PickupState, PlayerReport, SimEvent } from '../sim/world';
+import type { Profile } from '../core/save';
 
 /**
  * Wire format. Entities are packed into flat number arrays (positions rounded to cm)
@@ -22,7 +23,7 @@ export type HostMessage =
   | { t: 'full' }
   | { t: 'snap'; k: number; P: NetPlayer[]; D: number[][]; V: number[][]; K: number[][]; X: number[][]; E: SimEvent[] };
 
-export type GuestMessage = { t: 'join'; name: string; look: number } | ({ t: 'st'; a: ActionKind[] } & PlayerReport);
+export type GuestMessage = { t: 'join'; name: string; look: number; profile?: Profile } | ({ t: 'st'; a: { k: ActionKind; arg?: string }[] } & PlayerReport);
 
 const q = (n: number) => Math.round(n * 100) / 100;
 
@@ -62,6 +63,22 @@ export type NetPlayer = Pick<
   | 'teleportSeq'
   | 'name'
   | 'look'
+  | 'weapons'
+  | 'outfit'
+  | 'clothes'
+  | 'garage'
+  | 'homes'
+  | 'rep'
+  | 'missionsDone'
+  | 'mission'
+  | 'missionStep'
+  | 'objective'
+  | 'missionTimer'
+  | 'wantedSeen'
+  | 'searchX'
+  | 'searchZ'
+  | 'searchR'
+  | 'arrest'
 >;
 
 export function packPlayer(s: PlayerState): NetPlayer {
@@ -95,6 +112,22 @@ export function packPlayer(s: PlayerState): NetPlayer {
     teleportSeq: s.teleportSeq,
     name: s.name,
     look: s.look,
+    weapons: s.weapons,
+    outfit: s.outfit,
+    clothes: s.clothes,
+    garage: s.garage,
+    homes: s.homes,
+    rep: s.rep,
+    missionsDone: s.missionsDone,
+    mission: s.mission,
+    missionStep: s.missionStep,
+    objective: s.objective,
+    missionTimer: q(s.missionTimer),
+    wantedSeen: s.wantedSeen,
+    searchX: q(s.searchX),
+    searchZ: q(s.searchZ),
+    searchR: s.searchR,
+    arrest: q(s.arrest),
   };
 }
 

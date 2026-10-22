@@ -17,7 +17,7 @@ const CLIPS = {
   'Rig_Medium_General.glb': ['Idle_A', 'Hit_A', 'Hit_B', 'Death_A', 'Death_A_Pose', 'Death_B', 'Interact', 'PickUp', 'Throw'],
   'Rig_Medium_MovementBasic.glb': ['Walking_A', 'Walking_B', 'Running_A', 'Running_B', 'Jump_Start', 'Jump_Idle', 'Jump_Land'],
   'Rig_Medium_MovementAdvanced.glb': ['Running_HoldingRifle', 'Dodge_Forward', 'Crouching'],
-  'Rig_Medium_CombatMelee.glb': ['Melee_Unarmed_Attack_Punch_A', 'Melee_Unarmed_Attack_Kick', 'Melee_Unarmed_Idle'],
+  'Rig_Medium_CombatMelee.glb': ['Melee_Unarmed_Attack_Punch_A', 'Melee_Unarmed_Attack_Kick', 'Melee_Unarmed_Idle', 'Melee_1H_Attack_Chop', 'Melee_1H_Attack_Slice_Horizontal', 'Melee_1H_Attack_Stab', 'Melee_2H_Attack_Chop'],
   'Rig_Medium_CombatRanged.glb': ['Ranged_1H_Aiming', 'Ranged_1H_Shoot', 'Ranged_2H_Aiming', 'Ranged_2H_Shoot'],
   'Rig_Medium_Simulation.glb': ['Sit_Chair_Idle', 'Waving', 'Cheering', 'Lie_Idle'],
 };

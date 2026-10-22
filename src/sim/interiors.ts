@@ -27,6 +27,9 @@ export interface RoomLayout {
   /** Counter position (robbery spot) and the clerk behind it. */
   counter: { x: number; z: number } | null;
   clerk: { x: number; z: number } | null;
+  /** Hideouts: change outfit here / take out a stored vehicle here. */
+  wardrobe: { x: number; z: number } | null;
+  garage: { x: number; z: number } | null;
 }
 
 const PALETTE: Record<InteriorDef['kind'], { floor: number; wall: number; trim: number; counter: number }> = {
@@ -36,6 +39,10 @@ const PALETTE: Record<InteriorDef['kind'], { floor: number; wall: number; trim: 
   police: { floor: 0xc9d1dc, wall: 0xe6edf5, trim: 0x2f6fe0, counter: 0x3c4a66 },
   hospital: { floor: 0xe8f1f2, wall: 0xffffff, trim: 0xff4057, counter: 0xdfe7ea },
   hideout: { floor: 0x7a5a3c, wall: 0xd9c3a1, trim: 0x3b2516, counter: 0x5b3b22 },
+  gunshop: { floor: 0x4a4a52, wall: 0xc9b9a0, trim: 0xff7a3d, counter: 0x2b2b30 },
+  clothes: { floor: 0xf2e6f2, wall: 0xffffff, trim: 0xff7eb6, counter: 0xffffff },
+  dealer: { floor: 0xdfe5ea, wall: 0xf7f9fb, trim: 0x2f80ed, counter: 0x2b2b30 },
+  apartment: { floor: 0xa9805a, wall: 0xf3ead8, trim: 0x2d3436, counter: 0x6b4423 },
 };
 
 const PRODUCTS = [0xff4f6d, 0xffd23f, 0x2f80ed, 0x27ae60, 0xf2994a, 0x9b51e0, 0x56ccf2];
@@ -61,7 +68,7 @@ export function roomLayout(def: InteriorDef): RoomLayout {
   let counter: RoomLayout['counter'] = null;
   let clerk: RoomLayout['clerk'] = null;
   const cz = oz - d / 2 + 3.2;
-  if (def.kind !== 'hideout') {
+  if (def.kind !== 'hideout' && def.kind !== 'apartment') {
     boxes.push({ x: ox, y: 0.55, z: cz, sx: Math.min(8, w * 0.55), sy: 1.1, sz: 1.0, color: pal.counter });
     boxes.push({ x: ox, y: 1.12, z: cz, sx: Math.min(8, w * 0.55) + 0.2, sy: 0.06, sz: 1.2, color: 0xf5f5f5, deco: true });
     counter = { x: ox, z: cz + 1.4 };
@@ -95,7 +102,25 @@ export function roomLayout(def: InteriorDef): RoomLayout {
       boxes.push({ x, y: 1.15, z, sx: 1.1, sy: 0.3, sz: 2.3, color: 0xd6f4ff, deco: true });
       boxes.push({ x, y: 1.05, z, sx: 0.2, sy: 0.12, sz: 0.2, color: 0xffd23f, deco: true });
     }
-  } else if (def.kind === 'hideout') {
+  } else if (def.kind === 'gunshop') {
+    // racks of guns on the back wall
+    for (let k = 0; k < 5; k++) {
+      boxes.push({ x: ox - 4 + k * 2, y: 2.2, z: oz - d / 2 + 0.25, sx: 1.4, sy: 0.12, sz: 0.3, color: 0x2b2b30, deco: true });
+      boxes.push({ x: ox - 4 + k * 2, y: 1.6, z: oz - d / 2 + 0.25, sx: 1.2, sy: 0.12, sz: 0.3, color: 0x6b4423, deco: true });
+    }
+    boxes.push({ x: ox + w / 2 - 1, y: 0.6, z: oz + 1, sx: 1.2, sy: 1.2, sz: 4, color: 0x3d5a40 });
+  } else if (def.kind === 'clothes') {
+    // clothes racks with colorful shirts
+    for (let k = 0; k < 4; k++) {
+      const x = ox - w / 2 + 2.5 + k * 3.5;
+      boxes.push({ x, y: 1.5, z: oz + 1.5, sx: 2.4, sy: 0.08, sz: 0.08, color: 0xc0c0c0, deco: true });
+      for (let i = 0; i < 5; i++) boxes.push({ x: x - 1 + i * 0.5, y: 1.0, z: oz + 1.5, sx: 0.35, sy: 0.9, sz: 0.6, color: PRODUCTS[(k + i) % PRODUCTS.length], deco: true });
+    }
+    boxes.push({ x: ox + w / 2 - 0.3, y: 1.6, z: oz, sx: 0.1, sy: 2.4, sz: 1.6, color: 0xdff4ff, deco: true }); // mirror
+  } else if (def.kind === 'dealer') {
+    // showroom: a glossy plinth
+    boxes.push({ x: ox, y: 0.1, z: oz + 1, sx: 7, sy: 0.2, sz: 5, color: 0xffffff });
+  } else if (def.kind === 'hideout' || def.kind === 'apartment') {
     boxes.push({ x: ox - w / 2 + 1.5, y: 0.3, z: oz - d / 2 + 2, sx: 2.2, sy: 0.6, sz: 3.2, color: 0x3d5a80 }); // bed
     boxes.push({ x: ox + 2, y: 0.45, z: oz - 1, sx: 3.5, sy: 0.9, sz: 1.5, color: 0x8a4fff }); // sofa
     boxes.push({ x: ox + 2, y: 1.6, z: oz - d / 2 + 0.3, sx: 3, sy: 1.7, sz: 0.2, color: 0x111111, deco: true }); // TV
@@ -104,8 +129,20 @@ export function roomLayout(def: InteriorDef): RoomLayout {
     // police / hospital waiting rooms: rows of chairs
     for (let k = 0; k < 4; k++) boxes.push({ x: ox - w / 2 + 2 + k * 1.2, y: 0.25, z: oz + 2, sx: 0.9, sy: 0.5, sz: 0.9, color: pal.trim });
   }
+  // hideouts and apartments: a wardrobe (outfits) and a garage terminal (stored vehicles)
+  let wardrobe: RoomLayout['wardrobe'] = null;
+  let garage: RoomLayout['garage'] = null;
+  if (def.kind === 'hideout' || def.kind === 'apartment') {
+    boxes.push({ x: ox + w / 2 - 0.5, y: 1.1, z: oz + 1.5, sx: 0.9, sy: 2.2, sz: 2.2, color: 0x6b4423 });
+    wardrobe = { x: ox + w / 2 - 1.6, z: oz + 1.5 };
+    boxes.push({ x: ox - w / 2 + 0.4, y: 1.4, z: oz + 2.5, sx: 0.3, sy: 1.2, sz: 0.9, color: 0x2a2a30 });
+    boxes.push({ x: ox - w / 2 + 0.55, y: 1.6, z: oz + 2.5, sx: 0.05, sy: 0.6, sz: 0.7, color: 0x5ee8ff, deco: true });
+    garage = { x: ox - w / 2 + 1.4, z: oz + 2.5 };
+  }
   return {
     boxes,
+    wardrobe,
+    garage,
     spawn: { x: ox, z: oz + d / 2 - 1.8 },
     exit: { x: ox, z: oz + d / 2 - 0.6 },
     counter,

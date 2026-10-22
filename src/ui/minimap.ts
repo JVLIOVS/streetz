@@ -10,6 +10,10 @@ const POI_STYLE: Partial<Record<PoiKind, { color: string; label: string }>> = {
   jewelry: { color: '#b56cff', label: '◆' },
   hideout: { color: '#ffd23f', label: '⌂' },
   shop: { color: '#22b14c', label: '🛒' },
+  gunshop: { color: '#ff7a3d', label: '🔫' },
+  clothes: { color: '#ff7eb6', label: '👕' },
+  dealer: { color: '#2f80ed', label: '🚗' },
+  apartment: { color: '#7dff7a', label: '🏠' },
   airport: { color: '#9fd3ff', label: '✈' },
 };
 

@@ -1,5 +1,7 @@
 import type { ActionCommand, CommandQueue } from '../core/commands';
 import type { NetSession } from '../game';
+import { sanitize } from '../core/save';
+import { applyProfile } from '../sim/player';
 import type { SimEvent, SimWorld } from '../sim/world';
 import { AOI, MAX_PLAYERS, packPed, packPickup, packPlayer, packProp, packVehicle, SNAPSHOT_EVERY, type GuestMessage, type HostMessage } from './protocol';
 import type { Transport } from './transport';
@@ -51,7 +53,7 @@ export class NetHost implements NetSession {
       p.remote = true;
       p.state.name = name;
       p.state.look = m.look;
-      p.state.money = 500;
+      applyProfile(p.state, sanitize(m.profile));
       this.t.send({ t: 'welcome', id: from, host: this.t.selfId, tick: this.sim.tick } satisfies HostMessage, from);
       this.sim.events.push({ type: 'joined', playerId: from, name });
       this.onPlayersChange?.(this.playerCount);
@@ -60,7 +62,7 @@ export class NetHost implements NetSession {
     if (m.t === 'st') {
       if (!this.guests.has(from)) return;
       this.sim.applyPlayerReport(from, m);
-      for (const a of m.a ?? []) this.pending.push({ type: 'action', playerId: from, tick: 0, action: a });
+      for (const a of m.a ?? []) this.pending.push({ type: 'action', playerId: from, tick: 0, action: a.k, arg: a.arg });
     }
   }
 

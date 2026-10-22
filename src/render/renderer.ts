@@ -5,7 +5,7 @@ import type { GameAssets } from './assets';
 import { ThirdPersonCamera } from './camera';
 import { CityView } from './city';
 import { Effects } from './effects';
-import { DEFAULT_LOOK, HumanView, initHumans, randomLook, type BaseAnim } from './human';
+import { DEFAULT_LOOK, HumanView, initHumans, playerLook, type BaseAnim, type WeaponModel } from './human';
 import { HeliRenderer } from './helis';
 import { InteriorsView } from './interiors';
 import { sharedUniforms, skyMaterial } from './materials';
@@ -17,6 +17,8 @@ interface PlayerSlot {
   view: HumanView;
   seq: number;
   weapon: string;
+  /** Look + outfit the view was built with. */
+  key: string;
 }
 
 const SUN_DIR = new THREE.Vector3(-0.45, 0.8, 0.35).normalize();
@@ -34,7 +36,7 @@ export class GameRenderer {
   private player: PlayerSlot;
   /** Other players (multiplayer). */
   private others = new Map<string, PlayerSlot>();
-  private playerLook = -1;
+  private playerLook = '-1|{}';
   private lastInterior: string | null = null;
   private sky: THREE.Mesh;
   private preset: QualityPreset;
@@ -89,7 +91,7 @@ export class GameRenderer {
     this.interiors = new InteriorsView(map);
     this.scene.add(this.vehicles.root, this.peds.root, this.effects.root, this.interiors.root, this.helis.root);
 
-    this.player = { view: new HumanView(DEFAULT_LOOK), seq: 0, weapon: '' };
+    this.player = { view: new HumanView(DEFAULT_LOOK), seq: 0, weapon: '', key: '-1|{}' };
     this.player.view.setOutline(true);
     this.scene.add(this.player.view.root);
 
@@ -192,11 +194,12 @@ export class GameRenderer {
       }
       cx = x;
       cz = z;
-      if (s.look !== this.playerLook) {
-        // your own outfit (multiplayer guests get a random one, the same the others see)
-        this.playerLook = s.look;
+      const lookKey = `${s.look}|${JSON.stringify(s.outfit)}`;
+      if (lookKey !== this.playerLook) {
+        // your own look: seed (multiplayer guests) + the clothes you wear
+        this.playerLook = lookKey;
         this.player.view.dispose();
-        this.player = { view: new HumanView(s.look >= 0 ? randomLook(s.look) : DEFAULT_LOOK), seq: s.actionSeq, weapon: '' };
+        this.player = { view: new HumanView(playerLook(s.look, s.outfit)), seq: s.actionSeq, weapon: '', key: lookKey };
         this.player.view.setOutline(true);
         this.scene.add(this.player.view.root);
       }
@@ -254,8 +257,14 @@ export class GameRenderer {
       const s = p.state;
       if (s.id === localId) continue;
       let slot = this.others.get(s.id);
+      const key = `${s.look}|${JSON.stringify(s.outfit)}`;
+      if (slot && slot.key !== key) {
+        slot.view.dispose();
+        this.others.delete(s.id);
+        slot = undefined;
+      }
       if (!slot) {
-        slot = { view: new HumanView(s.look >= 0 ? randomLook(s.look) : DEFAULT_LOOK), seq: s.actionSeq, weapon: '' };
+        slot = { view: new HumanView(playerLook(s.look, s.outfit)), seq: s.actionSeq, weapon: '', key };
         slot.view.setOutline(true);
         this.scene.add(slot.view.root);
         this.others.set(s.id, slot);
@@ -292,10 +301,10 @@ export class GameRenderer {
       if (anim === 'walk') view.setSpeedScale(Math.max(0.6, s.speed / 2.2));
       else if (anim === 'run') view.setSpeedScale(Math.max(0.8, s.speed / 5.6));
     }
-    const weapon = s.vehicle >= 0 ? 'none' : s.weapon === 'fist' ? 'none' : s.weapon;
+    const weapon: WeaponModel = s.vehicle >= 0 || s.weapon === 'fist' ? 'none' : s.weapon;
     if (weapon !== slot.weapon) {
       slot.weapon = weapon;
-      view.setWeapon(weapon as 'none' | 'pistol' | 'rifle');
+      view.setWeapon(weapon);
     }
     if (s.actionSeq !== slot.seq) {
       slot.seq = s.actionSeq;

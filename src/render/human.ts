@@ -55,6 +55,11 @@ export const DEFAULT_LOOK: HumanLook = {
   width: 1,
 };
 
+/** Base look (seed, or the default hero) with the clothes the player wears on top. */
+export function playerLook(seed: number, outfit: Partial<HumanLook>): HumanLook {
+  return { ...(seed >= 0 ? randomLook(seed) : DEFAULT_LOOK), ...outfit };
+}
+
 export function randomLook(seed: number): HumanLook {
   const r = new Rng(seed);
   const female = r.chance(0.5);
@@ -374,7 +379,7 @@ function dressedGeometry(look: HumanLook, t: Template): THREE.BufferGeometry {
 // --------------------------------------------------------------------------- view
 
 export type BaseAnim = 'idle' | 'walk' | 'run' | 'sprint' | 'jump' | 'fall' | 'ko' | 'drive' | 'cower' | 'wave' | 'aim' | 'guard';
-export type OverlayAnim = 'punch' | 'kick' | 'shoot' | 'hit' | 'interact';
+export type OverlayAnim = 'punch' | 'kick' | 'shoot' | 'shoot2' | 'stab' | 'swing' | 'hit' | 'interact';
 
 const BASE_CLIPS: Record<BaseAnim, { clip: string; loop: boolean; speed?: number }> = {
   idle: { clip: 'Idle_A', loop: true },
@@ -394,6 +399,9 @@ const OVERLAY_CLIPS: Record<OverlayAnim, { clip: string; speed?: number }> = {
   punch: { clip: 'Melee_Unarmed_Attack_Punch_A', speed: 1.6 },
   kick: { clip: 'Melee_Unarmed_Attack_Kick', speed: 1.4 },
   shoot: { clip: 'Ranged_1H_Shoot', speed: 1.5 },
+  shoot2: { clip: 'Ranged_2H_Shoot', speed: 1.8 },
+  stab: { clip: 'Melee_1H_Attack_Stab', speed: 1.6 },
+  swing: { clip: 'Melee_1H_Attack_Chop', speed: 1.5 },
   hit: { clip: 'Hit_A', speed: 1.3 },
   interact: { clip: 'Interact', speed: 1.5 },
 };

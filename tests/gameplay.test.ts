@@ -23,7 +23,13 @@ const move = (tick: number, extra: Partial<MoveCommand> = {}): MoveCommand => ({
   handbrake: false,
   ...extra,
 });
-const act = (tick: number, action: ActionCommand['action']): ActionCommand => ({ type: 'action', playerId: 'p1', tick, action });
+const act = (tick: number, action: ActionCommand['action'], arg?: string): ActionCommand => ({ type: 'action', playerId: 'p1', tick, action, arg });
+/** Give the test player a pistol with some bullets (players start bare-handed). */
+const arm = (w: SimWorld) => {
+  const s = w.players.get('p1')!.state;
+  if (!s.weapons.includes('pistol')) s.weapons.push('pistol');
+  s.ammo.pistol = 48;
+};
 
 async function world(spawn?: { x: number; y: number; z: number; yaw: number }) {
   const w = await SimWorld.create(map);
@@ -188,6 +194,7 @@ describe('combat', () => {
   it('the pistol auto-aims, uses ammo and raises the wanted level', async () => {
     const { w, ped } = await withPed();
     ped.state.z -= 8;
+    arm(w);
     run(w, 1, (t) => [move(t, { yaw: 0 }), act(t, 'weapon')]);
     expect(P(w).weapon).toBe('pistol');
     const ammo = P(w).ammo.pistol;
@@ -223,6 +230,7 @@ describe('buildings', () => {
     w.players.get('p1')!.teleport(room.counter!.x, 0.2, room.counter!.z);
     run(w, 5);
     expect(P(w).context?.kind).toBe('talk');
+    arm(w);
     run(w, 1, (t) => [act(t, 'weapon')]);
     run(w, 2);
     expect(P(w).context?.kind).toBe('rob');
@@ -426,5 +434,102 @@ describe('police', () => {
     run(w, 1, (t) => [act(t, 'use')]);
     expect(P(w).wanted).toBe(0);
     expect(P(w).money).toBe(money - 300);
+  });
+});
+
+describe('shops, wardrobe and garage', () => {
+  async function inside(kind: string) {
+    const def = map.interiors.find((i) => i.kind === kind)!;
+    const fx = -Math.sin(def.door.yaw);
+    const fz = -Math.cos(def.door.yaw);
+    const w = await world({ x: def.door.x + fx * 1.2, y: 0.3, z: def.door.z + fz * 1.2, yaw: 0 });
+    run(w, 5);
+    run(w, 1, (t) => [act(t, 'use')]);
+    expect(P(w).interior).toBe(def.id);
+    return { w, room: w.rooms.get(def.id)! };
+  }
+
+  it('buys weapons, ammo and a vest at the gun shop', async () => {
+    const { w, room } = await inside('gunshop');
+    P(w).money = 5000;
+    w.players.get('p1')!.teleport(room.counter!.x, 0.2, room.counter!.z);
+    run(w, 3);
+    expect(P(w).context?.kind).toBe('shop');
+    run(w, 1, (t) => [act(t, 'buy', 'weapon:pistol'), act(t, 'buy', 'weapon:bat'), act(t, 'buy', 'armor')]);
+    expect(P(w).weapons).toEqual(expect.arrayContaining(['pistol', 'bat']));
+    expect(P(w).ammo.pistol).toBe(36);
+    expect(P(w).armor).toBe(100);
+    run(w, 1, (t) => [act(t, 'buy', 'ammo:pistol')]);
+    expect(P(w).ammo.pistol).toBe(72);
+    expect(P(w).money).toBe(5000 - 600 - 280 - 400 - 120);
+  });
+
+  it('refuses purchases outside the shop or without money', async () => {
+    const w = await world();
+    run(w, 1, (t) => [act(t, 'buy', 'weapon:pistol')]);
+    expect(P(w).weapons).not.toContain('pistol');
+    const g = await inside('gunshop');
+    g.w.players.get('p1')!.teleport(g.room.counter!.x, 0.2, g.room.counter!.z);
+    P(g.w).money = 10;
+    run(g.w, 1, (t) => [act(t, 'buy', 'weapon:smg')]);
+    expect(P(g.w).weapons).not.toContain('smg');
+  });
+
+  it('clothes bought are worn, and can be changed at the hideout wardrobe', async () => {
+    const c = await inside('clothes');
+    c.w.players.get('p1')!.teleport(c.room.counter!.x, 0.2, c.room.counter!.z);
+    run(c.w, 1, (t) => [act(t, 'buy', 'cloth:hoodie_red')]);
+    expect(P(c.w).clothes).toContain('hoodie_red');
+    expect(P(c.w).outfit.top).toBe(0xe63946);
+    const h = await inside('hideout');
+    P(h.w).clothes = ['tee_gold'];
+    h.w.players.get('p1')!.teleport(h.room.wardrobe!.x, 0.2, h.room.wardrobe!.z);
+    run(h.w, 3);
+    expect(P(h.w).context?.kind).toBe('wardrobe');
+    run(h.w, 1, (t) => [act(t, 'wear', 'tee_gold')]);
+    expect(P(h.w).outfit.top).toBe(0xffc93c);
+  });
+
+  it('a car parked at the hideout is kept in the garage and can be taken out', async () => {
+    const def = map.interiors.find((i) => i.kind === 'hideout')!;
+    const fx = -Math.sin(def.door.yaw);
+    const fz = -Math.cos(def.door.yaw);
+    const w = await world({ x: def.door.x + fx * 6, y: 0.4, z: def.door.z + fz * 6, yaw: 0 });
+    run(w, 3);
+    const v = w.spawnVehicle('sports', def.door.x + fx * 6 + 2.2, 0.3, def.door.z + fz * 6, 0, 'none', false);
+    run(w, 2);
+    run(w, 1, (t) => [act(t, 'use')]);
+    expect(P(w).vehicle).toBe(v.state.id);
+    run(w, 2);
+    expect(P(w).context?.kind).toBe('store_vehicle');
+    run(w, 1, (t) => [act(t, 'use')]);
+    expect(P(w).garage.map((g) => g.type)).toEqual(['sports']);
+    expect(w.vehicles.has(v.state.id)).toBe(false);
+    // walk in, take it out from the garage terminal
+    w.players.get('p1')!.teleport(def.door.x + fx * 1.2, 0.3, def.door.z + fz * 1.2);
+    run(w, 2);
+    run(w, 1, (t) => [act(t, 'use')]);
+    const room = w.rooms.get(def.id)!;
+    w.players.get('p1')!.teleport(room.garage!.x, 0.2, room.garage!.z);
+    run(w, 2);
+    expect(P(w).context?.kind).toBe('garage');
+    run(w, 1, (t) => [act(t, 'garage_out', '0')]);
+    expect(P(w).interior).toBeNull();
+    expect(P(w).vehicle).toBeGreaterThan(0);
+    expect(P(w).garage.length).toBe(0);
+  });
+
+  it('apartments can be bought', async () => {
+    const def = map.interiors.find((i) => i.kind === 'apartment')!;
+    const fx = -Math.sin(def.door.yaw);
+    const fz = -Math.cos(def.door.yaw);
+    const w = await world({ x: def.door.x + fx * 1.2, y: 0.3, z: def.door.z + fz * 1.2, yaw: 0 });
+    run(w, 3);
+    expect(P(w).context?.kind).toBe('buy_home');
+    P(w).money = 100000;
+    run(w, 1, (t) => [act(t, 'use')]);
+    expect(P(w).homes).toContain(def.id);
+    run(w, 2);
+    expect(P(w).context?.kind).toBe('enter_building');
   });
 });

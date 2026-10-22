@@ -1,4 +1,5 @@
 import type { ActionCommand, ActionKind } from '../core/commands';
+import type { Profile } from '../core/save';
 import type { NetSession } from '../game';
 import type { Player } from '../sim/player';
 import type { SimWorld } from '../sim/world';
@@ -11,7 +12,7 @@ import type { Transport } from './transport';
  * mirrors everything else from the host's snapshots into a replica SimWorld.
  */
 export class NetClient implements NetSession {
-  private actions: ActionKind[] = [];
+  private actions: { k: ActionKind; arg?: string }[] = [];
   private seen = new Map<number, number>();
   private seenV = new Map<number, number>();
   private snaps = 0;
@@ -35,10 +36,10 @@ export class NetClient implements NetSession {
   }
 
   /** Connects to the room's host: resolves with our player id, rejects if nobody answers. */
-  static connect(t: Transport, name: string, look: number, timeoutMs = 25000): Promise<{ id: string; host: string }> {
+  static connect(t: Transport, name: string, look: number, profile: Profile, timeoutMs = 25000): Promise<{ id: string; host: string }> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('Partie introuvable')), timeoutMs);
-      const hello = (peer?: string) => t.send({ t: 'join', name, look } satisfies GuestMessage, peer);
+      const hello = (peer?: string) => t.send({ t: 'join', name, look, profile } satisfies GuestMessage, peer);
       t.onJoin = (peer) => hello(peer);
       t.onMessage = (m) => {
         const msg = m as HostMessage;
@@ -61,7 +62,7 @@ export class NetClient implements NetSession {
   beforeStep() {}
 
   onLocalAction(cmd: ActionCommand): boolean {
-    this.actions.push(cmd.action);
+    this.actions.push({ k: cmd.action, arg: cmd.arg });
     return true;
   }
 
@@ -206,6 +207,21 @@ export class NetClient implements NetSession {
     s.lastHitTick = np.lastHitTick;
     s.wanted = np.wanted;
     s.wantedCooldown = np.wantedCooldown;
+    s.wantedSeen = np.wantedSeen;
+    s.searchX = np.searchX;
+    s.searchZ = np.searchZ;
+    s.searchR = np.searchR;
+    s.arrest = np.arrest;
+    s.weapons = np.weapons;
+    s.clothes = np.clothes;
+    s.garage = np.garage;
+    s.homes = np.homes;
+    s.rep = np.rep;
+    s.missionsDone = np.missionsDone;
+    s.mission = np.mission;
+    s.missionStep = np.missionStep;
+    s.objective = np.objective;
+    s.missionTimer = np.missionTimer;
     if (np.teleportSeq > s.teleportSeq) {
       // doors, respawn, getting out of a car: the host moved us
       p.teleport(np.x, np.y, np.z, np.facing);
@@ -237,4 +253,6 @@ function copyShared(p: Player, np: NetPlayer) {
   s.name = np.name;
   s.look = np.look;
   s.interior = np.interior;
+  s.outfit = np.outfit;
+  s.wanted = np.wanted;
 }

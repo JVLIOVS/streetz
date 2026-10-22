@@ -28,7 +28,15 @@ export type ActionKind =
   | 'use'
   /** Cycle weapons. */
   | 'weapon'
-  | 'horn';
+  | 'horn'
+  /** Shop purchase, arg = 'weapon:pistol' | 'ammo:pistol' | 'armor' | 'cloth:<id>' | 'car:<type>' | 'home:<id>'. */
+  | 'buy'
+  /** Wardrobe: put on an owned piece of clothing (arg = clothing id). */
+  | 'wear'
+  /** Garage: take out stored vehicle number arg. */
+  | 'garage_out'
+  /** Missions: start (arg = mission id) or give up (arg = ''). */
+  | 'mission';
 
 /** One-shot action (button tap). */
 export interface ActionCommand {
@@ -36,6 +44,7 @@ export interface ActionCommand {
   playerId: string;
   tick: number;
   action: ActionKind;
+  arg?: string;
 }
 
 export type Command = MoveCommand | ActionCommand;
