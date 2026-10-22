@@ -7,6 +7,7 @@ import type { GameRenderer } from './render/renderer';
 import type { SimWorld } from './sim/world';
 import type { Hud } from './ui/hud';
 import { MenuPanel, type MenuKind } from './ui/menus';
+import { missionById } from './data/missions';
 
 export const LOCAL_PLAYER = 'local';
 
@@ -53,6 +54,7 @@ export class Game {
       (action, arg) => this.menuActions.push({ action, arg }),
       () => {},
     );
+    hud.onAbort = () => this.menuActions.push({ action: 'mission', arg: 'abort' });
     this.loop = new FixedLoop(
       (tick) => this.step(tick),
       (alpha, dt) => this.render(alpha, dt),
@@ -159,6 +161,16 @@ export class Game {
             this.onSave?.();
           }
           break;
+        case 'mission':
+          if (e.playerId === this.localId) {
+            if (e.state === 'done') this.sound.cash();
+            else if (e.state === 'fail') this.sound.alert();
+            this.onSave?.();
+          } else if (e.state === 'start') {
+            const who = this.sim.players.get(e.playerId)?.state.name ?? 'Un joueur';
+            this.hud.toast(`🎯 ${who} lance la mission « ${e.name} » : aide ou sabote !`);
+          }
+          break;
         case 'busted':
           if (e.playerId === this.localId) this.sound.alert();
           break;
@@ -196,13 +208,14 @@ export class Game {
   }
 
   private updateNameTags(me: { x: number; z: number; interior: string | null }) {
-    const tags: { id: string; name: string; x: number; y: number }[] = [];
+    const tags: { id: string; name: string; sub?: string; x: number; y: number }[] = [];
     for (const p of this.sim.players.values()) {
       const s = p.state;
       if (s.id === this.localId || s.interior !== me.interior || Math.hypot(s.x - me.x, s.z - me.z) > 70) continue;
       const v = this.tmp.set(s.x, s.y + 2.3, s.z).project(this.view.cam.camera);
       if (v.z > 1) continue;
-      tags.push({ id: s.id, name: s.name, x: ((v.x + 1) / 2) * innerWidth, y: ((1 - v.y) / 2) * innerHeight });
+      const job = s.mission ? missionById(s.mission) : undefined;
+      tags.push({ id: s.id, name: s.name, sub: job ? `🎯 ${job.name}` : undefined, x: ((v.x + 1) / 2) * innerWidth, y: ((1 - v.y) / 2) * innerHeight });
     }
     this.hud.setNameTags(tags);
   }

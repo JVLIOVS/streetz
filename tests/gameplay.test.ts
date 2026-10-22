@@ -533,3 +533,154 @@ describe('shops, wardrobe and garage', () => {
     expect(P(w).context?.kind).toBe('enter_building');
   });
 });
+
+describe('missions', () => {
+  const giver = (w: SimWorld, id: string) => w.missions.givers.find((g) => g.id === id)!;
+  async function at(id: string, done: string[] = []) {
+    const g0 = buildParisMap();
+    const w = await SimWorld.create(g0);
+    const gv = w.missions.givers.find((g) => g.id === id)!;
+    w.addPlayer('p1', { x: gv.x, y: 0.5, z: gv.z, yaw: 0 });
+    P(w).missionsDone = done;
+    run(w, 3);
+    return w;
+  }
+  const tp = (w: SimWorld, x: number, z: number) => {
+    w.teleportPlayer(w.players.get('p1')!, x, 0.5, z);
+    run(w, 3);
+  };
+
+  it('a marker offers the first mission; locked ones say so', async () => {
+    const w = await at('colis');
+    expect(P(w).context?.kind).toBe('mission');
+    const w2 = await at('casse');
+    expect(P(w2).context?.label).toContain('🔒');
+    run(w2, 1, (t) => [act(t, 'use')]);
+    expect(P(w2).mission).toBeNull();
+  });
+
+  it('timed delivery: pick up, deliver before the clock runs out, get paid', async () => {
+    const w = await at('colis');
+    const money = P(w).money;
+    run(w, 1, (t) => [act(t, 'use')]);
+    expect(P(w).mission).toBe('colis');
+    expect(P(w).waypoint).not.toBeNull();
+    const [x, z] = P(w).waypoint!;
+    tp(w, x, z);
+    expect(P(w).missionStep).toBe(1);
+    run(w, 30);
+    expect(P(w).missionTimer).toBeGreaterThan(80);
+    expect(P(w).missionTimer).toBeLessThan(90);
+    const [dx, dz] = P(w).waypoint!;
+    tp(w, dx, dz + 2);
+    expect(P(w).mission).toBeNull();
+    expect(P(w).missionsDone).toContain('colis');
+    expect(P(w).money).toBe(money + 600);
+    expect(P(w).rep).toBe(30);
+  });
+
+  it('runs out of time', async () => {
+    const w = await at('colis');
+    w.density = { peds: 0, traffic: 0, parkedRadius: 0 };
+    run(w, 1, (t) => [act(t, 'use')]);
+    tp(w, ...P(w).waypoint!);
+    run(w, 60 * 91);
+    expect(P(w).mission).toBeNull();
+    expect(P(w).missionsDone).not.toContain('colis');
+  });
+
+  it('elimination: thugs fight back; knocking them all out (with help or not) completes the step', async () => {
+    const w = await at('dette', ['colis']);
+    run(w, 1, (t) => [act(t, 'use')]);
+    tp(w, ...P(w).waypoint!);
+    run(w, 5);
+    expect(P(w).missionStep).toBe(1);
+    const thugs = P(w).missionTargets.map((id) => w.peds.get(id)!);
+    expect(thugs.length).toBe(3);
+    run(w, 30);
+    expect(thugs.some((t) => t.state.mode === 'fight')).toBe(true);
+    // another player (or anyone) can take them down
+    for (const t of thugs) w.damagePed(t, 999, null, t.state.x, t.state.z);
+    run(w, 2);
+    expect(P(w).missionStep).toBe(2);
+    tp(w, ...P(w).waypoint!);
+    expect(P(w).missionsDone).toContain('dette');
+  });
+
+  it('escort: the witness follows; if killed the mission fails', async () => {
+    const w = await at('temoin', ['colis', 'dette']);
+    run(w, 1, (t) => [act(t, 'use')]);
+    const wid = P(w).missionTargets[0];
+    const witness = w.peds.get(wid)!;
+    expect(witness.state.mode).toBe('follow');
+    const d0 = Math.hypot(witness.state.x - P(w).x, witness.state.z - P(w).z);
+    // walk away: the witness keeps up
+    run(w, 120, (t) => [move(t, { y: 1, sprint: false })]);
+    expect(Math.hypot(witness.state.x - P(w).x, witness.state.z - P(w).z)).toBeLessThan(d0 + 4);
+    w.damagePed(witness, 999, null, 0, 0);
+    run(w, 2);
+    expect(P(w).mission).toBeNull();
+  });
+
+  it('escort reaches the police station', async () => {
+    const w = await at('temoin', ['colis', 'dette']);
+    run(w, 1, (t) => [act(t, 'use')]);
+    const witness = w.peds.get(P(w).missionTargets[0])!;
+    const [x, z] = P(w).waypoint!;
+    // move both next to the station
+    witness.state.x = x + 2;
+    witness.state.z = z + 2;
+    tp(w, x + 3, z + 2);
+    run(w, 60);
+    expect(P(w).missionsDone).toContain('temoin');
+  });
+
+  it('chase: a stolen car flees through traffic; wrecking it completes the mission', async () => {
+    const w = await at('rodeo', ['colis', 'dette', 'temoin']);
+    run(w, 1, (t) => [act(t, 'use')]);
+    const car = w.vehicles.get(P(w).missionTargets[0])!;
+    expect(car.state.driver).toBe('npc');
+    const x0 = car.state.x;
+    const z0 = car.state.z;
+    run(w, 120);
+    expect(Math.hypot(car.state.x - x0, car.state.z - z0)).toBeGreaterThan(10);
+    car.state.health = car.spec.health * 0.3;
+    run(w, 2);
+    expect(car.state.driver).toBe('none');
+    car.state.health = 0;
+    run(w, 2);
+    expect(P(w).missionsDone).toContain('rodeo');
+  });
+
+  it('heist: get armed, rob the bank, lose the police, hide', async () => {
+    const w = await at('casse', ['colis', 'dette', 'temoin', 'rodeo']);
+    run(w, 1, (t) => [act(t, 'use')]);
+    expect(P(w).missionStep).toBe(0);
+    arm(w);
+    run(w, 2);
+    expect(P(w).missionStep).toBe(1);
+    // rob the bank
+    const bank = map.interiors.find((i) => i.kind === 'bank')!;
+    tp(w, bank.door.x, bank.door.z + 1.5);
+    run(w, 1, (t) => [act(t, 'use')]);
+    expect(P(w).interior).toBe(bank.id);
+    const room = w.rooms.get(bank.id)!;
+    tp(w, room.counter!.x, room.counter!.z);
+    P(w).weapon = 'pistol';
+    run(w, 3);
+    expect(P(w).context?.kind).toBe('rob');
+    run(w, 1, (t) => [act(t, 'use')]);
+    run(w, 60 * 11);
+    expect(P(w).missionStep).toBe(2);
+    expect(P(w).wanted).toBeGreaterThanOrEqual(3);
+    w.clearWanted(w.players.get('p1')!);
+    run(w, 2);
+    expect(P(w).missionStep).toBe(3);
+    const home = map.interiors.find((i) => i.kind === 'hideout')!;
+    P(w).interior = null;
+    tp(w, home.door.x, home.door.z + 2);
+    expect(P(w).missionsDone).toContain('casse');
+    expect(P(w).rep).toBe(150);
+    void giver;
+  });
+});

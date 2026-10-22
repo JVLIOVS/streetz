@@ -1,6 +1,7 @@
 import type { MapData, PoiKind } from '../maps/types';
 import type { PlayerState } from '../sim/player';
 import type { SimWorld } from '../sim/world';
+import { missionById } from '../data/missions';
 
 const POI_STYLE: Partial<Record<PoiKind, { color: string; label: string }>> = {
   police: { color: '#3f7bff', label: '★' },
@@ -97,6 +98,55 @@ export class Minimap {
     }
   }
 
+  /** Mission start markers, current waypoint and mission targets. */
+  private drawMissions(
+    g: CanvasRenderingContext2D,
+    k: number,
+    sim: SimWorld,
+    me: PlayerState,
+    at: (x: number, z: number) => [number, number],
+    dot: (x: number, z: number, r: number, color: string) => void,
+    blink: boolean,
+  ) {
+    g.font = `900 ${12 / k}px system-ui, sans-serif`;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    if (!me.mission) {
+      for (const gv of sim.missions.givers) {
+        const def = missionById(gv.id)!;
+        const open = !def.requires || me.missionsDone.includes(def.requires);
+        const done = me.missionsDone.includes(def.id);
+        const [mx, mz] = at(gv.x, gv.z);
+        g.fillStyle = !open ? 'rgba(120,120,130,0.8)' : done ? '#b8a24a' : '#ffd23f';
+        g.strokeStyle = '#1b1430';
+        g.lineWidth = 2 / k;
+        g.beginPath();
+        g.arc(mx, mz, 8 / k, 0, Math.PI * 2);
+        g.fill();
+        g.stroke();
+        g.fillStyle = '#1b1430';
+        g.fillText(open ? '!' : '🔒', mx, mz + 1 / k);
+      }
+    }
+    for (const id of me.missionTargets) {
+      const t = sim.peds.get(id)?.state ?? sim.vehicles.get(id)?.state;
+      if (t) dot(t.x, t.z, 4.5, blink ? '#ff3b4f' : '#ffd23f');
+    }
+    if (me.waypoint) {
+      const [mx, mz] = at(me.waypoint[0], me.waypoint[1]);
+      g.save();
+      g.translate(mx, mz);
+      g.rotate(Math.PI / 4);
+      g.fillStyle = '#ffd23f';
+      g.strokeStyle = '#1b1430';
+      g.lineWidth = 2 / k;
+      const r = 6 / k;
+      g.fillRect(-r, -r, r * 2, r * 2);
+      g.strokeRect(-r, -r, r * 2, r * 2);
+      g.restore();
+    }
+  }
+
   /** @param yaw camera yaw: the map rotates so that "up" is where the camera looks. */
   update(px: number, pz: number, facing: number, yaw: number, sim?: SimWorld, me?: PlayerState) {
     const g = this.ctx;
@@ -157,8 +207,37 @@ export class Minimap {
         for (const v of sim.vehicles.values()) if (v.state.siren) dot(v.state.x, v.state.z, 5, police);
         for (const h of sim.police.helis.values()) if (h.state.down < 0) dot(h.state.x, h.state.z, 6.5, police);
         for (const p of sim.players.values()) if (me && p.state.id !== me.id && !p.state.interior) dot(p.state.x, p.state.z, 5, '#ffd23f');
+        if (me) this.drawMissions(g, k, sim, me, at, dot, blink);
       }
       g.restore();
+    }
+    // Next objective: an arrow on the rim when it is off the map
+    if (me?.waypoint && px <= this.map.half + 50) {
+      const dx = me.waypoint[0] - px;
+      const dz = me.waypoint[1] - pz;
+      // rotate like the map: camera forward is up
+      const c = Math.cos(yaw);
+      const sn = Math.sin(yaw);
+      const rx = (dx * c - dz * sn) * this.scale * k;
+      const rz = (dx * sn + dz * c) * this.scale * k;
+      const d = Math.hypot(rx, rz);
+      const R = S / 2 - 10;
+      if (d > R) {
+        g.save();
+        g.translate(S / 2 + (rx / d) * R, S / 2 + (rz / d) * R);
+        g.rotate(Math.atan2(rz, rx) + Math.PI / 2);
+        g.fillStyle = '#ffd23f';
+        g.strokeStyle = '#1b1430';
+        g.lineWidth = 2;
+        g.beginPath();
+        g.moveTo(0, -8);
+        g.lineTo(7, 5);
+        g.lineTo(-7, 5);
+        g.closePath();
+        g.fill();
+        g.stroke();
+        g.restore();
+      }
     }
     // Player arrow
     g.save();

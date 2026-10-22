@@ -31,12 +31,22 @@ export class Hud {
   private ko = $('ko');
   private targetHp = $('target-hp');
   private targetFill = $('target-hp').firstElementChild as HTMLElement;
+  private objective = $('objective');
+  private objText = $('objective').querySelector('.obj-txt') as HTMLElement;
+  private objTime = $('objective').querySelector('.obj-time') as HTMLElement;
+  /** ✕ on the objective banner: abandon the mission. */
+  onAbort?: () => void;
   private toastTimer = 0;
   private last: Record<string, string | number | boolean> = {};
 
   constructor(private map: MapData) {
     $('hud').classList.remove('hidden');
     this.minimap = new Minimap($('minimap') as HTMLCanvasElement, map);
+    this.objective.querySelector('.obj-x')!.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      this.onAbort?.();
+    });
+    this.objective.addEventListener('pointerdown', (e) => e.stopPropagation());
   }
 
   /** Only touches the DOM when a value actually changes. */
@@ -86,13 +96,23 @@ export class Hud {
     if (this.changed('rob', bar >= 0)) this.robbery.classList.toggle('hidden', bar < 0);
     if (this.changed('robLabel', barLabel)) (this.robbery.firstElementChild as HTMLElement).textContent = barLabel;
     if (bar >= 0) this.robberyBar.style.width = `${bar * 100}%`;
+    const obj = s.mission ? s.objective : '';
+    if (this.changed('obj', obj)) {
+      this.objective.classList.toggle('hidden', !obj);
+      this.objText.textContent = obj;
+    }
+    const t = s.mission && s.missionTimer >= 0 ? Math.ceil(s.missionTimer) : -1;
+    if (this.changed('objTime', t)) {
+      this.objTime.textContent = t >= 0 ? `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}` : '';
+      this.objTime.classList.toggle('hurry', t >= 0 && t <= 15);
+    }
     if (this.changed('ko', s.dead)) this.ko.classList.toggle('hidden', !s.dead);
   }
 
   private tags = new Map<string, HTMLElement>();
 
   /** Nicknames floating above the other players. */
-  setNameTags(tags: { id: string; name: string; x: number; y: number }[]) {
+  setNameTags(tags: { id: string; name: string; sub?: string; x: number; y: number }[]) {
     const keep = new Set(tags.map((t) => t.id));
     for (const [id, el] of this.tags) {
       if (!keep.has(id)) {
@@ -108,7 +128,16 @@ export class Hud {
         $('hud').appendChild(el);
         this.tags.set(t.id, el);
       }
-      if (el.textContent !== t.name) el.textContent = t.name;
+      const key = `${t.name}|${t.sub ?? ''}`;
+      if (el.dataset.key !== key) {
+        el.dataset.key = key;
+        el.textContent = t.name;
+        if (t.sub) {
+          const sub = document.createElement('small');
+          sub.textContent = t.sub;
+          el.appendChild(sub);
+        }
+      }
       el.style.transform = `translate(${t.x.toFixed(0)}px, ${t.y.toFixed(0)}px) translate(-50%, -100%)`;
     }
   }
@@ -135,7 +164,7 @@ export class Hud {
     if (this.changed('zone', name)) this.zoneEl.textContent = name;
   }
 
-  toast(text: string, seconds = 2.4) {
+  toast(text: string, seconds = Math.max(2.4, text.length / 16)) {
     this.toastEl.textContent = text;
     this.toastEl.classList.add('show');
     this.toastTimer = seconds;

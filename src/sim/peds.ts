@@ -3,7 +3,7 @@ import { DT } from '../core/loop';
 import type { Rng } from '../core/rng';
 import type { WalkNode } from './nav';
 
-export type PedMode = 'walk' | 'idle' | 'flee' | 'cower' | 'ko' | 'shopkeeper' | 'wave' | 'stun' | 'fight' | 'police';
+export type PedMode = 'walk' | 'idle' | 'flee' | 'cower' | 'ko' | 'shopkeeper' | 'wave' | 'stun' | 'fight' | 'police' | 'follow';
 
 /** Civilians, or law enforcement (driven by the police system). */
 export type PedRole = 'civ' | 'cop' | 'swat' | 'soldier';
@@ -152,6 +152,7 @@ export class Ped {
           this.timer = this.afterStun === 'cower' ? 1.8 : 9;
         }
         break;
+      case 'follow':
       case 'fight': {
         // movement only: the world decides targets and resolves punches
         if (this.attackCooldown > 0) this.attackCooldown -= DT;

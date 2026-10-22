@@ -150,7 +150,7 @@ body {
 }
 #toast {
   position: absolute;
-  top: 22%;
+  top: 27%;
   left: 50%;
   transform: translate(-50%, -10px);
   padding: 10px 22px;
@@ -554,7 +554,7 @@ body {
 }
 #players {
   position: absolute;
-  top: calc(60px + var(--safe-t));
+  top: calc(98px + var(--safe-t));
   left: 50%;
   transform: translateX(-50%);
   padding: 3px 10px;
@@ -701,4 +701,49 @@ body {
 .mp-row button:disabled {
   background: #ddd;
   opacity: 0.6;
+}
+
+/* Mission objective, under the pause button */
+#objective {
+  position: absolute;
+  top: calc(58px + var(--safe-t));
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 52vw;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px 5px 14px;
+  border-radius: 999px;
+  background: rgba(27, 20, 48, 0.82);
+  border: 2px solid #ffd23f;
+  font-weight: 900;
+  font-size: 13px;
+  line-height: 1.15;
+  pointer-events: auto;
+}
+#objective .obj-txt::before {
+  content: '🎯 ';
+}
+#objective .obj-time {
+  color: #ffd23f;
+  font-variant-numeric: tabular-nums;
+}
+#objective .obj-time.hurry {
+  color: #ff4057;
+}
+#objective .obj-x {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-weight: 900;
+}
+.name-tag small {
+  display: block;
+  font-size: 10px;
+  color: #ffd23f;
 }

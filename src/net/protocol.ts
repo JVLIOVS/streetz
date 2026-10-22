@@ -27,7 +27,7 @@ export type GuestMessage = { t: 'join'; name: string; look: number; profile?: Pr
 
 const q = (n: number) => Math.round(n * 100) / 100;
 
-const PED_MODES: PedMode[] = ['walk', 'idle', 'flee', 'cower', 'ko', 'shopkeeper', 'wave', 'stun', 'fight'];
+const PED_MODES: PedMode[] = ['walk', 'idle', 'flee', 'cower', 'ko', 'shopkeeper', 'wave', 'stun', 'fight', 'police', 'follow'];
 const TEMPERS: Temper[] = ['coward', 'scared', 'fighter'];
 const VEHICLE_TYPES = Object.keys(VEHICLES) as VehicleType[];
 
@@ -74,6 +74,8 @@ export type NetPlayer = Pick<
   | 'missionStep'
   | 'objective'
   | 'missionTimer'
+  | 'waypoint'
+  | 'missionTargets'
   | 'wantedSeen'
   | 'searchX'
   | 'searchZ'
@@ -123,6 +125,8 @@ export function packPlayer(s: PlayerState): NetPlayer {
     missionStep: s.missionStep,
     objective: s.objective,
     missionTimer: q(s.missionTimer),
+    waypoint: s.waypoint ? [q(s.waypoint[0]), q(s.waypoint[1])] : null,
+    missionTargets: s.missionTargets,
     wantedSeen: s.wantedSeen,
     searchX: q(s.searchX),
     searchZ: q(s.searchZ),

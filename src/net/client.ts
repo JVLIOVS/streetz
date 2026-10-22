@@ -222,6 +222,8 @@ export class NetClient implements NetSession {
     s.missionStep = np.missionStep;
     s.objective = np.objective;
     s.missionTimer = np.missionTimer;
+    s.waypoint = np.waypoint;
+    s.missionTargets = np.missionTargets ?? [];
     if (np.teleportSeq > s.teleportSeq) {
       // doors, respawn, getting out of a car: the host moved us
       p.teleport(np.x, np.y, np.z, np.facing);

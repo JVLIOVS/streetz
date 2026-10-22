@@ -67,6 +67,9 @@ export interface PlayerState {
   /** One-line objective of the current mission, and its countdown (s, -1 = none). */
   objective: string;
   missionTimer: number;
+  /** Where to go next (minimap / 3D marker), and mission entities to show (ped or vehicle ids). */
+  waypoint: [number, number] | null;
+  missionTargets: number[];
   /** Vehicle id when driving, -1 on foot. */
   vehicle: number;
   /** Interior id when inside a building. */
@@ -170,6 +173,8 @@ export class Player {
       missionStep: 0,
       objective: '',
       missionTimer: -1,
+      waypoint: null,
+      missionTargets: [],
       vehicle: -1,
       interior: null,
       action: null,

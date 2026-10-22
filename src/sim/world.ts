@@ -13,6 +13,7 @@ import { buildLaneGraph, buildSidewalkGraph, nextLane, type LaneGraph, type Walk
 import { Ped, type PedState } from './peds';
 import { PROP_SPECS, PropField, type BrokenProp } from './props';
 import { PoliceSystem, type HeliState } from './police';
+import { MissionSystem } from './missions';
 import { REPAINT_PRICE } from '../data/police';
 import { GROUP, groups, initPhysics } from './physics';
 import { angleDiff, Player, PLAYER_TUNING, type ContextAction, type PlayerState } from './player';
@@ -58,6 +59,7 @@ export type SimEvent =
   | { type: 'horn'; vehicle: number }
   | { type: 'wanted'; playerId: string; level: number }
   | { type: 'busted'; playerId: string }
+  | { type: 'mission'; playerId: string; name: string; state: 'start' | 'done' | 'fail' }
   | { type: 'joined'; playerId: string; name: string }
   | { type: 'left'; playerId: string; name: string }
   | { type: 'break'; x: number; y: number; z: number; kind: string; prop: number };
@@ -126,6 +128,7 @@ export class SimWorld {
   rng: Rng;
   private nextId = 1;
   readonly police: PoliceSystem;
+  readonly missions: MissionSystem;
   private controller: RAPIER_T.KinematicCharacterController;
   private carController: RAPIER_T.KinematicCharacterController;
   private offroadController: RAPIER_T.KinematicCharacterController;
@@ -149,6 +152,7 @@ export class SimWorld {
     this.walk = buildSidewalkGraph(map);
     this.buildInteriors();
     this.police = new PoliceSystem(this);
+    this.missions = new MissionSystem(this);
     this.props = new PropField(map.props);
     this.buildProps();
     if (role === 'authority') for (const f of map.featured) this.spawnVehicle(f.type as VehicleType, f.x, 0.3, f.z, f.yaw, 'none', false);
@@ -179,6 +183,7 @@ export class SimWorld {
     const p = this.players.get(id);
     if (!p) return;
     if (p.state.vehicle >= 0) this.leaveVehicle(p);
+    this.missions.drop(id);
     this.physics.removeRigidBody(p.body);
     this.players.delete(id);
   }
@@ -384,6 +389,7 @@ export class SimWorld {
     this.props.update((x, z) => this.groundY(x, z));
     this.collectPickups();
     this.police.update();
+    this.missions.update();
     if (this.tick % 20 === 0) this.managePopulation();
     for (const p of this.players.values()) p.state.context = this.computeContext(p);
     this.physics.step();
@@ -632,20 +638,29 @@ export class SimWorld {
     const diff = angleDiff(s.yaw, desired);
     let target = lane.speed * (Math.abs(diff) > 0.35 ? 0.45 : 1);
     if (this.maxWanted >= 3) target *= 1.15;
+    if (v.rush > 1) target = Math.min(target * v.rush, Math.max(target, 19));
     // Brake for anything in front
     const fx = -Math.sin(s.yaw);
     const fz = -Math.cos(s.yaw);
-    const check = (x: number, z: number, radius: number) => {
+    const check = (x: number, z: number, radius: number, side = 1.4 + radius) => {
       const dx = x - s.x;
       const dz = z - s.z;
       const ahead = dx * fx + dz * fz;
       if (ahead < 0 || ahead > 16) return;
       const lateral = Math.abs(dx * fz - dz * fx);
-      if (lateral < 1.4 + radius) target = Math.min(target, Math.max(0, (ahead - 4.5 - radius) * 1.3));
+      if (lateral < side) target = Math.min(target, Math.max(0, (ahead - 4.5 - radius) * 1.3));
     };
-    for (const o of this.vehicles.values()) if (o !== v) check(o.state.x, o.state.z, VEHICLES[o.state.type].length / 2);
-    for (const pd of this.peds.values()) if (pd.alive && pd.state.mode !== 'shopkeeper') check(pd.state.x, pd.state.z, 0.3);
-    for (const pl of this.players.values()) if (pl.state.vehicle < 0 && !pl.state.interior) check(pl.state.x, pl.state.z, 0.4);
+    for (const o of this.vehicles.values()) {
+      if (o === v) continue;
+      // a car parallel to us only takes its width sideways (parked cars along the curb)
+      const sp = VEHICLES[o.state.type];
+      const parallel = Math.abs(Math.sin(angleDiff(o.state.yaw, s.yaw)));
+      check(o.state.x, o.state.z, sp.length / 2, v.spec.width / 2 - 0.05 + sp.width / 2 + ((sp.length - sp.width) / 2) * parallel);
+    }
+    if (v.rush <= 1) {
+      for (const pd of this.peds.values()) if (pd.alive && pd.state.mode !== 'shopkeeper') check(pd.state.x, pd.state.z, 0.3);
+      for (const pl of this.players.values()) if (pl.state.vehicle < 0 && !pl.state.interior) check(pl.state.x, pl.state.z, 0.4);
+    }
     const speed = s.speed;
     v.input = {
       throttle: speed < target - 0.5 ? 1 : speed > target + 0.8 ? -0.7 : 0,
@@ -804,6 +819,7 @@ export class SimWorld {
       this.teleportPlayer(p, station.door.x + fx * 2, 0.3, station.door.z + fz * 2, station.door.yaw);
     }
     this.events.push({ type: 'busted', playerId: s.id });
+    if (s.mission) this.missions.abort(p, 'Mission échouée : arrêté');
     this.toast(p, `ARRÊTÉ ! Amende -${fine.toLocaleString('fr-FR')} €, armes confisquées`);
   }
 
@@ -835,6 +851,10 @@ export class SimWorld {
         break;
       case 'garage_out':
         this.garageOut(p, Number(arg));
+        break;
+      case 'mission':
+        if (arg === 'abort') this.missions.abort(p);
+        else if (arg) this.missions.start(p, arg);
         break;
       case 'horn':
         if (s.vehicle >= 0) {
@@ -924,6 +944,9 @@ export class SimWorld {
         break;
       case 'store_vehicle':
         this.storeVehicle(p);
+        break;
+      case 'mission':
+        this.missions.start(p, ctx.target as string);
         break;
     }
   }
@@ -1022,6 +1045,8 @@ export class SimWorld {
       }
       return null;
     }
+    const job = this.missions.context(p);
+    if (job) return job;
     // Vehicles
     let best: Vehicle | null = null;
     let bd = Infinity;
@@ -1185,6 +1210,7 @@ export class SimWorld {
       s.robbery = -1;
       this.crime(p, def.kind === 'shop' ? 'robbery_shop' : 'robbery_big', s.x, s.z, null, true);
       this.toast(p, `Butin : +${amount.toLocaleString('fr-FR')} € — file !`);
+      this.missions.onRobbery(p, def.id);
     }
   }
 
@@ -1700,7 +1726,7 @@ export class SimWorld {
 }
 
 function structuredCloneState(s: PlayerState): PlayerState {
-  return { ...s, ammo: { ...s.ammo }, context: s.context ? { ...s.context } : null };
+  return { ...s, ammo: { ...s.ammo }, context: s.context ? { ...s.context } : null, waypoint: s.waypoint ? [...s.waypoint] : null, missionTargets: [...s.missionTargets] };
 }
 
 export type { MoveCommand };
