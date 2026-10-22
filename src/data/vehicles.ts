@@ -2,7 +2,7 @@
  * Vehicle catalogue. `model` refers to a node of public/assets/city.glb (KayKit)
  * or vehicles.glb (Kenney). Physics values are arcade-tuned.
  */
-export type VehicleType = 'compact' | 'sports' | 'wagon' | 'taxi' | 'police' | 'offroad' | 'moto';
+export type VehicleType = 'compact' | 'sports' | 'wagon' | 'taxi' | 'police' | 'offroad' | 'moto' | 'army';
 
 export interface VehicleSpec {
   name: string;
@@ -30,6 +30,8 @@ export interface VehicleSpec {
   /** Seat height for the driver animation. */
   seatY: number;
   twoWheels?: boolean;
+  /** How fast the wheel turns towards the stick (1/s). Lower = smoother. */
+  steerRate?: number;
 }
 
 export const VEHICLES: Record<VehicleType, VehicleSpec> = {
@@ -39,7 +41,8 @@ export const VEHICLES: Record<VehicleType, VehicleSpec> = {
   taxi: { name: 'Taxi', model: 'car_taxi', pack: 'city', scale: 4.6, length: 4.3, width: 1.9, height: 1.8, wheelbase: 2.7, accel: 10, maxSpeed: 35, reverseSpeed: 8, brake: 22, steer: 0.55, grip: 9, climb: 30, health: 110, seatY: 0.35 },
   police: { name: 'Voiture de police', model: 'car_police', pack: 'city', scale: 4.6, length: 4.3, width: 1.9, height: 1.8, wheelbase: 2.7, accel: 13, maxSpeed: 42, reverseSpeed: 9, brake: 26, steer: 0.55, grip: 9.5, climb: 30, health: 140, seatY: 0.35 },
   offroad: { name: '4×4', model: 'vehicle-truck-red', pack: 'vehicles', scale: 1.6, length: 4.5, width: 2.4, height: 2.2, wheelbase: 2.9, accel: 12, maxSpeed: 34, reverseSpeed: 10, brake: 24, steer: 0.55, grip: 10, climb: 50, health: 180, seatY: 0.75 },
-  moto: { name: 'Scooter', model: 'vehicle-motorcycle', pack: 'vehicles', scale: 0.9, length: 2.2, width: 0.9, height: 1.2, wheelbase: 1.4, accel: 13, maxSpeed: 36, reverseSpeed: 4, brake: 24, steer: 0.7, grip: 12, climb: 34, health: 60, seatY: 0.45, twoWheels: true },
+  army: { name: 'Camion militaire', model: 'vehicle-truck-green', pack: 'vehicles', scale: 1.8, length: 5, width: 2.7, height: 2.5, wheelbase: 3.2, accel: 11, maxSpeed: 30, reverseSpeed: 8, brake: 22, steer: 0.5, grip: 11, climb: 50, health: 420, seatY: 0.85 },
+  moto: { name: 'Scooter', model: 'vehicle-motorcycle', pack: 'vehicles', scale: 0.9, length: 2.2, width: 0.9, height: 1.2, wheelbase: 1.9, accel: 12, maxSpeed: 34, reverseSpeed: 4, brake: 24, steer: 0.36, grip: 10, climb: 34, health: 60, seatY: 0.45, twoWheels: true, steerRate: 3.5 },
 };
 
 /** Weighted pick for traffic / parked cars. */
