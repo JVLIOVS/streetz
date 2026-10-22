@@ -144,6 +144,10 @@ export class Game {
           break;
         case 'explosion':
           this.sound.explosion(d);
+          if (d < 35) {
+            this.view.cam.shake(0.75 * (1 - d / 35));
+            this.vibrate(60);
+          }
           break;
         case 'break':
           if (d < 40) this.sound.impact(e.kind === 'streetlight' || e.kind === 'trafficlight' || e.kind === 'dumpster' ? 14 : 7);
@@ -160,6 +164,39 @@ export class Game {
             this.hud.toast(`+${e.amount.toLocaleString('fr-FR')} €`, 1.2);
             this.onSave?.();
           }
+          break;
+        case 'dmg':
+          if (e.playerId === this.localId) this.onHit(e.x, e.y, e.z, e.amount, e.ko);
+          break;
+        case 'chaos':
+          if (e.playerId === this.localId) {
+            this.hud.popup(innerWidth - 90, innerHeight * 0.36, `${e.label} +${e.points}`, 'stunt');
+            this.sound.combo(this.player.chaosMult);
+          }
+          break;
+        case 'chaosEnd':
+          if (e.playerId === this.localId) {
+            this.hud.chaosCashed(e.score, e.cash);
+            if (e.cash > 0) this.sound.cash();
+          }
+          break;
+        case 'levelup':
+          if (e.playerId === this.localId) {
+            this.hud.levelUp(e.level, e.unlocks);
+            this.sound.fanfare();
+            this.vibrate([40, 60, 80]);
+            this.onSave?.();
+          }
+          break;
+        case 'contract':
+          if (e.playerId === this.localId) {
+            if (e.all) this.sound.fanfare();
+            else this.sound.cash();
+            this.onSave?.();
+          }
+          break;
+        case 'streak':
+          if (e.playerId === this.localId) this.sound.cash();
           break;
         case 'mission':
           if (e.playerId === this.localId) {
@@ -190,6 +227,30 @@ export class Game {
   }
 
   private tmp = new Vector3();
+  private slowmo = 0;
+  private lastHealth = 100;
+
+  private vibrate(pattern: number | number[]) {
+    try {
+      navigator.vibrate?.(pattern);
+    } catch {
+      /* not supported */
+    }
+  }
+
+  /** Juice when the local player lands a hit: number, shake, buzz, hit-stop / slow-mo. */
+  private onHit(x: number, y: number, z: number, amount: number, ko: boolean) {
+    const v = this.tmp.set(x, y, z).project(this.view.cam.camera);
+    if (v.z < 1) this.hud.popup(((v.x + 1) / 2) * innerWidth, ((1 - v.y) / 2) * innerHeight, ko ? `K.O. ${amount}` : String(amount), ko ? 'dmg ko' : 'dmg');
+    this.view.cam.shake(ko ? 0.42 : 0.18);
+    this.vibrate(ko ? 45 : 15);
+    if (ko) this.sound.knockout();
+    // time effects only in solo: in multiplayer the world can't slow down for one player
+    if (!this.net) {
+      this.loop.timeScale = ko ? 0.3 : 0.06;
+      this.slowmo = ko ? 0.32 : 0.06;
+    }
+  }
 
   /** Shows the health of the last pedestrian you hit, above their head, for a few seconds. */
   private updateTargetBar(id: number, tick: number) {
@@ -231,6 +292,11 @@ export class Game {
   }
 
   private render(alpha: number, dt: number) {
+    if (this.slowmo > 0) {
+      // measured in real time (dt is already slowed down)
+      this.slowmo -= dt / Math.max(0.05, this.loop.timeScale);
+      if (this.slowmo <= 0) this.loop.timeScale = 1;
+    }
     this.controls.update(dt);
     const d = this.controls.takeCameraDelta();
     if (d.yaw || d.pitch) this.view.cam.rotate(d.yaw, d.pitch);
@@ -254,6 +320,12 @@ export class Game {
     }
     this.hud.update(dt);
     this.hud.updatePlayer(me);
+    this.hud.updateProgress(me);
+    if (me.health < this.lastHealth - 1) {
+      this.view.cam.shake(Math.min(0.5, (this.lastHealth - me.health) / 40));
+      this.vibrate(25);
+    }
+    this.lastHealth = me.health;
     this.menu.update(me);
     this.updateTargetBar(me.lastHit, me.lastHitTick);
     if (this.sim.players.size > 1) this.updateNameTags(me);

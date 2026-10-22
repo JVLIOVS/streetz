@@ -5,6 +5,7 @@ import type { Profile } from '../core/save';
 import type { Outfit } from '../data/shop';
 import type { VehicleType } from '../data/vehicles';
 import type { WeaponId } from '../data/weapons';
+import { dailyContracts, type Contract } from '../data/contracts';
 
 export type PlayerAnim = 'idle' | 'walk' | 'run' | 'sprint' | 'jump' | 'fall' | 'drive' | 'ko';
 export type PlayerAction = 'punch' | 'kick' | 'shoot' | 'shoot2' | 'stab' | 'swing' | 'hit' | 'interact';
@@ -26,7 +27,9 @@ export interface ContextAction {
     | 'garage'
     | 'buy_home'
     | 'store_vehicle'
-    | 'mission';
+    | 'mission'
+    | 'fence'
+    | 'business';
   label: string;
   target: number | string;
 }
@@ -70,6 +73,20 @@ export interface PlayerState {
   /** Where to go next (minimap / 3D marker), and mission entities to show (ped or vehicle ids). */
   waypoint: [number, number] | null;
   missionTargets: number[];
+  /** Chaos combo: score, multiplier (1–5) and seconds left before it is cashed in. */
+  chaos: number;
+  chaosMult: number;
+  chaosTimer: number;
+  /** Today's contracts (and the day they belong to), login streak. */
+  contracts: Contract[];
+  contractsDay: number;
+  streak: number;
+  streakDay: number;
+  /** Car the fence (receleur) wants. */
+  fenceOrder: VehicleType | null;
+  /** Hideout businesses: stock produced and when it was last updated (epoch s). */
+  biz: { id: string; stock: number; last: number }[];
+  tutorialDone: boolean;
   /** Vehicle id when driving, -1 on foot. */
   vehicle: number;
   /** Interior id when inside a building. */
@@ -175,6 +192,16 @@ export class Player {
       missionTimer: -1,
       waypoint: null,
       missionTargets: [],
+      chaos: 0,
+      chaosMult: 1,
+      chaosTimer: 0,
+      contracts: [],
+      contractsDay: 0,
+      streak: 0,
+      streakDay: 0,
+      fenceOrder: null,
+      biz: [],
+      tutorialDone: true,
       vehicle: -1,
       interior: null,
       action: null,
@@ -325,6 +352,13 @@ export function applyProfile(s: PlayerState, p: Profile) {
   s.homes = [...p.homes];
   s.rep = p.rep;
   s.missionsDone = [...p.missions];
+  s.contractsDay = p.daily.day;
+  s.contracts = p.daily.day > 0 ? dailyContracts(p.daily.day) : [];
+  s.contracts.forEach((c, i) => (c.progress = Math.min(c.goal, Math.max(0, Number(p.daily.progress[i]) || 0))));
+  s.streak = p.streak.count;
+  s.streakDay = p.streak.day;
+  s.biz = p.biz.map((b) => ({ ...b }));
+  s.tutorialDone = p.tutorial;
 }
 
 /** What gets saved from a player. */
@@ -340,5 +374,9 @@ export function profileOf(s: PlayerState): Profile {
     homes: [...s.homes],
     rep: s.rep,
     missions: [...s.missionsDone],
+    daily: { day: s.contractsDay, progress: s.contracts.map((c) => c.progress) },
+    streak: { day: s.streakDay, count: s.streak },
+    biz: s.biz.map((b) => ({ ...b })),
+    tutorial: s.tutorialDone,
   };
 }

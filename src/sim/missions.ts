@@ -98,6 +98,13 @@ export class MissionSystem {
     this.runs.delete(id);
   }
 
+  /** Called by the world when a player knocks someone out. */
+  onKo(p: Player) {
+    const run = this.runs.get(p.state.id);
+    const step = run?.def.steps[run.step];
+    if (step?.kind === 'ko') this.next(p);
+  }
+
   /** Called by the world when a robbery is completed. */
   onRobbery(p: Player, interior: string) {
     const run = this.runs.get(p.state.id);
@@ -145,7 +152,8 @@ export class MissionSystem {
     const money = Math.round(run.def.reward * (replay ? REPLAY_FACTOR : 1));
     const rep = Math.round(run.def.rep * (replay ? REPLAY_FACTOR : 1));
     s.money += money;
-    s.rep += rep;
+    this.w.progress.addXp(p, rep);
+    this.w.contracts.track(p, 'mission', 1);
     if (!replay) s.missionsDone.push(run.def.id);
     this.cleanup(run);
     this.runs.delete(s.id);

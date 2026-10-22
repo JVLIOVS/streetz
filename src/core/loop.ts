@@ -10,6 +10,8 @@ export class FixedLoop {
   tick = 0;
   private acc = 0;
   private last = -1;
+  /** Slow motion / hit-stop (1 = normal speed). Only used in solo. */
+  timeScale = 1;
 
   constructor(
     private step: (tick: number) => void,
@@ -23,7 +25,7 @@ export class FixedLoop {
     this.last = nowMs;
     // Tab switch / long hitch: don't try to catch up forever.
     if (frameDt > 0.25) frameDt = 0.25;
-    this.acc += frameDt;
+    this.acc += frameDt * this.timeScale;
     let steps = 0;
     while (this.acc >= DT && steps < MAX_STEPS_PER_FRAME) {
       this.step(this.tick);
@@ -32,7 +34,7 @@ export class FixedLoop {
       steps++;
     }
     if (steps === MAX_STEPS_PER_FRAME) this.acc = 0;
-    this.render(this.acc / DT, frameDt);
+    this.render(this.acc / DT, frameDt * this.timeScale);
     return steps;
   }
 

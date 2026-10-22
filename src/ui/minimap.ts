@@ -128,6 +128,20 @@ export class Minimap {
         g.fillText(open ? '!' : '🔒', mx, mz + 1 / k);
       }
     }
+    // fence (receleur)
+    {
+      const f = sim.contracts.fence;
+      const [mx, mz] = at(f.x, f.z);
+      g.fillStyle = '#5ee86a';
+      g.strokeStyle = '#1b1430';
+      g.lineWidth = 2 / k;
+      g.beginPath();
+      g.arc(mx, mz, 8 / k, 0, Math.PI * 2);
+      g.fill();
+      g.stroke();
+      g.fillStyle = '#1b1430';
+      g.fillText('€', mx, mz + 1 / k);
+    }
     for (const id of me.missionTargets) {
       const t = sim.peds.get(id)?.state ?? sim.vehicles.get(id)?.state;
       if (t) dot(t.x, t.z, 4.5, blink ? '#ff3b4f' : '#ffd23f');

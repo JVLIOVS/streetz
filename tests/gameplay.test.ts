@@ -443,6 +443,7 @@ describe('shops, wardrobe and garage', () => {
     const fx = -Math.sin(def.door.yaw);
     const fz = -Math.cos(def.door.yaw);
     const w = await world({ x: def.door.x + fx * 1.2, y: 0.3, z: def.door.z + fz * 1.2, yaw: 0 });
+    P(w).rep = 1e6; // everything unlocked
     run(w, 5);
     run(w, 1, (t) => [act(t, 'use')]);
     expect(P(w).interior).toBe(def.id);
@@ -524,6 +525,7 @@ describe('shops, wardrobe and garage', () => {
     const fx = -Math.sin(def.door.yaw);
     const fz = -Math.cos(def.door.yaw);
     const w = await world({ x: def.door.x + fx * 1.2, y: 0.3, z: def.door.z + fz * 1.2, yaw: 0 });
+    P(w).rep = 1e6;
     run(w, 3);
     expect(P(w).context?.kind).toBe('buy_home');
     P(w).money = 100000;
@@ -682,5 +684,104 @@ describe('missions', () => {
     expect(P(w).missionsDone).toContain('casse');
     expect(P(w).rep).toBe(150);
     void giver;
+  });
+});
+
+describe('progression', () => {
+  it('levels: XP curve, level-up rewards and gated purchases', async () => {
+    const { levelOf, xpToNext } = await import('../src/data/progression');
+    expect(levelOf(0)).toBe(1);
+    expect(levelOf(xpToNext(1))).toBe(2);
+    const w = await world();
+    run(w, 2);
+    const s = P(w);
+    s.rep = 0;
+    const money = s.money;
+    w.progress.addXp(w.players.get('p1')!, xpToNext(1) + xpToNext(2));
+    expect(levelOf(s.rep)).toBe(3);
+    expect(s.money).toBeGreaterThan(money);
+    expect(w.drainEvents().filter((e) => e.type === 'levelup').length).toBe(2);
+  });
+
+  it('chaos combo: mayhem builds a multiplier, then cashes in money and XP', async () => {
+    const w = await world();
+    w.density = { peds: 0, traffic: 0, parkedRadius: 0 };
+    run(w, 2);
+    const p = w.players.get('p1')!;
+    const s = P(w);
+    const money = s.money;
+    const xp = s.rep;
+    for (let i = 0; i < 9; i++) w.progress.onProp(p);
+    expect(s.chaosMult).toBe(3);
+    expect(s.chaos).toBeGreaterThan(9 * 15);
+    run(w, 60 * 5);
+    expect(s.chaos).toBe(0);
+    expect(s.money).toBeGreaterThan(money);
+    expect(s.rep).toBeGreaterThan(xp);
+  });
+
+  it('knocking someone out gives XP and chaos', async () => {
+    const w = await world();
+    run(w, 2);
+    const ped = w.spawnPed(P(w).x + 1, P(w).z, { mode: 'idle' });
+    const xp = P(w).rep;
+    w.damagePed(ped, 999, w.players.get('p1')!, P(w).x, P(w).z);
+    expect(P(w).rep).toBeGreaterThan(xp);
+    expect(P(w).chaos).toBeGreaterThan(0);
+  });
+});
+
+describe('daily contracts, streak and fence', () => {
+  it('the same 3 contracts for everyone each day, new ones the next day', async () => {
+    const { dailyContracts } = await import('../src/data/contracts');
+    expect(dailyContracts(20000).map((c) => c.text)).toEqual(dailyContracts(20000).map((c) => c.text));
+    expect(dailyContracts(20000).length).toBe(3);
+    expect(dailyContracts(20000).map((c) => c.text)).not.toEqual(dailyContracts(20001).map((c) => c.text));
+  });
+
+  it('progress pays out, finishing all gives a bonus; login streak rewards', async () => {
+    const w = await world();
+    w.day = 20000;
+    run(w, 31);
+    const s = P(w);
+    expect(s.contracts.length).toBe(3);
+    expect(s.streak).toBe(1);
+    const p = w.players.get('p1')!;
+    const money = s.money;
+    for (const c of s.contracts) w.contracts.track(p, c.stat, c.goal, c.stat === 'chaos');
+    expect(s.contracts.every((c) => c.progress >= c.goal)).toBe(true);
+    const total = s.contracts.reduce((a, c) => a + c.cash, 0);
+    expect(s.money).toBeGreaterThanOrEqual(money + total + 1500);
+    // next day: new contracts, streak 2
+    w.day = 20001;
+    run(w, 31);
+    expect(s.streak).toBe(2);
+    expect(s.contracts.every((c) => c.progress === 0)).toBe(true);
+    // a missed day slips back one step instead of resetting
+    w.day = 20005;
+    run(w, 31);
+    expect(s.streak).toBe(1);
+  });
+
+  it('the fence buys the car he ordered', async () => {
+    const w = await world();
+    run(w, 31);
+    const s = P(w);
+    const f = w.contracts.fence;
+    const type = s.fenceOrder!;
+    const v = w.spawnVehicle(type, f.x, 0.3, f.z, 0, 'none', false);
+    w.teleportPlayer(w.players.get('p1')!, f.x + 2, 0.5, f.z);
+    run(w, 2);
+    // get in
+    s.vehicle = -1;
+    run(w, 1, (t) => [act(t, 'use')]);
+    expect(s.vehicle).toBe(v.state.id);
+    run(w, 2);
+    expect(s.context?.kind).toBe('fence');
+    const money = s.money;
+    run(w, 1, (t) => [act(t, 'use')]);
+    expect(s.vehicle).toBe(-1);
+    expect(w.vehicles.has(v.state.id)).toBe(false);
+    expect(s.money).toBeGreaterThan(money + 200);
   });
 });

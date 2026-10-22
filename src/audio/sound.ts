@@ -119,6 +119,23 @@ export class Sound {
     this.tone('sine', 1760, 1760, 0.15, 0.25, 0.07);
   }
 
+  /** Rising arpeggio (level up, all contracts done). */
+  fanfare() {
+    [523, 659, 784, 1047].forEach((f, i) => this.tone('triangle', f, f, 0.22, 0.22, i * 0.09));
+  }
+
+  /** Short blip whose pitch climbs with the combo multiplier. */
+  combo(mult: number) {
+    const f = 500 + mult * 120;
+    this.tone('square', f, f * 1.5, 0.07, 0.07);
+  }
+
+  /** KO crunch: punch + low thump. */
+  knockout() {
+    this.burst(0.15, 600, 1);
+    this.tone('sine', 90, 35, 0.25, 0.9);
+  }
+
   alert() {
     this.tone('square', 660, 880, 0.25, 0.12);
   }

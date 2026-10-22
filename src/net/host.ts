@@ -100,7 +100,7 @@ export class NetHost implements NetSession {
       return;
     }
     const players = [...this.sim.players.values()];
-    const P = players.map((p) => packPlayer(p.state));
+    const shared = players.map((p) => packPlayer(p.state, false));
     const index = new Map(players.map((p, i) => [p.state.id, i]));
     const driverIndex = (d: string) => (d === 'none' ? -1 : d === 'npc' ? -2 : (index.get(d) ?? -1));
     for (const g of this.guests.values()) {
@@ -124,11 +124,12 @@ export class NetHost implements NetSession {
       const H: number[][] = [];
       for (const h of this.sim.police.helis.values()) if (near(h.state.x, h.state.z, AOI + 80)) H.push(packHeli(h.state));
       const E = this.events.filter((e) => {
-        if ('playerId' in e && (e.type === 'toast' || e.type === 'money' || e.type === 'respawn')) return e.playerId === g.peer;
+        if (e.type === 'toast' || e.type === 'money' || e.type === 'respawn' || e.type === 'levelup' || e.type === 'chaos' || e.type === 'chaosEnd' || e.type === 'contract' || e.type === 'streak' || e.type === 'dmg') return e.playerId === g.peer;
         if ('x' in e) return near((e as { x: number }).x, (e as { z: number }).z, AOI + 30);
         if (e.type === 'shot') return near(e.fx, e.fz, AOI + 30);
         return true;
       });
+      const P = players.map((p, i) => (p.state.id === g.peer ? packPlayer(p.state) : shared[i]));
       this.t.send({ t: 'snap', k: tick, P, D, V, K, X, H, E } satisfies HostMessage, g.peer);
     }
     this.events = [];

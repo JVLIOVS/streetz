@@ -14,7 +14,10 @@ import { Ped, type PedState } from './peds';
 import { PROP_SPECS, PropField, type BrokenProp } from './props';
 import { PoliceSystem, type HeliState } from './police';
 import { MissionSystem } from './missions';
+import { ProgressSystem } from './progress';
+import { ContractSystem } from './contracts';
 import { REPAINT_PRICE } from '../data/police';
+import { levelOf, requiredLevel } from '../data/progression';
 import { GROUP, groups, initPhysics } from './physics';
 import { angleDiff, Player, PLAYER_TUNING, type ContextAction, type PlayerState } from './player';
 import { Vehicle, type VehicleNet, type VehicleState } from './vehicle';
@@ -59,6 +62,13 @@ export type SimEvent =
   | { type: 'horn'; vehicle: number }
   | { type: 'wanted'; playerId: string; level: number }
   | { type: 'busted'; playerId: string }
+  | { type: 'levelup'; playerId: string; level: number; unlocks: string[]; cash: number }
+  | { type: 'chaos'; playerId: string; label: string; points: number }
+  | { type: 'chaosEnd'; playerId: string; score: number; cash: number; mult: number }
+  | { type: 'contract'; playerId: string; text: string; cash: number; all: boolean }
+  | { type: 'streak'; playerId: string; day: number; cash: number }
+  /** Damage dealt by a player (floating numbers). */
+  | { type: 'dmg'; playerId: string; x: number; y: number; z: number; amount: number; ko: boolean }
   | { type: 'mission'; playerId: string; name: string; state: 'start' | 'done' | 'fail' }
   | { type: 'joined'; playerId: string; name: string }
   | { type: 'left'; playerId: string; name: string }
@@ -129,6 +139,12 @@ export class SimWorld {
   private nextId = 1;
   readonly police: PoliceSystem;
   readonly missions: MissionSystem;
+  readonly progress: ProgressSystem;
+  readonly contracts: ContractSystem;
+  /** Local calendar day number (set by the game from the clock; 0 = unknown). */
+  day = 0;
+  /** Wall-clock time in seconds (set by the game; used by hideout businesses). */
+  now = 0;
   private controller: RAPIER_T.KinematicCharacterController;
   private carController: RAPIER_T.KinematicCharacterController;
   private offroadController: RAPIER_T.KinematicCharacterController;
@@ -153,6 +169,8 @@ export class SimWorld {
     this.buildInteriors();
     this.police = new PoliceSystem(this);
     this.missions = new MissionSystem(this);
+    this.progress = new ProgressSystem(this);
+    this.contracts = new ContractSystem(this);
     this.props = new PropField(map.props);
     this.buildProps();
     if (role === 'authority') for (const f of map.featured) this.spawnVehicle(f.type as VehicleType, f.x, 0.3, f.z, f.yaw, 'none', false);
@@ -184,6 +202,7 @@ export class SimWorld {
     if (!p) return;
     if (p.state.vehicle >= 0) this.leaveVehicle(p);
     this.missions.drop(id);
+    this.progress.drop(id);
     this.physics.removeRigidBody(p.body);
     this.players.delete(id);
   }
@@ -336,11 +355,12 @@ export class SimWorld {
   }
 
   /** Breaks a street prop with a push; returns true if it was intact. */
-  breakProp(i: number, vx: number, vz: number, up = 2): boolean {
+  breakProp(i: number, vx: number, vz: number, up = 2, by?: Player): boolean {
     if (!this.props.break(i, vx, vz, up)) return false;
     this.propColliders[i]?.setEnabled(false);
     const d = this.map.props[i];
     this.events.push({ type: 'break', x: d.x, y: 0.8, z: d.z, kind: d.kind, prop: i });
+    if (by) this.progress.onProp(by);
     return true;
   }
 
@@ -390,6 +410,8 @@ export class SimWorld {
     this.collectPickups();
     this.police.update();
     this.missions.update();
+    this.progress.update();
+    this.contracts.update();
     if (this.tick % 20 === 0) this.managePopulation();
     for (const p of this.players.values()) p.state.context = this.computeContext(p);
     this.physics.step();
@@ -733,7 +755,8 @@ export class SimWorld {
       const spec = PROP_SPECS[d.kind];
       // push along the car's motion, a bit outwards
       const side = lr > 0 ? 1 : -1;
-      if (!this.breakProp(i, s.vx * 1.1 + fz * side * 2, s.vz * 1.1 - fx * side * 2, 2 + Math.abs(s.speed) * 0.2)) continue;
+      const driver = s.driver !== 'npc' && s.driver !== 'none' ? this.players.get(s.driver) : undefined;
+      if (!this.breakProp(i, s.vx * 1.1 + fz * side * 2, s.vz * 1.1 - fx * side * 2, 2 + Math.abs(s.speed) * 0.2, driver)) continue;
       s.vx *= spec.carKeep;
       s.vz *= spec.carKeep;
       s.health -= spec.carDamage;
@@ -742,6 +765,8 @@ export class SimWorld {
 
   private explode(v: Vehicle) {
     const s = v.state;
+    const culprit = this.players.get(s.driver) ?? (v.lastHitBy ? this.players.get(v.lastHitBy) : undefined);
+    if (culprit) this.progress.onExplode(culprit, v);
     s.wrecked = true;
     s.fire = -1;
     s.health = 0;
@@ -780,7 +805,7 @@ export class SimWorld {
     for (const i of [...this.props.near(x, z, radius, this.scratch)]) {
       const p = this.map.props[i];
       const d = Math.hypot(p.x - x, p.z - z) + 0.1;
-      if (d < radius) this.breakProp(i, ((p.x - x) / d) * 12, ((p.z - z) / d) * 12, 8);
+      if (d < radius) this.breakProp(i, ((p.x - x) / d) * 12, ((p.z - z) / d) * 12, 8, source?.lastHitBy ? this.players.get(source.lastHitBy) : undefined);
     }
   }
 
@@ -830,6 +855,7 @@ export class SimWorld {
       this.teleportPlayer(p, station.door.x + fx * 2, 0.3, station.door.z + fz * 2, station.door.yaw);
     }
     this.events.push({ type: 'busted', playerId: s.id });
+    this.progress.breakCombo(p);
     if (s.mission) this.missions.abort(p, 'Mission échouée : arrêté');
     this.toast(p, `ARRÊTÉ ! Amende -${fine.toLocaleString('fr-FR')} €, armes confisquées`);
   }
@@ -959,6 +985,9 @@ export class SimWorld {
       case 'mission':
         this.missions.start(p, ctx.target as string);
         break;
+      case 'fence':
+        this.contracts.sell(p);
+        break;
     }
   }
 
@@ -1004,6 +1033,11 @@ export class SimWorld {
     s.actionSeq++;
   }
 
+  /** Public: put a driver back on foot (fence, missions). */
+  leaveVehicleOf(p: Player) {
+    if (p.state.vehicle >= 0) this.leaveVehicle(p);
+  }
+
   private leaveVehicle(p: Player) {
     const s = p.state;
     const v = this.vehicles.get(s.vehicle);
@@ -1033,6 +1067,8 @@ export class SimWorld {
     if (s.vehicle >= 0) {
       const home = this.homeNear(p, 16);
       const v = this.vehicles.get(s.vehicle);
+      const sale = this.contracts.context(p);
+      if (sale) return sale;
       if (home && v && !v.police && v.state.type !== 'army') return { kind: 'store_vehicle', label: 'Garer au garage', target: home.id };
       const garage = this.map.pois.find((q) => q.kind === 'garage');
       if (garage && s.wanted > 0 && Math.hypot(garage.x - s.x, garage.z - s.z) < 14) return { kind: 'repaint', label: `Repeindre · ${REPAINT_PRICE} €`, target: s.vehicle };
@@ -1110,6 +1146,11 @@ export class SimWorld {
       this.toast(p, `${what} : -${price.toLocaleString('fr-FR')} €`);
       return true;
     };
+    const need = requiredLevel(item);
+    if (levelOf(s.rep) < need) {
+      this.toast(p, `🔒 Débloqué au niveau ${need}`);
+      return;
+    }
     if (kind === 'weapon' && inside === 'gunshop' && id in WEAPONS) {
       const w = id as WeaponId;
       const spec = WEAPONS[w];
@@ -1158,7 +1199,7 @@ export class SimWorld {
     const def = s.interior ? this.interior(s.interior) : undefined;
     const c = CLOTHES.find((x) => x.id === id);
     if (!c || !def || (def.kind !== 'hideout' && def.kind !== 'apartment' && def.kind !== 'clothes')) return;
-    if (c.price > 0 && !s.clothes.includes(id)) return;
+    if (c.price !== 0 && !s.clothes.includes(id)) return;
     s.outfit = { ...s.outfit, ...c.set };
   }
 
@@ -1222,6 +1263,7 @@ export class SimWorld {
       this.crime(p, def.kind === 'shop' ? 'robbery_shop' : 'robbery_big', s.x, s.z, null, true);
       this.toast(p, `Butin : +${amount.toLocaleString('fr-FR')} € — file !`);
       this.missions.onRobbery(p, def.id);
+      this.progress.onRobbery(p, def.kind === 'shop');
     }
   }
 
@@ -1288,7 +1330,7 @@ export class SimWorld {
     const blocker = this.propOnSegment(fx, fz, tx, tz);
     if (blocker) {
       const len = Math.hypot(tx - fx, tz - fz) || 1;
-      this.breakProp(blocker.i, ((tx - fx) / len) * 7, ((tz - fz) / len) * 7, 3);
+      this.breakProp(blocker.i, ((tx - fx) / len) * 7, ((tz - fz) / len) * 7, 3, p);
       tx = blocker.x;
       tz = blocker.z;
       ty = 0.6;
@@ -1403,7 +1445,7 @@ export class SimWorld {
       const fz = -Math.cos(s.facing);
       for (const i of this.props.near(s.x + fx, s.z + fz, 1.3, this.scratch)) {
         if (PROP_SPECS[this.map.props[i].kind].fragile) {
-          this.breakProp(i, fx * 7, fz * 7, 3);
+          this.breakProp(i, fx * 7, fz * 7, 3, p);
           break;
         }
       }
@@ -1442,9 +1484,13 @@ export class SimWorld {
       } else this.crime(p, t.ped.alive ? (melee ? 'assault' : 'shoot_person') : 'knockout', t.ped.state.x, t.ped.state.z, t.ped, !melee);
     } else if (t.player) {
       this.damagePlayer(t.player, damage * 0.8);
-    } else if (t.vehicle) t.vehicle.state.health -= damage * 0.8;
-    else if (t.heli) {
+    } else if (t.vehicle) {
+      t.vehicle.state.health -= damage * 0.8;
+      t.vehicle.lastHitBy = s.id;
+    } else if (t.heli) {
       t.heli.health -= damage;
+      const h = this.police.helis.get(t.heli.id);
+      if (h) h.lastHitBy = s.id;
       if (s.wanted < 3) this.crime(p, 'attack_cop', s.x, s.z, null, true);
     }
   }
@@ -1482,6 +1528,14 @@ export class SimWorld {
     if (!ped.alive) return;
     ped.state.health -= amount;
     ped.state.hitSeq++;
+    if (by) {
+      const ko = ped.state.health <= 0;
+      this.events.push({ type: 'dmg', playerId: by.state.id, x: ped.state.x, y: ped.state.y + 2, z: ped.state.z, amount: Math.round(amount), ko });
+      if (ko) {
+        this.progress.onKo(by, ped);
+        this.missions.onKo(by);
+      } else this.progress.chaos(by, 5);
+    }
     if (ped.state.health <= 0) {
       ped.state.health = 0;
       ped.state.mode = 'ko';

@@ -1,6 +1,7 @@
 import type { Outfit } from '../data/shop';
 import type { VehicleType } from '../data/vehicles';
 import type { WeaponId } from '../data/weapons';
+import { START_XP } from '../data/progression';
 
 /**
  * Player progression, saved on the device (localStorage). The same JSON shape is sent to
@@ -18,6 +19,14 @@ export interface Profile {
   rep: number;
   /** Story missions completed. */
   missions: string[];
+  /** Daily contracts progress (day number + progress per contract). */
+  daily: { day: number; progress: number[] };
+  /** Login streak: last day played and streak length. */
+  streak: { day: number; count: number };
+  /** Hideout businesses owned. */
+  biz: { id: string; stock: number; last: number }[];
+  /** Tutorial finished (or skipped). */
+  tutorial: boolean;
 }
 
 export interface SaveData {
@@ -29,7 +38,7 @@ export interface SaveData {
 const KEY = 'streetz.save';
 
 export function defaultProfile(): Profile {
-  return { money: 500, weapons: ['fist'], ammo: {}, armor: 0, outfit: {}, clothes: [], garage: [], homes: ['hideout'], rep: 0, missions: [] };
+  return { money: 500, weapons: ['fist'], ammo: {}, armor: 0, outfit: {}, clothes: [], garage: [], homes: ['hideout'], rep: START_XP, missions: [], daily: { day: 0, progress: [] }, streak: { day: 0, count: 0 }, biz: [], tutorial: false };
 }
 
 export function defaultSave(): SaveData {
@@ -71,6 +80,11 @@ export function sanitize(p: Partial<Profile> | undefined): Profile {
     homes: arr<string>(p.homes, d.homes).includes('hideout') ? arr<string>(p.homes, d.homes) : ['hideout', ...arr<string>(p.homes, [])],
     rep: Math.max(0, Number(p.rep) || 0),
     missions: arr<string>(p.missions, []),
+    daily: p.daily && typeof p.daily === 'object' ? { day: Number(p.daily.day) || 0, progress: arr<number>(p.daily.progress, []) } : d.daily,
+    streak: p.streak && typeof p.streak === 'object' ? { day: Number(p.streak.day) || 0, count: Math.max(0, Number(p.streak.count) || 0) } : d.streak,
+    biz: arr<{ id: string; stock: number; last: number }>(p.biz, []).slice(0, 6),
+    // players from before the tutorial existed already know the game
+    tutorial: typeof p.tutorial === 'boolean' ? p.tutorial : (p.missions?.length ?? 0) > 0 || (Number(p.money) || 0) !== d.money,
   };
 }
 

@@ -1,4 +1,7 @@
 import { WEAPONS } from '../data/weapons';
+import { CHAOS_WINDOW, levelProgress, nextUnlock } from '../data/progression';
+import { STREAK_REWARDS } from '../data/contracts';
+import { VEHICLES } from '../data/vehicles';
 import type { MapData } from '../maps/types';
 import type { PlayerState } from '../sim/player';
 import { Minimap } from './minimap';
@@ -34,6 +37,19 @@ export class Hud {
   private objective = $('objective');
   private objText = $('objective').querySelector('.obj-txt') as HTMLElement;
   private objTime = $('objective').querySelector('.obj-time') as HTMLElement;
+  private lvlNum = $('lvl-num');
+  private xpFill = $('xp-fill');
+  private ctrBadge = $('ctr-badge');
+  private nextGoal = $('next-goal');
+  private chaosEl = $('chaos');
+  private chaosMult = $('chaos').querySelector('.ch-mult') as HTMLElement;
+  private chaosScore = $('chaos').querySelector('.ch-score') as HTMLElement;
+  private chaosBar = $('chaos').querySelector('.ch-bar i') as HTMLElement;
+  private popups = $('popups');
+  private panel = $('progress-panel');
+  private panelBody = $('progress-panel').querySelector('.pp-body') as HTMLElement;
+  private panelKey = '';
+  private cashTimer = 0;
   /** ✕ on the objective banner: abandon the mission. */
   onAbort?: () => void;
   private toastTimer = 0;
@@ -47,6 +63,100 @@ export class Hud {
       this.onAbort?.();
     });
     this.objective.addEventListener('pointerdown', (e) => e.stopPropagation());
+    $('btn-level').addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      this.panel.classList.toggle('hidden');
+      this.panelKey = '';
+    });
+    this.panel.addEventListener('pointerdown', (e) => e.stopPropagation());
+    this.panel.querySelector('.pp-close')!.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      this.panel.classList.add('hidden');
+    });
+  }
+
+  /** Level badge, XP bar, next unlock, chaos combo and the progression panel. */
+  updateProgress(s: PlayerState) {
+    const lp = levelProgress(s.rep);
+    if (this.changed('lvl', lp.level)) this.lvlNum.textContent = String(lp.level);
+    const xp = `${Math.round((lp.cur / lp.need) * 100)}%`;
+    if (this.changed('xp', xp)) this.xpFill.style.width = xp;
+    const next = nextUnlock(lp.level);
+    const goal = next ? `Niv. ${next.level} : ${next.label}` : '';
+    if (this.changed('goal', goal)) this.nextGoal.textContent = goal;
+    const allDone = s.contracts.length > 0 && s.contracts.every((c) => c.progress >= c.goal);
+    if (this.changed('ctrDone', allDone)) this.ctrBadge.classList.toggle('done', allDone);
+    // chaos combo
+    const on = s.chaosTimer > 0 && s.chaos > 0;
+    if (this.cashTimer <= 0 && this.changed('chaosOn', on)) {
+      this.chaosEl.classList.remove('cash');
+      this.chaosEl.classList.toggle('hidden', !on);
+    }
+    if (on) {
+      if (this.changed('chaosMult', s.chaosMult)) this.chaosMult.textContent = `×${s.chaosMult}`;
+      if (this.changed('chaosScore', Math.round(s.chaos))) {
+        this.chaosScore.textContent = Math.round(s.chaos).toLocaleString('fr-FR');
+        this.chaosEl.classList.remove('bump');
+        void this.chaosEl.offsetWidth;
+        this.chaosEl.classList.add('bump');
+      }
+      this.chaosBar.style.width = `${(s.chaosTimer / CHAOS_WINDOW) * 100}%`;
+    }
+    if (!this.panel.classList.contains('hidden')) this.renderPanel(s, lp);
+  }
+
+  /** Combo cashed in: the score flies away as money. */
+  chaosCashed(score: number, cash: number) {
+    this.chaosEl.classList.remove('hidden', 'bump');
+    this.chaosScore.textContent = cash > 0 ? `+${cash.toLocaleString('fr-FR')} €` : 'PERDU';
+    void this.chaosEl.offsetWidth;
+    this.chaosEl.classList.add('cash');
+    this.cashTimer = 0.9;
+    this.last.chaosOn = false;
+    void score;
+  }
+
+  levelUp(level: number, unlocks: string[]) {
+    const el = $('levelup');
+    el.querySelector('b')!.textContent = String(level);
+    el.querySelector('span')!.textContent = unlocks.length ? `Débloqué : ${unlocks.join(' · ')}` : '';
+    el.classList.remove('hidden');
+    el.style.animation = 'none';
+    void el.offsetWidth;
+    el.style.animation = '';
+  }
+
+  /** Floating text at a screen position (damage numbers, stunts). */
+  popup(x: number, y: number, text: string, cls: string) {
+    if (this.popups.childElementCount > 14) this.popups.firstElementChild?.remove();
+    const el = document.createElement('div');
+    el.className = `pop ${cls}`;
+    el.textContent = text;
+    el.style.transform = `translate(${x.toFixed(0)}px, ${y.toFixed(0)}px) translate(-50%, -50%)`;
+    el.addEventListener('animationend', () => el.remove());
+    this.popups.appendChild(el);
+  }
+
+  private renderPanel(s: PlayerState, lp: { level: number; cur: number; need: number }) {
+    const key = JSON.stringify([s.rep, s.contracts.map((c) => c.progress), s.streak, s.fenceOrder, s.contractsDay]);
+    if (key === this.panelKey) return;
+    this.panelKey = key;
+    const esc = (t: string) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
+    const bar = (r: number) => `<div class="pp-bar"><i style="width:${Math.min(100, r * 100).toFixed(0)}%"></i></div>`;
+    let h = `<div class="pp-sec">NIVEAU ${lp.level}</div><div class="pp-row">${lp.cur} / ${lp.need} XP${bar(lp.cur / lp.need)}</div>`;
+    const next = nextUnlock(lp.level);
+    if (next) h += `<div class="pp-row">🔓 Niveau ${next.level} : ${esc(next.label)}</div>`;
+    h += `<div class="pp-sec">CONTRATS DU JOUR</div>`;
+    if (!s.contracts.length) h += `<div class="pp-row">Chargement…</div>`;
+    for (const c of s.contracts) {
+      const done = c.progress >= c.goal;
+      h += `<div class="pp-row${done ? ' done' : ''}">${done ? '✔ ' : ''}${esc(c.text)}<small>+${c.cash.toLocaleString('fr-FR')} €</small>${bar(c.progress / c.goal)}<span>${c.progress} / ${c.goal}</span></div>`;
+    }
+    h += `<div class="pp-row">🏆 Les 3 contrats : bonus 1 500 € · nouveaux contrats demain</div>`;
+    const k = s.streak > 0 ? ((s.streak - 1) % 7) + 1 : 0;
+    h += `<div class="pp-sec">SÉRIE DE CONNEXION 🔥</div><div class="pp-row">Jour ${k}/7 · demain : +${STREAK_REWARDS[k % 7].toLocaleString('fr-FR')} €${k === 6 ? ' + veste dorée exclusive' : ''}${bar(k / 7)}</div>`;
+    if (s.fenceOrder) h += `<div class="pp-sec">RECELEUR 💰</div><div class="pp-row">Il veut : <b>${esc(VEHICLES[s.fenceOrder].name)}</b>. Vole-la et amène-la au point 💰 de la carte. Une voiture dorée vaut une fortune.</div>`;
+    this.panelBody.innerHTML = h;
   }
 
   /** Only touches the DOM when a value actually changes. */
@@ -175,6 +285,13 @@ export class Hud {
   }
 
   update(dt: number) {
+    if (this.cashTimer > 0) {
+      this.cashTimer -= dt;
+      if (this.cashTimer <= 0) {
+        this.chaosEl.classList.add('hidden');
+        this.chaosEl.classList.remove('cash');
+      }
+    }
     if (this.toastTimer > 0) {
       this.toastTimer -= dt;
       if (this.toastTimer <= 0) this.toastEl.classList.remove('show');

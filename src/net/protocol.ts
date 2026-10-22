@@ -79,6 +79,16 @@ export type NetPlayer = Pick<
   | 'missionTimer'
   | 'waypoint'
   | 'missionTargets'
+  | 'chaos'
+  | 'chaosMult'
+  | 'chaosTimer'
+  | 'contracts'
+  | 'contractsDay'
+  | 'streak'
+  | 'streakDay'
+  | 'fenceOrder'
+  | 'biz'
+  | 'tutorialDone'
   | 'wantedSeen'
   | 'searchX'
   | 'searchZ'
@@ -86,7 +96,16 @@ export type NetPlayer = Pick<
   | 'arrest'
 >;
 
-export function packPlayer(s: PlayerState): NetPlayer {
+/** Private fields only sent to their owner (inventory, contracts…). */
+const PRIVATE: (keyof NetPlayer)[] = ['ammo', 'weapons', 'clothes', 'garage', 'homes', 'missionsDone', 'contracts', 'biz', 'context', 'searchX', 'searchZ', 'searchR', 'waypoint', 'missionTargets', 'objective'];
+
+export function packPlayer(s: PlayerState, owner = true): NetPlayer {
+  const n = packFull(s);
+  if (!owner) for (const k of PRIVATE) delete (n as Partial<NetPlayer>)[k];
+  return n;
+}
+
+function packFull(s: PlayerState): NetPlayer {
   return {
     id: s.id,
     x: q(s.x),
@@ -130,6 +149,16 @@ export function packPlayer(s: PlayerState): NetPlayer {
     missionTimer: q(s.missionTimer),
     waypoint: s.waypoint ? [q(s.waypoint[0]), q(s.waypoint[1])] : null,
     missionTargets: s.missionTargets,
+    chaos: Math.round(s.chaos),
+    chaosMult: s.chaosMult,
+    chaosTimer: q(s.chaosTimer),
+    contracts: s.contracts,
+    contractsDay: s.contractsDay,
+    streak: s.streak,
+    streakDay: s.streakDay,
+    fenceOrder: s.fenceOrder,
+    biz: s.biz,
+    tutorialDone: s.tutorialDone,
     wantedSeen: s.wantedSeen,
     searchX: q(s.searchX),
     searchZ: q(s.searchZ),

@@ -26,6 +26,8 @@
         <canvas id="minimap"></canvas>
         <div id="bars"><div id="hp"><i></i></div><div id="armor"><i></i></div></div>
         <div id="zone-name"></div>
+        <button id="btn-level" aria-label="Progression et contrats"><b id="lvl-num">1</b><span class="xp"><i id="xp-fill"></i></span><span id="ctr-badge">📋</span></button>
+        <div id="next-goal"></div>
       </div>
       <div id="top-right">
         <div id="stars"><span>★</span><span>★</span><span>★</span><span>★</span><span>★</span></div>
@@ -39,6 +41,13 @@
       <div id="toast"></div>
       <div id="robbery" class="hidden"><div class="lbl">BRAQUAGE</div><div class="bar"><i></i></div></div>
       <div id="ko" class="hidden">K.O.</div>
+      <div id="chaos" class="hidden"><div class="ch-head">CHAOS <b class="ch-mult">×1</b></div><div class="ch-score">0</div><div class="ch-bar"><i></i></div></div>
+      <div id="popups"></div>
+      <div id="levelup" class="hidden"><small>NIVEAU</small><b>2</b><span></span></div>
+      <div id="progress-panel" class="hidden">
+        <div class="pp-head"><span>Progression</span><button class="pp-close" aria-label="Fermer">✕</button></div>
+        <div class="pp-body"></div>
+      </div>
       <div id="target-hp" class="hidden"><i></i></div>
 
       <!-- On foot -->

@@ -14,6 +14,7 @@ import type { QualityLevel } from './render/quality';
 import { GameRenderer } from './render/renderer';
 import { SimWorld } from './sim/world';
 import { Hud } from './ui/hud';
+import { localDay, nowSeconds } from './core/clock';
 
 const $ = (id: string) => document.getElementById(id)!;
 const params = new URLSearchParams(location.search);
@@ -159,6 +160,13 @@ async function boot() {
 async function launch(map: MapData, assets: GameAssets, quality: QualityLevel, save: ReturnType<typeof loadSave>, mode: Mode, playerName: string, look: number) {
   const sim = await SimWorld.create(map, mode.kind === 'guest' ? 'replica' : 'authority');
   sim.density = DENSITY[quality];
+  // the sim never reads the clock itself: the calendar is an input
+  const tickClock = () => {
+    sim.day = localDay();
+    sim.now = nowSeconds();
+  };
+  tickClock();
+  setInterval(tickClock, 5000);
   const localId = mode.kind === 'solo' ? LOCAL_PLAYER : mode.kind === 'host' ? mode.t.selfId : mode.id;
   const me = sim.addPlayer(localId);
   applyProfile(me.state, save.profile);

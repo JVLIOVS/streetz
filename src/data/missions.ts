@@ -21,7 +21,11 @@ export type MissionStep =
   /** Complete a robbery in that building (id or kind). */
   | { kind: 'rob'; text: string; interior: string }
   /** Get rid of the police. */
-  | { kind: 'lose'; text: string };
+  | { kind: 'lose'; text: string }
+  /** Tutorial: knock somebody out / drive any vehicle / park it in your garage. */
+  | { kind: 'ko'; text: string }
+  | { kind: 'drive'; text: string }
+  | { kind: 'store'; text: string };
 
 export interface MissionDef {
   id: string;

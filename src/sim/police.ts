@@ -30,6 +30,8 @@ export class Heli {
   vz = 0;
   vy = 0;
   net: { x: number; y: number; z: number; yaw: number } | null = null;
+  /** Player who last shot it (credited when it goes down). */
+  lastHitBy: string | null = null;
   constructor(public state: HeliState) {
     this.savePrev();
   }
@@ -192,7 +194,10 @@ export class PoliceSystem {
       s.wantedSeen = false;
       p.unseen += DT;
       const out = Math.hypot(s.x - s.searchX, s.z - s.searchZ) > s.searchR;
-      if (out && p.unseen > HIDE_TIME) this.w.clearWanted(p, 'Tu as semé la police !');
+      if (out && p.unseen > HIDE_TIME) {
+        this.w.progress.onEscape(p, s.wanted);
+        this.w.clearWanted(p, 'Tu as semé la police !');
+      }
       else if (!out && p.unseen > COOL_TIME) {
         s.wanted--;
         p.unseen = 0;
@@ -521,6 +526,8 @@ export class PoliceSystem {
     }
     if (s.health <= 0) {
       s.down = 0;
+      const by = h.lastHitBy ? w.players.get(h.lastHitBy) : undefined;
+      if (by) w.progress.onHeliDown(by);
       return;
     }
     const t = h.target ? w.players.get(h.target) : undefined;

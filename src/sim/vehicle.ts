@@ -72,6 +72,8 @@ export class Vehicle {
   parkedSpot = -1;
   /** AI speed factor (> 1: a fleeing car that does not stop for pedestrians). */
   rush = 1;
+  /** Player who last shot it (credited if it explodes). */
+  lastHitBy: string | null = null;
   /** Ticks since a player last drove it (persistent while recent). */
   touchedTick = -1;
   /** Police AI scratch (target player, unstuck timers, crew dropped off). */

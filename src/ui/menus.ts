@@ -3,6 +3,7 @@ import { CLOTHES, GARAGE_SLOTS, VEHICLE_OFFERS } from '../data/shop';
 import { VEHICLES } from '../data/vehicles';
 import { ARMOR_PRICE, WEAPON_ORDER, WEAPONS } from '../data/weapons';
 import type { PlayerState } from '../sim/player';
+import { levelOf, requiredLevel } from '../data/progression';
 
 export type MenuKind = 'gunshop' | 'clothes' | 'dealer' | 'wardrobe' | 'garage';
 
@@ -72,10 +73,20 @@ export class MenuPanel {
       this.close();
       return;
     }
-    const key = JSON.stringify([s.money, s.weapons, s.ammo, s.armor, s.clothes, s.outfit, s.garage]);
+    const key = JSON.stringify([s.rep, s.money, s.weapons, s.ammo, s.armor, s.clothes, s.outfit, s.garage]);
     if (key === this.lastKey) return;
     this.lastKey = key;
     const { title, rows } = this.rows(this.kind, s);
+    // level-gated items show what level unlocks them (the next goal to grind for)
+    const level = levelOf(s.rep);
+    for (const r of rows) {
+      if (r.action?.action !== 'buy' || r.on) continue;
+      const need = requiredLevel(r.action.arg);
+      if (need > level) {
+        r.disabled = true;
+        r.button = `🔒 Niv. ${need}`;
+      }
+    }
     this.title.textContent = `${title} · ${euro(s.money)}`;
     this.list.innerHTML = '';
     for (const r of rows) {

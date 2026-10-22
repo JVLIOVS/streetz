@@ -240,6 +240,16 @@ export class NetClient implements NetSession {
     s.missionTimer = np.missionTimer;
     s.waypoint = np.waypoint;
     s.missionTargets = np.missionTargets ?? [];
+    s.chaos = np.chaos;
+    s.chaosMult = np.chaosMult;
+    s.chaosTimer = np.chaosTimer;
+    s.contracts = np.contracts;
+    s.contractsDay = np.contractsDay;
+    s.streak = np.streak;
+    s.streakDay = np.streakDay;
+    s.fenceOrder = np.fenceOrder;
+    s.biz = np.biz;
+    s.tutorialDone = np.tutorialDone;
     if (np.teleportSeq > s.teleportSeq) {
       // doors, respawn, getting out of a car: the host moved us
       p.teleport(np.x, np.y, np.z, np.facing);

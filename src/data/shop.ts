@@ -34,6 +34,8 @@ export const CLOTHES: ClothingItem[] = [
   { id: 'tracksuit_blue', name: 'Survêt bleu', price: 180, slot: 'top', set: { top: 0x1e6fd9, topAccent: 0xffffff, sleeves: 'long' } },
   { id: 'tee_white', name: 'T-shirt blanc', price: 40, slot: 'top', set: { top: 0xf5f5f5, topAccent: 0x1b1430, sleeves: 'short' } },
   { id: 'tee_gold', name: 'Maillot doré', price: 350, slot: 'top', set: { top: 0xffc93c, topAccent: 0x1b1430, sleeves: 'short' } },
+  // price -1: not sold, earned only (login streak day 7)
+  { id: 'jacket_streak', name: 'Veste dorée de la série (exclusive)', price: -1, slot: 'top', set: { top: 0xffc93c, topAccent: 0x1b1430, sleeves: 'long' } },
   { id: 'leather', name: 'Veste en cuir', price: 600, slot: 'top', set: { top: 0x3b2418, topAccent: 0x9b6a3a, sleeves: 'long' } },
   { id: 'jeans', name: 'Jean brut', price: 90, slot: 'bottom', set: { bottom: 0x2f4f8f } },
   { id: 'jogger_black', name: 'Jogging noir', price: 80, slot: 'bottom', set: { bottom: 0x15151a } },

@@ -17,6 +17,7 @@ export class MissionMarkers {
   private openMat = beamMat(0xffd23f, 0.4);
   private lockedMat = beamMat(0x9aa0b0, 0.22);
   private time = 0;
+  private fence: THREE.Group;
 
   constructor(private sim: SimWorld) {
     const beamGeo = new THREE.CylinderGeometry(1.1, 1.1, 3.2, 20, 1, true);
@@ -40,6 +41,15 @@ export class MissionMarkers {
       this.root.add(group);
       this.givers.push({ id: g.id, group, beam });
     }
+    // fence (receleur) drop-off: green ring + beam
+    const fence = new THREE.Group();
+    const fBeam = new THREE.Mesh(new THREE.CylinderGeometry(4, 4, 6, 24, 1, true).translate(0, 3, 0), beamMat(0x5ee86a, 0.25));
+    const fRing = new THREE.Mesh(new THREE.RingGeometry(3.6, 4.2, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x5ee86a, transparent: true, opacity: 0.85, depthWrite: false }));
+    fRing.position.y = 0.06;
+    fence.add(fBeam, fRing);
+    fence.position.set(sim.contracts.fence.x, sim.groundY(sim.contracts.fence.x, sim.contracts.fence.z), sim.contracts.fence.z);
+    this.fence = fence;
+    this.root.add(fence);
     const wpGeo = new THREE.CylinderGeometry(1.4, 1.4, 70, 16, 1, true);
     wpGeo.translate(0, 35, 0);
     this.waypoint = new THREE.Mesh(wpGeo, beamMat(0xffd23f, 0.3));
@@ -70,6 +80,7 @@ export class MissionMarkers {
       bang.position.y = 3.6 + bob;
       bang.rotation.y = this.time * 2;
     }
+    this.fence.visible = !indoors;
     const wp = me?.waypoint;
     this.waypoint.visible = !!wp && !indoors;
     if (wp) this.waypoint.position.set(wp[0], this.sim.groundY(wp[0], wp[1]), wp[1]);

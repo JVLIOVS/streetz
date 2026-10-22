@@ -747,3 +747,275 @@ body {
   font-size: 10px;
   color: #ffd23f;
 }
+
+/* Level badge + XP bar (under the mini-map), opens the progression panel */
+#btn-level {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px auto 0;
+  padding: 2px 6px 2px 2px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(27, 20, 48, 0.75);
+  color: #fff;
+  pointer-events: auto;
+}
+#btn-level b {
+  display: grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #ffd23f;
+  color: #1b1430;
+  font-weight: 900;
+  font-size: 13px;
+}
+#btn-level .xp {
+  width: 70px;
+  height: 7px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  overflow: hidden;
+}
+#btn-level .xp i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, #ffd23f, #ff9f1c);
+  transition: width 0.4s;
+}
+#ctr-badge {
+  font-size: 13px;
+}
+#ctr-badge.done {
+  filter: grayscale(1);
+  opacity: 0.6;
+}
+#next-goal {
+  margin-top: 2px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 800;
+  color: #ffd23f;
+  text-shadow: 0 1px 2px #000;
+  white-space: nowrap;
+}
+
+/* Chaos combo */
+#chaos {
+  position: absolute;
+  right: calc(16px + var(--safe-r));
+  top: 40%;
+  min-width: 120px;
+  text-align: right;
+  font-weight: 900;
+  text-shadow: 0 2px 0 #000;
+  transform-origin: right center;
+}
+#chaos .ch-head {
+  font-size: 13px;
+  color: #ff7eb6;
+}
+#chaos .ch-mult {
+  font-size: 22px;
+  color: #ffd23f;
+}
+#chaos .ch-score {
+  font-size: 26px;
+  line-height: 1;
+}
+#chaos .ch-bar {
+  height: 5px;
+  margin-top: 3px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+#chaos .ch-bar i {
+  display: block;
+  height: 100%;
+  background: #ff7eb6;
+}
+#chaos.bump {
+  animation: bump 0.18s ease-out;
+}
+#chaos.cash {
+  animation: cashout 0.9s ease-out forwards;
+}
+@keyframes bump {
+  50% {
+    transform: scale(1.18);
+  }
+}
+@keyframes cashout {
+  0% {
+    transform: scale(1.3);
+    color: #7dff7a;
+  }
+  100% {
+    transform: translateY(-30px);
+    opacity: 0;
+  }
+}
+
+/* Floating popups (stunts, damage numbers) */
+#popups {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.pop {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-weight: 900;
+  white-space: nowrap;
+  text-shadow: 0 2px 0 #000, 0 0 6px rgba(0, 0, 0, 0.6);
+  animation: popup 0.9s ease-out forwards;
+}
+.pop.dmg {
+  font-size: 16px;
+  color: #fff;
+}
+.pop.dmg.ko {
+  font-size: 22px;
+  color: #ff4057;
+}
+.pop.stunt {
+  font-size: 18px;
+  color: #ffd23f;
+}
+@keyframes popup {
+  0% {
+    opacity: 0;
+    margin-top: 0;
+    scale: 0.6;
+  }
+  15% {
+    opacity: 1;
+    scale: 1.15;
+  }
+  100% {
+    opacity: 0;
+    margin-top: -46px;
+    scale: 1;
+  }
+}
+
+/* Level-up banner */
+#levelup {
+  position: absolute;
+  top: 18%;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  font-weight: 900;
+  text-shadow: 0 3px 0 #000;
+  animation: levelup 2.8s ease-out forwards;
+}
+#levelup small {
+  display: block;
+  font-size: 16px;
+  color: #ffd23f;
+  letter-spacing: 4px;
+}
+#levelup b {
+  display: block;
+  font-size: 64px;
+  line-height: 1;
+  color: #fff;
+  -webkit-text-stroke: 2px #ff9f1c;
+}
+#levelup span {
+  display: block;
+  font-size: 14px;
+  color: #7dff7a;
+}
+@keyframes levelup {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) scale(2.2);
+  }
+  12% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Progression panel: level, contracts, streak, fence order */
+#progress-panel {
+  position: absolute;
+  left: calc(14px + var(--safe-l));
+  top: calc(10px + var(--safe-t));
+  bottom: calc(10px + var(--safe-b));
+  width: min(360px, 52vw);
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  background: rgba(27, 20, 48, 0.94);
+  border: 2px solid #ffd23f;
+  pointer-events: auto;
+}
+#progress-panel .pp-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px 4px 14px;
+  font-weight: 900;
+  font-size: 16px;
+}
+#progress-panel .pp-close {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-weight: 900;
+}
+#progress-panel .pp-body {
+  overflow-y: auto;
+  padding: 0 12px 12px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.pp-sec {
+  margin: 10px 0 4px;
+  font-size: 11px;
+  color: #ffd23f;
+  letter-spacing: 1px;
+}
+.pp-row {
+  margin: 4px 0;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.07);
+}
+.pp-row.done {
+  opacity: 0.55;
+}
+.pp-row small {
+  float: right;
+  color: #7dff7a;
+}
+.pp-bar {
+  height: 5px;
+  margin-top: 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+}
+.pp-bar i {
+  display: block;
+  height: 100%;
+  background: #ffd23f;
+}

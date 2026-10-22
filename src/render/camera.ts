@@ -19,6 +19,9 @@ export class ThirdPersonCamera {
   private target = new THREE.Vector3();
   private sinceDrag = 10;
   private initialized = false;
+  /** Screen shake strength (decays). */
+  private trauma = 0;
+  private shakeT = 0;
 
   constructor(aspect: number, private collider: CameraCollider) {
     this.camera = new THREE.PerspectiveCamera(62, aspect, 0.3, 1200);
@@ -29,6 +32,11 @@ export class ThirdPersonCamera {
     this.yaw = yaw;
     this.pitch = 0.28;
     this.initialized = false;
+  }
+
+  /** Adds screen shake (0..1). */
+  shake(amount: number) {
+    this.trauma = Math.min(1, this.trauma + amount);
   }
 
   rotate(dYaw: number, dPitch: number) {
@@ -75,5 +83,14 @@ export class ThirdPersonCamera {
     const c = this.camera;
     c.position.copy(this.target).addScaledVector(_dir, this.dist);
     c.lookAt(this.target.x, this.target.y + 0.15, this.target.z);
+    if (this.trauma > 0.001) {
+      // smooth noise, strength = trauma² (small hits barely shake, big ones do)
+      this.shakeT += dt * 32;
+      const k = this.trauma * this.trauma;
+      c.position.x += Math.sin(this.shakeT * 1.3) * 0.35 * k;
+      c.position.y += Math.sin(this.shakeT * 1.7 + 1) * 0.25 * k;
+      c.rotation.z += Math.sin(this.shakeT * 1.1 + 2) * 0.05 * k;
+      this.trauma = Math.max(0, this.trauma - dt * 1.8);
+    }
   }
 }
