@@ -195,6 +195,16 @@ export class Game {
             this.onSave?.();
           }
           break;
+        case 'crate':
+          if (e.playerId === this.localId) {
+            this.hud.toast(`📦 Colis surprise : ${e.text}`, e.rare ? 3.5 : 2);
+            if (e.rare) {
+              this.sound.fanfare();
+              this.vibrate([30, 40, 60]);
+            } else this.sound.cash();
+            this.onSave?.();
+          }
+          break;
         case 'streak':
           if (e.playerId === this.localId) this.sound.cash();
           break;

@@ -49,6 +49,8 @@ export class Effects {
   private tracerLife = new Float32Array(MAX_TRACERS);
   private tracerNext = 0;
   private money: THREE.InstancedMesh;
+  private crates: THREE.InstancedMesh;
+  private crateGlow: THREE.InstancedMesh;
   private time = 0;
 
   constructor() {
@@ -71,6 +73,18 @@ export class Effects {
     this.money = new THREE.InstancedMesh(bill, new THREE.MeshBasicMaterial({ color: 0x5ee86a }), 64);
     this.money.frustumCulled = false;
     this.money.count = 0;
+    // surprise crates: glowing golden boxes
+    this.crates = new THREE.InstancedMesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), new THREE.MeshBasicMaterial({ color: 0xffc93c }), 16);
+    this.crates.frustumCulled = false;
+    this.crates.count = 0;
+    this.crateGlow = new THREE.InstancedMesh(
+      new THREE.CylinderGeometry(0.9, 0.9, 6, 12, 1, true).translate(0, 3, 0),
+      new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }),
+      16,
+    );
+    this.crateGlow.frustumCulled = false;
+    this.crateGlow.count = 0;
+    this.root.add(this.crates, this.crateGlow);
 
     this.root.add(this.puffMesh, tracers, this.money);
   }
@@ -182,13 +196,27 @@ export class Effects {
     if (dirty) pos.needsUpdate = true;
 
     let m = 0;
+    let c = 0;
     for (const pk of pickups.values()) {
+      if (pk.kind === 'crate') {
+        if (c >= 16) continue;
+        _q.setFromAxisAngle(_p.set(0, 1, 0), this.time * 1.5 + pk.id);
+        _m.compose(_p.set(pk.x, pk.y + 0.6 + Math.sin(this.time * 3 + pk.id) * 0.15, pk.z), _q, _s.setScalar(1));
+        this.crates.setMatrixAt(c, _m);
+        _m.compose(_p.set(pk.x, pk.y, pk.z), _q.identity(), _s.setScalar(1));
+        this.crateGlow.setMatrixAt(c++, _m);
+        continue;
+      }
       if (m >= 64) break;
       _q.setFromAxisAngle(_p.set(0, 1, 0), this.time * 3 + pk.id);
       _m.compose(_p.set(pk.x, pk.y + 0.5 + Math.sin(this.time * 4 + pk.id) * 0.12, pk.z), _q, _s.setScalar(1));
       this.money.setMatrixAt(m++, _m);
     }
     this.money.count = m;
+    this.crates.count = c;
+    this.crateGlow.count = c;
+    this.crates.instanceMatrix.needsUpdate = true;
+    this.crateGlow.instanceMatrix.needsUpdate = true;
     this.money.instanceMatrix.needsUpdate = true;
   }
 }

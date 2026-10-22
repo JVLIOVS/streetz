@@ -183,6 +183,7 @@ export function packPed(s: PedState): number[] {
     s.action === 'kick' ? 2 : s.action === 'punch' ? 1 : 0,
     s.actionSeq,
     TEMPERS.indexOf(s.temper),
+    s.vip ? 1 : 0,
   ];
 }
 
@@ -196,6 +197,7 @@ export function unpackPed(a: number[], s: PedState) {
   s.action = a[11] === 2 ? 'kick' : a[11] === 1 ? 'punch' : null;
   s.actionSeq = a[12];
   s.temper = TEMPERS[a[13]] ?? 'coward';
+  s.vip = a[14] === 1;
 }
 
 export function packVehicle(s: VehicleState, driverIndex: (d: string) => number): number[] {
@@ -225,7 +227,7 @@ export function packVehicle(s: VehicleState, driverIndex: (d: string) => number)
 export const vehicleTypeOf = (a: number[]) => VEHICLE_TYPES[a[1]] ?? 'compact';
 
 export function packPickup(p: PickupState): number[] {
-  return [p.id, q(p.x), q(p.y), q(p.z), p.amount];
+  return [p.id, q(p.x), q(p.y), q(p.z), p.amount, p.kind === 'crate' ? 1 : 0];
 }
 
 export function packProp(p: BrokenProp): number[] {

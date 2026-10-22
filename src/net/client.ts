@@ -201,7 +201,7 @@ export class NetClient implements NetSession {
 
     // --- money on the ground, broken props
     sim.pickups.clear();
-    for (const [id, x, y, z, amount] of m.K) sim.pickups.set(id, { id, x, y, z, kind: 'money', amount });
+    for (const [id, x, y, z, amount, kind] of m.K) sim.pickups.set(id, { id, x, y, z, kind: kind === 1 ? 'crate' : 'money', amount });
     for (const [id, x, y, z, tilt, ax, az, spin, spray] of m.X) sim.applyBrokenProp({ id, x, y, z, tilt, ax, az, spin, spray });
 
     // --- events (effects, sounds, toasts) from the host

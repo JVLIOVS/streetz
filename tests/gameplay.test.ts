@@ -785,3 +785,24 @@ describe('daily contracts, streak and fence', () => {
     expect(s.money).toBeGreaterThan(money + 200);
   });
 });
+
+describe('surprises', () => {
+  it('a surprise crate gives a reward when walked over', async () => {
+    const w = await world();
+    run(w, 2);
+    const s = P(w);
+    const before = { money: s.money, armor: s.armor, xp: s.rep };
+    w.pickups.set(9999, { id: 9999, x: s.x, y: s.y, z: s.z, kind: 'crate', amount: 0 });
+    run(w, 2);
+    expect(w.pickups.has(9999)).toBe(false);
+    expect(s.rep).toBeGreaterThan(before.xp);
+    expect(w.drainEvents().some((e) => e.type === 'crate')).toBe(true);
+  });
+
+  it('crates appear around players over time', async () => {
+    const w = await world();
+    w.density = { peds: 0, traffic: 0, parkedRadius: 0 };
+    run(w, 60 * 20);
+    expect([...w.pickups.values()].filter((p) => p.kind === 'crate').length).toBeGreaterThan(0);
+  });
+});

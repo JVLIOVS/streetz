@@ -36,6 +36,8 @@ export interface PedState {
   actionSeq: number;
   role: PedRole;
   weapon: PedWeapon;
+  /** Rich passer-by carrying a lot of cash (marked on the map). */
+  vip?: boolean;
 }
 
 const WALK = 1.45;

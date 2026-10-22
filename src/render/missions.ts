@@ -18,6 +18,7 @@ export class MissionMarkers {
   private lockedMat = beamMat(0x9aa0b0, 0.22);
   private time = 0;
   private fence: THREE.Group;
+  private vips: THREE.Mesh[] = [];
 
   constructor(private sim: SimWorld) {
     const beamGeo = new THREE.CylinderGeometry(1.1, 1.1, 3.2, 20, 1, true);
@@ -58,6 +59,15 @@ export class MissionMarkers {
     const arrowGeo = new THREE.ConeGeometry(0.35, 0.6, 4);
     arrowGeo.rotateX(Math.PI);
     const arrowMat = new THREE.MeshBasicMaterial({ color: 0xff3b4f });
+    const vipGeo = new THREE.OctahedronGeometry(0.22);
+    vipGeo.scale(1, 1.4, 1);
+    const vipMat = new THREE.MeshBasicMaterial({ color: 0xffc93c });
+    for (let i = 0; i < 4; i++) {
+      const d = new THREE.Mesh(vipGeo, vipMat);
+      d.visible = false;
+      this.vips.push(d);
+      this.root.add(d);
+    }
     for (let i = 0; i < MAX_TARGETS; i++) {
       const a = new THREE.Mesh(arrowGeo, arrowMat);
       a.visible = false;
@@ -98,6 +108,20 @@ export class MissionMarkers {
       a.rotation.y = this.time * 3;
     }
     for (let i = n; i < MAX_TARGETS; i++) this.arrows[i].visible = false;
+    // rich passers-by: a spinning gold diamond above their head
+    let k = 0;
+    if (!indoors && me) {
+      for (const ped of this.sim.peds.values()) {
+        if (k >= this.vips.length) break;
+        const s = ped.state;
+        if (!s.vip || !ped.alive || Math.abs(s.x - me.x) > 60 || Math.abs(s.z - me.z) > 60) continue;
+        const d = this.vips[k++];
+        d.visible = true;
+        d.position.set(s.x, s.y + 2.4 + bob, s.z);
+        d.rotation.y = this.time * 3;
+      }
+    }
+    for (let i = k; i < this.vips.length; i++) this.vips[i].visible = false;
   }
 }
 

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GOLD_PAINT } from '../data/contracts';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { VEHICLES, type VehicleType } from '../data/vehicles';
 import type { Vehicle } from '../sim/vehicle';
@@ -101,6 +102,7 @@ export class VehicleView {
     readonly id: number,
     readonly type: VehicleType,
     private parts: ModelParts,
+    gold = false,
   ) {
     this.root.add(this.tilt);
     this.merged = new THREE.Mesh(parts.merged, parts.material);
@@ -115,6 +117,13 @@ export class VehicleView {
       blue.position.set(0.3, y, 0.1);
       this.tilt.add(red, blue);
       this.lights = { red, blue };
+    }
+    if (gold) {
+      // rare golden car: worth a fortune at the fence
+      const m = (parts.material as THREE.MeshToonMaterial).clone();
+      m.color.setHex(0xffd23f);
+      m.emissive.setHex(0x3a2800);
+      this.merged.material = m;
     }
     if (type === 'army') {
       // darker military paint
@@ -202,7 +211,7 @@ export class VehicleRenderer {
     for (const v of vehicles.values()) {
       let view = this.views.get(v.state.id);
       if (!view) {
-        view = new VehicleView(v.state.id, v.state.type, modelFor(v.state.type, v.state.paint, this.assets));
+        view = new VehicleView(v.state.id, v.state.type, modelFor(v.state.type, v.state.paint, this.assets), v.state.paint === GOLD_PAINT);
         this.views.set(v.state.id, view);
         this.root.add(view.root);
       }

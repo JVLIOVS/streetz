@@ -18,6 +18,7 @@ import { ProgressSystem } from './progress';
 import { ContractSystem } from './contracts';
 import { REPAINT_PRICE } from '../data/police';
 import { levelOf, requiredLevel } from '../data/progression';
+import { GOLD_PAINT } from '../data/contracts';
 import { GROUP, groups, initPhysics } from './physics';
 import { angleDiff, Player, PLAYER_TUNING, type ContextAction, type PlayerState } from './player';
 import { Vehicle, type VehicleNet, type VehicleState } from './vehicle';
@@ -27,7 +28,7 @@ export interface PickupState {
   x: number;
   y: number;
   z: number;
-  kind: 'money';
+  kind: 'money' | 'crate';
   amount: number;
 }
 
@@ -62,6 +63,7 @@ export type SimEvent =
   | { type: 'horn'; vehicle: number }
   | { type: 'wanted'; playerId: string; level: number }
   | { type: 'busted'; playerId: string }
+  | { type: 'crate'; playerId: string; text: string; rare: boolean }
   | { type: 'levelup'; playerId: string; level: number; unlocks: string[]; cash: number }
   | { type: 'chaos'; playerId: string; label: string; points: number }
   | { type: 'chaosEnd'; playerId: string; score: number; cash: number; mult: number }
@@ -1649,11 +1651,43 @@ export class SimWorld {
       const r = s.vehicle >= 0 ? 3 : 1.6;
       for (const pk of this.pickups.values()) {
         if (Math.hypot(pk.x - s.x, pk.z - s.z) < r && Math.abs(pk.y - s.y) < 2.5) {
+          this.pickups.delete(pk.id);
+          if (pk.kind === 'crate') {
+            this.openCrate(p);
+            continue;
+          }
           s.money += pk.amount;
           this.events.push({ type: 'money', playerId: s.id, amount: pk.amount });
-          this.pickups.delete(pk.id);
         }
       }
+    }
+  }
+
+  /** Surprise crate: mostly cash, sometimes ammo or armor, rarely a better weapon. */
+  private openCrate(p: Player) {
+    const s = p.state;
+    this.contracts.track(p, 'crate', 1);
+    this.progress.addXp(p, 15);
+    const roll = this.rng.next();
+    const guns = s.weapons.filter((w) => !WEAPONS[w].melee);
+    const next = WEAPON_ORDER.find((w) => !s.weapons.includes(w) && WEAPONS[w].price > 0);
+    if (roll < 0.05 && next) {
+      s.weapons.push(next);
+      s.ammo[next] += WEAPONS[next].ammoPack;
+      this.events.push({ type: 'crate', playerId: s.id, text: `JACKPOT : ${WEAPONS[next].name} !`, rare: true });
+    } else if (roll < 0.15 && s.armor < 100) {
+      s.armor = Math.min(100, s.armor + 50);
+      this.events.push({ type: 'crate', playerId: s.id, text: 'Gilet pare-balles +50', rare: false });
+    } else if (roll < 0.4 && guns.length) {
+      const w = guns[this.rng.int(0, guns.length - 1)];
+      s.ammo[w] += WEAPONS[w].ammoPack;
+      this.events.push({ type: 'crate', playerId: s.id, text: `Munitions ${WEAPONS[w].name} +${WEAPONS[w].ammoPack}`, rare: false });
+    } else {
+      // cash, with a small chance of a big pile
+      const amount = this.rng.chance(0.1) ? this.rng.int(1000, 2500) : this.rng.int(100, 450);
+      s.money += amount;
+      this.events.push({ type: 'money', playerId: s.id, amount });
+      this.events.push({ type: 'crate', playerId: s.id, text: `+${amount.toLocaleString('fr-FR')} €`, rare: amount >= 1000 });
     }
   }
 
@@ -1667,6 +1701,20 @@ export class SimWorld {
     }
     for (const pk of [...this.pickups.values()]) if (!near(pk.x, pk.z, 200)) this.pickups.delete(pk.id);
     if (centers.length === 0) return;
+    // --- surprise crates: about 2 around each player, 40–120 m away on sidewalks
+    for (const c of centers) {
+      let around = 0;
+      for (const pk of this.pickups.values()) if (pk.kind === 'crate' && Math.hypot(pk.x - c.x, pk.z - c.z) < 150) around++;
+      if (around >= 2 || !this.rng.chance(0.12)) continue;
+      const ring = this.walk.filter((q) => {
+        const d = Math.hypot(q.x - c.x, q.z - c.z);
+        return d > 40 && d < 120;
+      });
+      if (!ring.length) continue;
+      const n = ring[this.rng.int(0, ring.length - 1)];
+      const id = this.nextId++;
+      this.pickups.set(id, { id, x: n.x, y: this.groundY(n.x, n.z), z: n.z, kind: 'crate', amount: 0 });
+    }
     let ambient = 0;
     for (const ped of this.peds.values()) if (ped.ambient && ped.state.role === 'civ') ambient++;
     const ring = (x: number, z: number, r0: number, r1: number) =>
@@ -1680,7 +1728,12 @@ export class SimWorld {
       const to = n.links[this.rng.int(0, n.links.length - 1)];
       const t = this.rng.next();
       const m = this.walk[to];
-      this.spawnPed(n.x + (m.x - n.x) * t, n.z + (m.z - n.z) * t, { from: n.id, to });
+      const ped = this.spawnPed(n.x + (m.x - n.x) * t, n.z + (m.z - n.z) * t, { from: n.id, to });
+      if (this.rng.chance(0.04)) {
+        // VIP: dressed rich, loaded with cash
+        ped.state.vip = true;
+        ped.state.money = this.rng.int(600, 1500);
+      }
       ambient++;
     }
     // --- traffic
@@ -1706,6 +1759,10 @@ export class SimWorld {
       if ([...this.vehicles.values()].some((v) => Math.hypot(v.state.x - x, v.state.z - z) < 12)) continue;
       const type = this.pickType();
       const v = this.spawnVehicle(type, x, 0.3, z, Math.atan2(-lane.dx, -lane.dz), 'npc', true);
+      if (type !== 'moto' && this.rng.chance(0.025)) {
+        v.state.paint = GOLD_PAINT;
+        for (const pl of this.players.values()) if (Math.hypot(pl.state.x - x, pl.state.z - z) < 170) this.toast(pl, '🌟 Une voiture DORÉE roule dans le coin : le receleur la paie 5 000 € !');
+      }
       v.lane = lane.id;
       v.state.vx = lane.dx * lane.speed * 0.7;
       v.state.vz = lane.dz * lane.speed * 0.7;

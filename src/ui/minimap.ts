@@ -2,6 +2,7 @@ import type { MapData, PoiKind } from '../maps/types';
 import type { PlayerState } from '../sim/player';
 import type { SimWorld } from '../sim/world';
 import { missionById } from '../data/missions';
+import { GOLD_PAINT } from '../data/contracts';
 
 const POI_STYLE: Partial<Record<PoiKind, { color: string; label: string }>> = {
   police: { color: '#3f7bff', label: '★' },
@@ -210,12 +211,21 @@ export class Minimap {
         g.stroke();
       }
       if (sim) {
-        // money on the ground
-        g.fillStyle = '#5ee86a';
+        // money on the ground, surprise crates
         for (const pk of sim.pickups.values()) {
           const [mx, mz] = at(pk.x, pk.z);
-          g.fillRect(mx - 5 / k, mz - 5 / k, 10 / k, 10 / k);
+          const r = (pk.kind === 'crate' ? 7 : 5) / k;
+          g.fillStyle = pk.kind === 'crate' ? '#ffc93c' : '#5ee86a';
+          g.fillRect(mx - r, mz - r, r * 2, r * 2);
+          if (pk.kind === 'crate') {
+            g.strokeStyle = '#1b1430';
+            g.lineWidth = 1.5 / k;
+            g.strokeRect(mx - r, mz - r, r * 2, r * 2);
+          }
         }
+        // golden cars and rich passers-by
+        for (const v of sim.vehicles.values()) if (v.state.paint === GOLD_PAINT && !v.state.wrecked) dot(v.state.x, v.state.z, blink ? 6 : 4.5, '#ffc93c');
+        for (const ped of sim.peds.values()) if (ped.state.vip && ped.alive) dot(ped.state.x, ped.state.z, 4, '#ffc93c');
         const police = blink ? '#ff3040' : '#3060ff';
         for (const ped of sim.peds.values()) if (ped.state.role !== 'civ' && ped.alive) dot(ped.state.x, ped.state.z, 3.5, police);
         for (const v of sim.vehicles.values()) if (v.state.siren) dot(v.state.x, v.state.z, 5, police);
