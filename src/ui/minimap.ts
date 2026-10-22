@@ -1,4 +1,5 @@
 import type { MapData, PoiKind } from '../maps/types';
+import type { PlayerState } from '../sim/player';
 import type { SimWorld } from '../sim/world';
 
 const POI_STYLE: Partial<Record<PoiKind, { color: string; label: string }>> = {
@@ -93,7 +94,7 @@ export class Minimap {
   }
 
   /** @param yaw camera yaw: the map rotates so that "up" is where the camera looks. */
-  update(px: number, pz: number, facing: number, yaw: number, sim?: SimWorld) {
+  update(px: number, pz: number, facing: number, yaw: number, sim?: SimWorld, me?: PlayerState) {
     const g = this.ctx;
     const S = this.size;
     const view = 220; // meters across
@@ -117,13 +118,41 @@ export class Minimap {
       g.fill();
     } else {
       g.drawImage(this.base, -x, -z);
+      const at = (wx: number, wz: number): [number, number] => {
+        const [mx, mz] = this.toPx(wx, wz);
+        return [mx - x, mz - z];
+      };
+      const dot = (wx: number, wz: number, r: number, color: string) => {
+        const [mx, mz] = at(wx, wz);
+        g.fillStyle = color;
+        g.beginPath();
+        g.arc(mx, mz, r / k, 0, Math.PI * 2);
+        g.fill();
+      };
+      const blink = Math.floor(performance.now() / 350) % 2 === 0;
+      if (me && me.wanted > 0 && !me.wantedSeen) {
+        // search zone: get out of it and hide to lose the police
+        const [cx, cz] = at(me.searchX, me.searchZ);
+        g.fillStyle = blink ? 'rgba(255,40,60,0.28)' : 'rgba(60,90,255,0.22)';
+        g.strokeStyle = blink ? '#ff3b4f' : '#4d6bff';
+        g.lineWidth = 3 / k;
+        g.beginPath();
+        g.arc(cx, cz, me.searchR * this.scale, 0, Math.PI * 2);
+        g.fill();
+        g.stroke();
+      }
       if (sim) {
         // money on the ground
         g.fillStyle = '#5ee86a';
         for (const pk of sim.pickups.values()) {
-          const [mx, mz] = this.toPx(pk.x, pk.z);
-          g.fillRect(mx - 6, mz - 6, 12, 12);
+          const [mx, mz] = at(pk.x, pk.z);
+          g.fillRect(mx - 5 / k, mz - 5 / k, 10 / k, 10 / k);
         }
+        const police = blink ? '#ff3040' : '#3060ff';
+        for (const ped of sim.peds.values()) if (ped.state.role !== 'civ' && ped.alive) dot(ped.state.x, ped.state.z, 3.5, police);
+        for (const v of sim.vehicles.values()) if (v.state.siren) dot(v.state.x, v.state.z, 5, police);
+        for (const h of sim.police.helis.values()) if (h.state.down < 0) dot(h.state.x, h.state.z, 6.5, police);
+        for (const p of sim.players.values()) if (me && p.state.id !== me.id && !p.state.interior) dot(p.state.x, p.state.z, 5, '#ffd23f');
       }
       g.restore();
     }

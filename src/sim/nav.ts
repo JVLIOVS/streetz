@@ -117,7 +117,7 @@ export interface WalkNode {
 
 export function buildSidewalkGraph(map: MapData): WalkNode[] {
   const nodes: WalkNode[] = [];
-  const inset = 2.2;
+  const inset = 2.8; // middle of the 4 m sidewalk: clear of trees (2 m) and street lights (0.9 m)
   for (const b of map.blocks) {
     const c = [
       [b.x0 + inset, b.z0 + inset],

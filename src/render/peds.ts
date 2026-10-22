@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import type { Ped } from '../sim/peds';
 import type { Vehicle } from '../sim/vehicle';
-import { HumanView, randomLook, type BaseAnim } from './human';
+import { HumanView, randomLook, roleLook, type BaseAnim } from './human';
 
 /** A limited set of outfits keeps the dressed-geometry cache small. */
 const LOOK_VARIANTS = 40;
 
 interface Entry {
+  weapon: string;
   view: HumanView;
   hitSeq: number;
   actionSeq: number;
@@ -36,7 +37,8 @@ export class PedRenderer {
       let e = this.views.get(s.id);
       if (!e) {
         if (d > viewDist) continue;
-        e = { view: new HumanView(randomLook(s.look % LOOK_VARIANTS)), hitSeq: s.hitSeq, actionSeq: s.actionSeq, far: 0 };
+        const look = s.role === 'civ' ? randomLook(s.look % LOOK_VARIANTS) : roleLook(s.role, s.look % 12);
+        e = { view: new HumanView(look), hitSeq: s.hitSeq, actionSeq: s.actionSeq, far: 0, weapon: 'none' };
         this.views.set(s.id, e);
         this.root.add(e.view.root);
       }
@@ -58,6 +60,14 @@ export class PedRenderer {
               ? 'wave'
               : s.mode === 'flee'
                 ? 'sprint'
+                : s.mode === 'police'
+                  ? s.speed > 3.5
+                    ? 'run'
+                    : s.speed > 0.4
+                      ? 'walk'
+                      : s.weapon === 'pistol' || s.weapon === 'rifle'
+                        ? 'aim'
+                        : 'guard'
                 : s.mode === 'fight' || s.mode === 'stun'
                   ? s.speed > 0.5
                     ? 'run'
@@ -70,6 +80,10 @@ export class PedRenderer {
       if (s.hitSeq !== e.hitSeq) {
         e.hitSeq = s.hitSeq;
         if (s.mode !== 'ko') v.playOverlay('hit');
+      }
+      if (s.weapon !== e.weapon) {
+        e.weapon = s.weapon;
+        v.setWeapon(s.mode === 'ko' ? 'none' : s.weapon);
       }
       if (s.actionSeq !== e.actionSeq) {
         e.actionSeq = s.actionSeq;

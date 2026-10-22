@@ -94,6 +94,8 @@ export class VehicleView {
   private wheels: { obj: THREE.Object3D; front: boolean }[] = [];
   private wrecked = false;
   lastSmoke = 0;
+  /** Roof lights of police / army vehicles. */
+  private lights: { red: THREE.Mesh; blue: THREE.Mesh } | null = null;
 
   constructor(
     readonly id: number,
@@ -105,6 +107,21 @@ export class VehicleView {
     this.merged.castShadow = true;
     this.merged.receiveShadow = true;
     this.tilt.add(this.merged);
+    if (type === 'police' || type === 'army') {
+      const red = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.16, 0.22), new THREE.MeshBasicMaterial({ color: 0xff2030 }));
+      const blue = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.16, 0.22), new THREE.MeshBasicMaterial({ color: 0x2050ff }));
+      const y = VEHICLES[type].height + (type === 'army' ? 0.25 : 0.02);
+      red.position.set(-0.3, y, 0.1);
+      blue.position.set(0.3, y, 0.1);
+      this.tilt.add(red, blue);
+      this.lights = { red, blue };
+    }
+    if (type === 'army') {
+      // darker military paint
+      const m = (parts.material as THREE.MeshToonMaterial).clone();
+      m.color.setHex(0x6a7a55);
+      this.merged.material = m;
+    }
   }
 
   /** Detailed mode: separate wheels (used for the car the player drives). */
@@ -155,6 +172,14 @@ export class VehicleView {
     if (s.wrecked) this.setWrecked();
     for (const w of this.wheels) {
       w.obj.rotation.set(-s.wheel, w.front ? -s.steer : 0, 0, 'YXZ');
+    }
+    if (this.lights) {
+      const on = s.siren && !s.wrecked;
+      const phase = Math.floor(performance.now() / 180) % 2 === 0;
+      this.lights.red.visible = on ? phase : true;
+      this.lights.blue.visible = on ? !phase : true;
+      (this.lights.red.material as THREE.MeshBasicMaterial).color.setHex(on ? 0xff2030 : 0x5a1a1f);
+      (this.lights.blue.material as THREE.MeshBasicMaterial).color.setHex(on ? 0x2a5cff : 0x1a245a);
     }
   }
 }

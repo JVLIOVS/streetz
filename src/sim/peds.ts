@@ -3,7 +3,11 @@ import { DT } from '../core/loop';
 import type { Rng } from '../core/rng';
 import type { WalkNode } from './nav';
 
-export type PedMode = 'walk' | 'idle' | 'flee' | 'cower' | 'ko' | 'shopkeeper' | 'wave' | 'stun' | 'fight';
+export type PedMode = 'walk' | 'idle' | 'flee' | 'cower' | 'ko' | 'shopkeeper' | 'wave' | 'stun' | 'fight' | 'police';
+
+/** Civilians, or law enforcement (driven by the police system). */
+export type PedRole = 'civ' | 'cop' | 'swat' | 'soldier';
+export type PedWeapon = 'none' | 'baton' | 'pistol' | 'rifle';
 
 /** How a pedestrian reacts when attacked. */
 export type Temper = 'coward' | 'scared' | 'fighter';
@@ -28,8 +32,10 @@ export interface PedState {
   /** Player this ped is fighting (fighters only). */
   target: string | null;
   /** Last attack move and a counter so the renderer plays it once. */
-  action: 'punch' | 'kick' | null;
+  action: 'punch' | 'kick' | 'shoot' | null;
   actionSeq: number;
+  role: PedRole;
+  weapon: PedWeapon;
 }
 
 const WALK = 1.45;
@@ -53,6 +59,8 @@ export class Ped {
   pendingHit = -1;
   /** What to do once the hit stun wears off. */
   afterStun: PedMode = 'flee';
+  /** Police AI scratch (target player, shot timer). */
+  police: { target: string | null; cooldown: number; leaving: boolean } | null = null;
   /** Multiplayer replica: last position from the host. */
   net: { x: number; y: number; z: number; facing: number } | null = null;
 
@@ -119,6 +127,9 @@ export class Ped {
       case 'ko':
         s.speed = 0;
         this.timer += DT;
+        break;
+      case 'police':
+        // moved by the police system (with collisions)
         break;
       case 'shopkeeper':
       case 'wave':

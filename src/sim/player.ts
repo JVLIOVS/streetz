@@ -7,7 +7,7 @@ export type PlayerAnim = 'idle' | 'walk' | 'run' | 'sprint' | 'jump' | 'fall' | 
 export type PlayerAction = 'punch' | 'kick' | 'shoot' | 'hit' | 'interact';
 
 export interface ContextAction {
-  kind: 'enter_vehicle' | 'steal_vehicle' | 'exit_vehicle' | 'enter_building' | 'exit_building' | 'rob' | 'talk' | 'travel';
+  kind: 'enter_vehicle' | 'steal_vehicle' | 'exit_vehicle' | 'enter_building' | 'exit_building' | 'rob' | 'talk' | 'travel' | 'repaint';
   label: string;
   target: number | string;
 }
@@ -48,6 +48,14 @@ export interface PlayerState {
   /** Wanted level (stars) and seconds before the next star is lost. */
   wanted: number;
   wantedCooldown: number;
+  /** Is the police currently seeing you? (stars blink when not) */
+  wantedSeen: boolean;
+  /** Search zone: last place the police saw you, and its radius. */
+  searchX: number;
+  searchZ: number;
+  searchR: number;
+  /** Arrest progress 0..1 while an officer holds you. */
+  arrest: number;
   /** Incremented by the authority on every teleport (doors, respawn…): clients apply it once. */
   teleportSeq: number;
   /** Multiplayer: nickname and outfit seed (-1 = default look). */
@@ -82,6 +90,8 @@ export class Player {
   meleeLock: unknown = null;
   lungeTicks = 0;
   respawnTimer = 0;
+  /** Seconds the police has not seen this player. */
+  unseen = 0;
   /** Multiplayer: this player's position comes from network reports, not from local physics. */
   remote = false;
   /** Last reported position (remote players). */
@@ -124,6 +134,11 @@ export class Player {
       lastHitTick: -1,
       wanted: 0,
       wantedCooldown: 0,
+      wantedSeen: false,
+      searchX: 0,
+      searchZ: 0,
+      searchR: 0,
+      arrest: 0,
       teleportSeq: 0,
       name: id,
       look: -1,

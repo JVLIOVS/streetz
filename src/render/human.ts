@@ -77,6 +77,15 @@ export function randomLook(seed: number): HumanLook {
   };
 }
 
+/** Uniforms for law enforcement (skin and build still vary with the seed). */
+export function roleLook(role: 'cop' | 'swat' | 'soldier', seed: number): HumanLook {
+  const base = randomLook(seed);
+  const common = { beard: false, glasses: role === 'swat', sleeves: 'long' as const, shoes: 0x111111 };
+  if (role === 'cop') return { ...base, ...common, top: 0x1f3a7a, topAccent: 0xf2f2f2, bottom: 0x1a2440, hat: 'cap', hatColor: 0x16244a, hairStyle: 'short' };
+  if (role === 'swat') return { ...base, ...common, top: 0x1c1c22, topAccent: 0xffd23f, bottom: 0x1c1c22, hat: 'beanie', hatColor: 0x111111, hairStyle: 'buzz' };
+  return { ...base, ...common, top: 0x4b5d32, topAccent: 0x3a4a26, bottom: 0x3f4f2a, hat: 'beanie', hatColor: 0x3b4a2a, hairStyle: 'buzz' };
+}
+
 // --------------------------------------------------------------------------- template
 
 interface Template {
@@ -447,7 +456,7 @@ export class HumanView {
     this.mesh.castShadow = on;
   }
 
-  setWeapon(kind: 'none' | 'pistol' | 'rifle') {
+  setWeapon(kind: WeaponModel) {
     if (this.weapon) this.weapon.removeFromParent();
     this.weapon = null;
     if (kind === 'none' || !this.handR) return;
@@ -519,17 +528,46 @@ export class HumanView {
   }
 }
 
-function weaponModel(kind: 'pistol' | 'rifle'): THREE.Object3D {
+export type WeaponModel = 'none' | 'pistol' | 'rifle' | 'baton' | 'smg' | 'shotgun' | 'knife' | 'bat';
+
+function weaponModel(kind: Exclude<WeaponModel, 'none'>): THREE.Object3D {
   const g = new THREE.Group();
   const dark = new THREE.MeshToonMaterial({ color: 0x24242c, gradientMap: toonGradient() });
   const accent = new THREE.MeshToonMaterial({ color: 0x8a6d4f, gradientMap: toonGradient() });
-  if (kind === 'pistol') {
+  if (kind === 'baton' || kind === 'bat' || kind === 'knife') {
+    // held along the forearm, pointing forward
+    const len = kind === 'bat' ? 0.85 : kind === 'baton' ? 0.6 : 0.3;
+    const mat = kind === 'bat' ? accent : kind === 'knife' ? new THREE.MeshToonMaterial({ color: 0xd8dde3, gradientMap: toonGradient() }) : dark;
+    const stick = new THREE.Mesh(new THREE.CylinderGeometry(kind === 'bat' ? 0.045 : 0.025, 0.03, len, 8), mat);
+    stick.rotation.x = Math.PI / 2;
+    stick.position.set(0, 0, len / 2 - 0.05);
+    if (kind === 'knife') {
+      stick.scale.set(1.6, 1, 0.4);
+      const handle = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.05, 0.12), dark);
+      g.add(handle);
+    }
+    g.add(stick);
+  } else if (kind === 'pistol') {
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.08, 0.26), dark);
     body.position.set(0, 0.02, 0.1);
     const grip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.13, 0.07), accent);
     grip.position.set(0, -0.05, 0.0);
     grip.rotation.x = 0.25;
     g.add(body, grip);
+  } else if (kind === 'smg') {
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.1, 0.42), dark);
+    body.position.set(0, 0.03, 0.15);
+    const mag = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.2, 0.05), dark);
+    mag.position.set(0, -0.1, 0.12);
+    g.add(body, mag);
+  } else if (kind === 'shotgun') {
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.09, 0.8), dark);
+    body.position.set(0, 0.03, 0.28);
+    const pump = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.07, 0.2), accent);
+    pump.position.set(0, -0.03, 0.42);
+    const stock = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.13, 0.22), accent);
+    stock.position.set(0, -0.02, -0.15);
+    g.add(body, pump, stock);
   } else {
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.1, 0.7), dark);
     body.position.set(0, 0.03, 0.25);

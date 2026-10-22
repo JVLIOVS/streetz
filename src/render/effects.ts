@@ -112,6 +112,11 @@ export class Effects {
     }
   }
 
+  /** Fire and black smoke on a wreck. */
+  burning(x: number, y: number, z: number, dt: number) {
+    if (Math.random() < dt * 14) this.spawn(x + rnd(1), y + 0.5, z + rnd(1), rnd(0.5), 2.2, rnd(0.5), 0.6, 2, 1.8, Math.random() < 0.5 ? C.fire : C.dark);
+  }
+
   /** Water gushing from a broken hydrant. */
   waterJet(x: number, z: number, left: number, dt: number) {
     const rate = 40 * Math.min(1, left / 5);

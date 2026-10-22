@@ -337,3 +337,94 @@ describe('destruction', () => {
     expect(w.snapshot().props.map((p) => p.id)).toContain(0);
   });
 });
+
+describe('police', () => {
+  async function wanted(level: number) {
+    const w = await world();
+    run(w, 10);
+    const p = w.players.get('p1')!;
+    p.state.wanted = level;
+    w.police.reported(p, p.state.x, p.state.z);
+    return { w, p };
+  }
+  const units = (w: SimWorld) => [...w.peds.values()].filter((x) => x.state.role !== 'civ');
+
+  it('one star: officers come on foot and arrest you if you stand still', async () => {
+    const { w } = await wanted(1);
+    run(w, 60 * 2);
+    expect(units(w).length).toBeGreaterThanOrEqual(1);
+    expect(units(w)[0].state.weapon).toBe('baton');
+    const money = P(w).money;
+    let busted = false;
+    for (let i = 0; i < 60 * 40 && !busted; i++) {
+      w.step([]);
+      busted = w.events.some((e) => e.type === 'busted');
+      w.events = [];
+    }
+    expect(busted).toBe(true);
+    expect(P(w).wanted).toBe(0);
+    expect(P(w).money).toBeLessThan(money);
+  });
+
+  it('two stars: armed officers and patrol cars; they shoot', async () => {
+    const { w } = await wanted(2);
+    let cars = false;
+    let pistols = false;
+    let hurt = false;
+    for (let i = 0; i < 60 * 15; i++) {
+      w.step([]);
+      cars ||= [...w.vehicles.values()].some((v) => v.police && v.state.siren);
+      pistols ||= units(w).some((u) => u.state.weapon === 'pistol');
+      hurt ||= P(w).health < 100;
+    }
+    expect(cars).toBe(true);
+    expect(pistols).toBe(true);
+    expect(hurt).toBe(true);
+  });
+
+  it('three stars bring a helicopter, five stars the army', async () => {
+    const a = await wanted(3);
+    run(a.w, 60 * 2);
+    expect(a.w.police.helis.size).toBeGreaterThanOrEqual(1);
+    const b = await wanted(5);
+    run(b.w, 60 * 4);
+    expect(units(b.w).some((u) => u.state.role === 'soldier') || [...b.w.vehicles.values()].some((v) => v.state.type === 'army')).toBe(true);
+  });
+
+  it('leaving the search zone and hiding loses the police', async () => {
+    const { w, p } = await wanted(2);
+    run(w, 30);
+    // teleport far away from everybody (outside the search zone)
+    for (const u of units(w)) w.removePed(u.state.id);
+    for (const v of [...w.vehicles.values()]) if (v.police) w.removeVehicle(v.state.id);
+    w.police.helis.clear();
+    p.teleport(300, 0.5, -300);
+    let lost = false;
+    for (let i = 0; i < 60 * 12 && !lost; i++) {
+      // keep removing newly dispatched units so nobody sees us
+      for (const u of units(w)) w.removePed(u.state.id);
+      for (const v of [...w.vehicles.values()]) if (v.police) w.removeVehicle(v.state.id);
+      w.step([]);
+      lost = P(w).wanted === 0;
+    }
+    expect(lost).toBe(true);
+  });
+
+  it('a repaint at the garage clears the stars', async () => {
+    const g = map.pois.find((q) => q.kind === 'garage')!;
+    const w = await world({ x: g.x, y: 0.5, z: g.z - 4, yaw: 0 });
+    run(w, 5);
+    const v = w.spawnVehicle('compact', g.x + 3, 0.3, g.z - 4, 0, 'none', false);
+    w.players.get('p1')!.teleport(v.state.x + 2, 0.4, v.state.z);
+    run(w, 3);
+    run(w, 1, (t) => [act(t, 'use')]);
+    expect(P(w).vehicle).toBe(v.state.id);
+    P(w).wanted = 2;
+    run(w, 2);
+    expect(P(w).context?.kind).toBe('repaint');
+    const money = P(w).money;
+    run(w, 1, (t) => [act(t, 'use')]);
+    expect(P(w).wanted).toBe(0);
+    expect(P(w).money).toBe(money - 300);
+  });
+});

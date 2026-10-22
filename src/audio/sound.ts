@@ -8,6 +8,7 @@ export class Sound {
   private noise: AudioBuffer | null = null;
   private engine: { osc: OscillatorNode; osc2: OscillatorNode; gain: GainNode; filter: BiquadFilterNode } | null = null;
   enabled = true;
+  private siren: { osc: OscillatorNode; lfo: OscillatorNode; gain: GainNode } | null = null;
 
   start() {
     if (this.ctx) {
@@ -120,6 +121,31 @@ export class Sound {
 
   alert() {
     this.tone('square', 660, 880, 0.25, 0.12);
+  }
+
+  /** Police siren (French two-tone), volume 0..1. */
+  setSiren(volume: number) {
+    const c = this.ctx;
+    if (!c || !this.master) return;
+    if (!this.siren) {
+      const osc = c.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.value = 520;
+      // square LFO jumps between the two tones (pin-pon)
+      const lfo = c.createOscillator();
+      lfo.type = 'square';
+      lfo.frequency.value = 1.3;
+      const depth = c.createGain();
+      depth.gain.value = 70;
+      lfo.connect(depth).connect(osc.frequency);
+      const gain = c.createGain();
+      gain.gain.value = 0;
+      osc.connect(gain).connect(this.master);
+      osc.start();
+      lfo.start();
+      this.siren = { osc, lfo, gain };
+    }
+    this.siren.gain.gain.setTargetAtTime(this.enabled ? volume * 0.09 : 0, c.currentTime, 0.2);
   }
 
   /** Continuous engine sound; speed in m/s, 0 = off. */

@@ -6,6 +6,7 @@ import { ThirdPersonCamera } from './camera';
 import { CityView } from './city';
 import { Effects } from './effects';
 import { DEFAULT_LOOK, HumanView, initHumans, randomLook, type BaseAnim } from './human';
+import { HeliRenderer } from './helis';
 import { InteriorsView } from './interiors';
 import { sharedUniforms, skyMaterial } from './materials';
 import { PedRenderer } from './peds';
@@ -43,6 +44,7 @@ export class GameRenderer {
   private vehicles: VehicleRenderer;
   readonly effects = new Effects();
   private interiors: InteriorsView;
+  private helis = new HeliRenderer();
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -85,7 +87,7 @@ export class GameRenderer {
     this.scene.add(this.city.root);
     this.vehicles = new VehicleRenderer(assets);
     this.interiors = new InteriorsView(map);
-    this.scene.add(this.vehicles.root, this.peds.root, this.effects.root, this.interiors.root);
+    this.scene.add(this.vehicles.root, this.peds.root, this.effects.root, this.interiors.root, this.helis.root);
 
     this.player = { view: new HumanView(DEFAULT_LOOK), seq: 0, weapon: '' };
     this.player.view.setOutline(true);
@@ -230,6 +232,8 @@ export class GameRenderer {
     for (const [id, v] of this.vehicles.views) roots.set(id, v.root);
     this.peds.syncRiders(this.sim.vehicles, roots, dt);
     for (const v of this.sim.vehicles.values()) if (Math.hypot(v.state.x - cx, v.state.z - cz) < 120) this.effects.vehicleSmoke(v, dt);
+    this.helis.sync(this.sim.police.helis, alpha);
+    for (const h of this.sim.police.helis.values()) if (h.state.down >= 50) this.effects.burning(h.state.x, h.state.y, h.state.z, dt);
     this.city.props.sync(this.sim.props, cx, cz);
     for (const d of this.sim.props.broken.values()) if (d.spray > 0) this.effects.waterJet(d.x, d.z, d.spray, dt);
     this.effects.update(dt, this.sim.pickups);

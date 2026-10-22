@@ -11,6 +11,8 @@ import { roomLayout, type RoomLayout } from './interiors';
 import { buildLaneGraph, buildSidewalkGraph, nextLane, type LaneGraph, type WalkNode } from './nav';
 import { Ped, type PedState } from './peds';
 import { PROP_SPECS, PropField, type BrokenProp } from './props';
+import { PoliceSystem, type HeliState } from './police';
+import { REPAINT_PRICE } from '../data/police';
 import { GROUP, groups, initPhysics } from './physics';
 import { angleDiff, Player, PLAYER_TUNING, type ContextAction, type PlayerState } from './player';
 import { Vehicle, type VehicleNet, type VehicleState } from './vehicle';
@@ -41,6 +43,7 @@ export interface WorldSnapshot {
   vehicles: VehicleState[];
   pickups: PickupState[];
   props: BrokenProp[];
+  helis: HeliState[];
 }
 
 export type SimEvent =
@@ -53,6 +56,7 @@ export type SimEvent =
   | { type: 'money'; playerId: string; amount: number }
   | { type: 'horn'; vehicle: number }
   | { type: 'wanted'; playerId: string; level: number }
+  | { type: 'busted'; playerId: string }
   | { type: 'joined'; playerId: string; name: string }
   | { type: 'left'; playerId: string; name: string }
   | { type: 'break'; x: number; y: number; z: number; kind: string; prop: number };
@@ -88,9 +92,10 @@ interface Target {
   ped?: Ped;
   player?: Player;
   vehicle?: Vehicle;
+  heli?: HeliState;
 }
 
-type Crime = 'assault' | 'gunshot' | 'shoot_person' | 'knockout' | 'carjack' | 'robbery_shop' | 'robbery_big' | 'hit_and_run';
+type Crime = 'assault' | 'gunshot' | 'shoot_person' | 'knockout' | 'carjack' | 'robbery_shop' | 'robbery_big' | 'hit_and_run' | 'attack_cop';
 
 const WANTED_DECAY = 25;
 const TALK_LINES = ['Bien ou bien ?', 'Fais gaffe aux keufs ce soir…', 'Paraît que la banque est blindée.', 'T’as pas une clope ?', 'Belle journée hein !', 'On se connaît, non ?'];
@@ -116,8 +121,10 @@ export class SimWorld {
   readonly props: PropField;
   private propColliders: RAPIER_T.Collider[] = [];
   private scratch: number[] = [];
-  private rng: Rng;
+  /** Internal (also used by the police system). */
+  rng: Rng;
   private nextId = 1;
+  readonly police: PoliceSystem;
   private controller: RAPIER_T.KinematicCharacterController;
   private carController: RAPIER_T.KinematicCharacterController;
   private offroadController: RAPIER_T.KinematicCharacterController;
@@ -140,6 +147,7 @@ export class SimWorld {
     this.lanes = buildLaneGraph(map);
     this.walk = buildSidewalkGraph(map);
     this.buildInteriors();
+    this.police = new PoliceSystem(this);
     this.props = new PropField(map.props);
     this.buildProps();
     if (role === 'authority') for (const f of map.featured) this.spawnVehicle(f.type as VehicleType, f.x, 0.3, f.z, f.yaw, 'none', false);
@@ -223,6 +231,8 @@ export class SimWorld {
       mode: opts.mode ?? 'walk',
       health: maxHealth,
       maxHealth,
+      role: 'civ',
+      weapon: 'none',
       look: this.rng.int(0, 1e9),
       money,
       hitSeq: 0,
@@ -282,6 +292,7 @@ export class SimWorld {
       braking: false,
       horn: -1,
       paint: this.rng.int(0, 7),
+      siren: false,
     };
     const v = new Vehicle(state, body, collider);
     v.ambient = ambient;
@@ -371,7 +382,7 @@ export class SimWorld {
     }
     this.props.update((x, z) => this.groundY(x, z));
     this.collectPickups();
-    this.updateWanted();
+    this.police.update();
     if (this.tick % 20 === 0) this.managePopulation();
     for (const p of this.players.values()) p.state.context = this.computeContext(p);
     this.physics.step();
@@ -707,8 +718,7 @@ export class SimWorld {
     s.wrecked = true;
     s.fire = -1;
     s.health = 0;
-    this.events.push({ type: 'explosion', x: s.x, y: s.y + 1, z: s.z });
-    if (s.driver !== 'none' && s.driver !== 'npc') {
+    if (s.driver !== 'none' && s.driver !== 'npc' && s.driver !== 'police') {
       const p = this.players.get(s.driver);
       if (p) {
         this.leaveVehicle(p);
@@ -716,29 +726,85 @@ export class SimWorld {
       }
     }
     s.driver = 'none';
+    this.blast(s.x, s.y, s.z, 7, 150, v);
+  }
+
+  /** Explosion at (x, y, z): hurts people, cars, helicopters and breaks props around. */
+  blast(x: number, y: number, z: number, radius: number, damage: number, source?: Vehicle) {
+    this.events.push({ type: 'explosion', x, y: y + 1, z });
     for (const ped of this.peds.values()) {
-      const d = Math.hypot(ped.state.x - s.x, ped.state.z - s.z);
-      if (d < 7) {
-        ped.kvx = ((ped.state.x - s.x) / (d + 0.1)) * 8;
-        ped.kvz = ((ped.state.z - s.z) / (d + 0.1)) * 8;
-        this.damagePed(ped, 150, null, s.x, s.z);
-      } else if (d < 45) ped.scare(s.x, s.z, this.rng.chance(0.3));
+      const d = Math.hypot(ped.state.x - x, ped.state.z - z);
+      if (d < radius) {
+        ped.kvx = ((ped.state.x - x) / (d + 0.1)) * 8;
+        ped.kvz = ((ped.state.z - z) / (d + 0.1)) * 8;
+        this.damagePed(ped, damage, null, x, z);
+      } else if (d < 45) ped.scare(x, z, this.rng.chance(0.3));
     }
     for (const p of this.players.values()) {
       if (p.state.vehicle >= 0) continue;
-      const d = Math.hypot(p.state.x - s.x, p.state.z - s.z);
-      if (d < 7) this.damagePlayer(p, 90 * (1 - d / 7));
+      const d = Math.hypot(p.state.x - x, p.state.z - z);
+      if (d < radius) this.damagePlayer(p, 90 * (1 - d / radius));
     }
     for (const o of this.vehicles.values()) {
-      if (o === v || o.state.wrecked) continue;
-      const d = Math.hypot(o.state.x - s.x, o.state.z - s.z);
-      if (d < 7) o.state.health -= 80 * (1 - d / 7);
+      if (o === source || o.state.wrecked) continue;
+      const d = Math.hypot(o.state.x - x, o.state.z - z);
+      if (d < radius) o.state.health -= 80 * (1 - d / radius);
     }
-    for (const i of [...this.props.near(s.x, s.z, 7, this.scratch)]) {
+    for (const i of [...this.props.near(x, z, radius, this.scratch)]) {
       const p = this.map.props[i];
-      const d = Math.hypot(p.x - s.x, p.z - s.z) + 0.1;
-      if (d < 7) this.breakProp(i, ((p.x - s.x) / d) * 12, ((p.z - s.z) / d) * 12, 8);
+      const d = Math.hypot(p.x - x, p.z - z) + 0.1;
+      if (d < radius) this.breakProp(i, ((p.x - x) / d) * 12, ((p.z - z) / d) * 12, 8);
     }
+  }
+
+  /** New entity id (shared counter for peds, vehicles, helicopters, pickups). */
+  newId() {
+    return this.nextId++;
+  }
+
+  /** Moves a walker (police officer) with collisions against walls, props and cars. */
+  moveWalker(ped: Ped, vx: number, vz: number) {
+    const s = ped.state;
+    if (vx !== 0 || vz !== 0) {
+      this.controller.computeColliderMovement(ped.collider, { x: vx * DT, y: 0, z: vz * DT }, undefined, groups(GROUP.PED, GROUP.STATIC | GROUP.PROP | GROUP.BREAKABLE | GROUP.VEHICLE));
+      const m = this.controller.computedMovement();
+      s.x += m.x;
+      s.z += m.z;
+    }
+    s.speed = Math.hypot(vx, vz);
+  }
+
+  /** Police lost track of the player. */
+  clearWanted(p: Player, message?: string) {
+    const s = p.state;
+    if (s.wanted === 0 && !message) return;
+    s.wanted = 0;
+    s.wantedCooldown = 0;
+    s.wantedSeen = false;
+    s.arrest = 0;
+    this.events.push({ type: 'wanted', playerId: s.id, level: 0 });
+    if (message) this.toast(p, message);
+  }
+
+  /** Busted: taken to the police station, fined, firearms confiscated. */
+  arrest(p: Player) {
+    const s = p.state;
+    const fine = Math.floor(s.money * 0.15);
+    s.money -= fine;
+    s.ammo.pistol = 0;
+    s.ammo.rifle = 0;
+    s.weapon = 'fist';
+    this.clearWanted(p);
+    s.robbery = -1;
+    p.robberyTarget = null;
+    const station = this.map.interiors.find((i) => i.kind === 'police');
+    if (station) {
+      const fx = -Math.sin(station.door.yaw);
+      const fz = -Math.cos(station.door.yaw);
+      this.teleportPlayer(p, station.door.x + fx * 2, 0.3, station.door.z + fz * 2, station.door.yaw);
+    }
+    this.events.push({ type: 'busted', playerId: s.id });
+    this.toast(p, `ARRÊTÉ ! Amende -${fine.toLocaleString('fr-FR')} €, armes confisquées`);
   }
 
   // ------------------------------------------------------------------ actions
@@ -830,6 +896,17 @@ export class SimWorld {
         }
         break;
       }
+      case 'repaint': {
+        if (s.money < REPAINT_PRICE) {
+          this.toast(p, `Il te faut ${REPAINT_PRICE} € pour repeindre`);
+          break;
+        }
+        s.money -= REPAINT_PRICE;
+        const v = this.vehicles.get(s.vehicle);
+        if (v) v.state.paint = (v.state.paint + 1) % 8;
+        this.clearWanted(p, 'Voiture repeinte : la police ne te reconnaît plus');
+        break;
+      }
       case 'travel':
         this.toast(p, '✈ Bientôt disponible : Amérique latine, Afrique, Île, Asie');
         break;
@@ -840,7 +917,18 @@ export class SimWorld {
     const v = this.vehicles.get(id);
     if (!v || v.state.wrecked) return;
     const s = p.state;
-    if (v.state.driver === 'npc') {
+    if (v.state.driver === 'police') {
+      // stealing a cop car: the officer gets out and fights
+      const rx = Math.cos(v.state.yaw);
+      const rz = -Math.sin(v.state.yaw);
+      const cop = this.spawnPed(v.state.x - rx * (v.spec.width / 2 + 0.9), v.state.z - rz * (v.spec.width / 2 + 0.9), { mode: 'police' });
+      cop.state.role = 'cop';
+      cop.state.weapon = 'pistol';
+      cop.police = { target: s.id, cooldown: 1, leaving: false };
+      v.police = null;
+      v.state.siren = false;
+      this.crime(p, 'attack_cop', s.x, s.z, null, true);
+    } else if (v.state.driver === 'npc') {
       // Carjacking: the driver is thrown out and runs away
       const rx = Math.cos(v.state.yaw);
       const rz = -Math.sin(v.state.yaw);
@@ -893,7 +981,11 @@ export class SimWorld {
   private computeContext(p: Player): ContextAction | null {
     const s = p.state;
     if (s.dead) return null;
-    if (s.vehicle >= 0) return { kind: 'exit_vehicle', label: 'Sortir', target: s.vehicle };
+    if (s.vehicle >= 0) {
+      const garage = this.map.pois.find((q) => q.kind === 'garage');
+      if (garage && s.wanted > 0 && Math.hypot(garage.x - s.x, garage.z - s.z) < 14) return { kind: 'repaint', label: `Repeindre · ${REPAINT_PRICE} €`, target: s.vehicle };
+      return { kind: 'exit_vehicle', label: 'Sortir', target: s.vehicle };
+    }
     if (s.interior) {
       const room = this.rooms.get(s.interior)!;
       const def = this.interior(s.interior)!;
@@ -913,7 +1005,7 @@ export class SimWorld {
     let best: Vehicle | null = null;
     let bd = Infinity;
     for (const v of this.vehicles.values()) {
-      if (v.state.wrecked || (v.state.driver !== 'none' && v.state.driver !== 'npc')) continue;
+      if (v.state.wrecked || (v.state.driver !== 'none' && v.state.driver !== 'npc' && v.state.driver !== 'police')) continue;
       const d = Math.hypot(v.state.x - s.x, v.state.z - s.z) - v.spec.length / 2;
       if (d < 1.6 && d < bd && Math.abs(v.state.y - s.y) < 2) {
         bd = d;
@@ -922,7 +1014,7 @@ export class SimWorld {
     }
     if (best) {
       const name = best.spec.name;
-      return best.state.driver === 'npc'
+      return best.state.driver === 'npc' || best.state.driver === 'police'
         ? { kind: 'steal_vehicle', label: `Voler`, target: best.state.id }
         : { kind: 'enter_vehicle', label: `Monter · ${name}`, target: best.state.id };
     }
@@ -1074,7 +1166,10 @@ export class SimWorld {
       if (o === p || o.state.dead || o.state.vehicle >= 0 || o.state.interior !== s.interior) continue;
       out.push({ x: o.state.x, y: o.state.y + 1.1, z: o.state.z, player: o });
     }
-    if (withVehicles) for (const v of this.vehicles.values()) if (!v.state.wrecked && v.state.driver !== s.id) out.push({ x: v.state.x, y: v.state.y + 0.9, z: v.state.z, vehicle: v });
+    if (withVehicles) {
+      for (const v of this.vehicles.values()) if (!v.state.wrecked && v.state.driver !== s.id) out.push({ x: v.state.x, y: v.state.y + 0.9, z: v.state.z, vehicle: v });
+      for (const h of this.police.helis.values()) if (h.state.down < 0) out.push({ x: h.state.x, y: h.state.y, z: h.state.z, heli: h.state });
+    }
     return out;
   }
 
@@ -1159,13 +1254,24 @@ export class SimWorld {
   private hitTarget(p: Player, t: Target, damage: number, melee: boolean) {
     const s = p.state;
     if (t.ped) {
+      const cop = t.ped.state.role !== 'civ';
+      const wasAlive = t.ped.alive;
       this.damagePed(t.ped, damage, p, s.x, s.z);
       s.lastHit = t.ped.state.id;
       s.lastHitTick = this.tick;
-      this.crime(p, t.ped.alive ? (melee ? 'assault' : 'shoot_person') : 'knockout', t.ped.state.x, t.ped.state.z, t.ped);
+      if (cop) {
+        // the first hit on an officer and taking one down each add a star
+        if (s.wanted === 0 || (wasAlive && !t.ped.alive) || !melee) this.crime(p, 'attack_cop', t.ped.state.x, t.ped.state.z, null, true);
+        else this.police.reported(p, s.x, s.z);
+        if (t.ped.police) t.ped.police.target = s.id;
+      } else this.crime(p, t.ped.alive ? (melee ? 'assault' : 'shoot_person') : 'knockout', t.ped.state.x, t.ped.state.z, t.ped);
     } else if (t.player) {
       this.damagePlayer(t.player, damage * 0.8);
     } else if (t.vehicle) t.vehicle.state.health -= damage * 0.8;
+    else if (t.heli) {
+      t.heli.health -= damage;
+      if (s.wanted < 3) this.crime(p, 'attack_cop', s.x, s.z, null, true);
+    }
   }
 
   /** Pedestrians who fight back: chase the attacker and throw punches. */
@@ -1215,11 +1321,11 @@ export class SimWorld {
     } else if (ped.state.mode === 'shopkeeper') {
       ped.state.mode = 'cower';
       ped.timer = 6;
-    } else ped.hurt(by?.state.id ?? null, fromX, fromZ);
+    } else if (ped.state.role === 'civ') ped.hurt(by?.state.id ?? null, fromX, fromZ);
   }
 
   /** Ground height for walkers (park hills), cheap: terrain lookup, no raycast. */
-  private groundY(x: number, z: number) {
+  groundY(x: number, z: number) {
     return this.map.terrain ? terrainHeight(this.map.terrain, x, z) : 0;
   }
 
@@ -1294,23 +1400,16 @@ export class SimWorld {
       case 'robbery_big':
         s.wanted = Math.max(s.wanted, 3);
         break;
+      case 'attack_cop':
+        s.wanted = Math.min(5, Math.max(1, s.wanted + 1));
+        break;
     }
     s.wantedCooldown = WANTED_DECAY;
+    this.police.reported(p, x, z);
     if (s.wanted !== before) this.events.push({ type: 'wanted', playerId: s.id, level: s.wanted });
   }
 
-  private updateWanted() {
-    for (const p of this.players.values()) {
-      const s = p.state;
-      if (s.wanted === 0) continue;
-      s.wantedCooldown -= DT;
-      if (s.wantedCooldown <= 0) {
-        s.wanted--;
-        s.wantedCooldown = WANTED_DECAY;
-        this.events.push({ type: 'wanted', playerId: s.id, level: s.wanted });
-      }
-    }
-  }
+
 
   // ------------------------------------------------------------------ pickups & population
 
@@ -1334,13 +1433,13 @@ export class SimWorld {
     const near = (x: number, z: number, r: number) => centers.some((c) => Math.hypot(c.x - x, c.z - z) < r);
     // --- pedestrians
     for (const ped of [...this.peds.values()]) {
-      if (!ped.ambient) continue;
+      if (!ped.ambient || ped.state.role !== 'civ') continue;
       if (!near(ped.state.x, ped.state.z, 140) || (!ped.alive && ped.timer > 45)) this.removePed(ped.state.id);
     }
     for (const pk of [...this.pickups.values()]) if (!near(pk.x, pk.z, 200)) this.pickups.delete(pk.id);
     if (centers.length === 0) return;
     let ambient = 0;
-    for (const ped of this.peds.values()) if (ped.ambient) ambient++;
+    for (const ped of this.peds.values()) if (ped.ambient && ped.state.role === 'civ') ambient++;
     const ring = (x: number, z: number, r0: number, r1: number) =>
       centers.some((c) => {
         const d = Math.hypot(c.x - x, c.z - z);
@@ -1409,7 +1508,7 @@ export class SimWorld {
     return 'compact';
   }
 
-  private nearestWalkNode(x: number, z: number) {
+  nearestWalkNode(x: number, z: number) {
     let best = 0;
     let bd = Infinity;
     for (const n of this.walk) {
@@ -1422,7 +1521,7 @@ export class SimWorld {
     return best;
   }
 
-  private toast(p: Player, text: string) {
+  toast(p: Player, text: string) {
     this.events.push({ type: 'toast', playerId: p.state.id, text });
   }
 
@@ -1451,6 +1550,7 @@ export class SimWorld {
       vehicles: [...this.vehicles.values()].map((v) => ({ ...v.state })),
       pickups: [...this.pickups.values()].map((p) => ({ ...p })),
       props: this.props.snapshot(),
+      helis: [...this.police.helis.values()].map((h) => ({ ...h.state })),
     };
   }
 

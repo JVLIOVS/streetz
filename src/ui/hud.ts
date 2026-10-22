@@ -81,8 +81,12 @@ export class Hud {
       this.actionBtn.classList.toggle('hidden', !label);
       this.actionLbl.textContent = label.toUpperCase();
     }
-    if (this.changed('rob', s.robbery >= 0)) this.robbery.classList.toggle('hidden', s.robbery < 0);
-    if (s.robbery >= 0) this.robberyBar.style.width = `${s.robbery * 100}%`;
+    // one progress bar for robberies and arrests
+    const bar = s.arrest > 0.05 ? s.arrest : s.robbery;
+    const barLabel = s.arrest > 0.05 ? 'ARRESTATION… BOUGE !' : 'BRAQUAGE';
+    if (this.changed('rob', bar >= 0)) this.robbery.classList.toggle('hidden', bar < 0);
+    if (this.changed('robLabel', barLabel)) (this.robbery.firstElementChild as HTMLElement).textContent = barLabel;
+    if (bar >= 0) this.robberyBar.style.width = `${bar * 100}%`;
     if (this.changed('ko', s.dead)) this.ko.classList.toggle('hidden', !s.dead);
   }
 

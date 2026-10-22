@@ -140,6 +140,9 @@ export class Game {
             this.onSave?.();
           }
           break;
+        case 'busted':
+          if (e.playerId === this.localId) this.sound.alert();
+          break;
         case 'joined':
           this.hud.toast(`${e.name} a rejoint la partie`);
           break;
@@ -185,6 +188,16 @@ export class Game {
     this.hud.setNameTags(tags);
   }
 
+  /** Police sirens around: loudness from the closest unit chasing someone. */
+  private updateSiren(me: { x: number; z: number; interior: string | null }) {
+    let d = Infinity;
+    if (!me.interior) {
+      for (const v of this.sim.vehicles.values()) if (v.state.siren) d = Math.min(d, Math.hypot(v.state.x - me.x, v.state.z - me.z));
+      for (const h of this.sim.police.helis.values()) if (h.state.down < 0) d = Math.min(d, Math.hypot(h.state.x - me.x, h.state.z - me.z) + 20);
+    }
+    this.sound.setSiren(d < 150 ? 1 - d / 150 : 0);
+  }
+
   private render(alpha: number, dt: number) {
     this.controls.update(dt);
     const d = this.controls.takeCameraDelta();
@@ -214,10 +227,11 @@ export class Game {
     this.hudTimer -= dt;
     if (this.hudTimer <= 0) {
       this.hudTimer = 1 / 20;
-      this.hud.minimap.update(me.x, me.z, me.facing, this.view.cam.yaw, this.sim);
+      this.hud.minimap.update(me.x, me.z, me.facing, this.view.cam.yaw, this.sim, me);
       this.hud.updateZone(me.x, me.z, me.interior);
       this.hud.setMoney(me.money);
-      this.hud.setStars(me.wanted, me.wanted > 0 && me.wantedCooldown < 8);
+      this.hud.setStars(me.wanted, me.wanted > 0 && !me.wantedSeen);
+      this.updateSiren(me);
     }
   }
 }

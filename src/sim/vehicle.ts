@@ -32,6 +32,8 @@ export interface VehicleState {
   horn: number;
   /** Paint variant for rendering. */
   paint: number;
+  /** Police lights and siren on. */
+  siren: boolean;
 }
 
 export interface DriveInput {
@@ -70,6 +72,8 @@ export class Vehicle {
   parkedSpot = -1;
   /** Ticks since a player last drove it (persistent while recent). */
   touchedTick = -1;
+  /** Police AI scratch (target player, unstuck timers, crew dropped off). */
+  police: { target: string | null; stuck: number; reverse: number; dropped: boolean; block: boolean } | null = null;
   /** Multiplayer: last networked pose to glide towards, and damage to report to the host. */
   net: VehicleNet | null = null;
   pendingDamage = 0;
@@ -133,8 +137,8 @@ export class Vehicle {
         s.braking = true;
       }
       // Steering: softer at high speed, sharper with the handbrake (drift)
-      const target = inp.steer * sp.steer / (1 + Math.abs(vf) / 22);
-      s.steer += (target - s.steer) * (1 - Math.exp(-10 * DT));
+      const target = inp.steer * sp.steer / (1 + Math.abs(vf) / (sp.twoWheels ? 14 : 22));
+      s.steer += (target - s.steer) * (1 - Math.exp(-(sp.steerRate ?? 10) * DT));
       let yawRate = (vf * Math.tan(s.steer)) / sp.wheelbase;
       if (inp.handbrake) yawRate *= 1.35;
       s.yaw -= yawRate * DT;
