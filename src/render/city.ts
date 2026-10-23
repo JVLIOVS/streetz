@@ -3,7 +3,7 @@ import type { MapData } from '../maps/types';
 import type { GameAssets } from './assets';
 import { buildChunkDetails, buildSigns } from './details';
 import { PropsView } from './props';
-import { buildingMaterial, roadMaterial, roofMaterial, toon, waterMaterial } from './materials';
+import { buildingMaterial, pavingMaterial, roadMaterial, roofMaterial, toon, waterMaterial } from './materials';
 
 export const CHUNK_SIZE = 125;
 
@@ -189,7 +189,7 @@ export class CityView {
 
   private buildSolids(map: MapData, shadows: boolean) {
     const geo = new THREE.BoxGeometry(1, 1, 1);
-    const mesh = new THREE.InstancedMesh(geo, toon(0xffffff), map.solids.length);
+    const mesh = new THREE.InstancedMesh(geo, pavingMaterial(), map.solids.length);
     map.solids.forEach((s, k) => {
       _q.setFromEuler(_e.set(0, s.rotY ?? 0, s.rotZ ?? 0, 'YZX'));
       _m.compose(_p.set(s.x, s.y, s.z), _q, _s.set(s.sx, s.sy, s.sz));

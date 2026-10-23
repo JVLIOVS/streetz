@@ -84,8 +84,11 @@ export class GameRenderer {
       stencil: false,
     });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    // filmic-but-neutral curve: deeper contrast without washing out the cartoon colors
+    this.renderer.toneMapping = THREE.NeutralToneMapping;
+    this.renderer.toneMappingExposure = 1.05;
     this.renderer.shadowMap.enabled = this.preset.shadows;
-    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.shadowMap.type = quality === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
     this.adaptive = new AdaptiveResolution(this.preset.minPixelRatio, Math.min(this.preset.maxPixelRatio, devicePixelRatio));
 
     this.cam = new ThirdPersonCamera(innerWidth / innerHeight, sim);
@@ -100,7 +103,7 @@ export class GameRenderer {
     this.configureShadows();
     this.scene.add(this.sun, this.sun.target);
 
-    this.sky = new THREE.Mesh(new THREE.SphereGeometry(1000, 24, 12), skyMaterial(SKY_TOP, SKY_HORIZON));
+    this.sky = new THREE.Mesh(new THREE.SphereGeometry(1000, 24, 12), skyMaterial(SKY_TOP, SKY_HORIZON, SUN_DIR));
     this.sky.frustumCulled = false;
     this.sky.renderOrder = -1;
     this.scene.add(this.sky);

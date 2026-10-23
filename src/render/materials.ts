@@ -240,17 +240,75 @@ export function waterMaterial(): THREE.MeshToonMaterial {
   return m;
 }
 
-/** Gradient sky dome (no texture). */
-export function skyMaterial(top: THREE.Color, horizon: THREE.Color): THREE.ShaderMaterial {
+/**
+ * Sidewalks, squares, curbs and other flat solids: paving slabs drawn in world space on
+ * top faces (thin joints + a slight per-slab tint), a darker strip along the edges.
+ */
+export function pavingMaterial(): THREE.MeshToonMaterial {
+  const m = toon(0xffffff);
+  m.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>\nvarying vec3 vPW;\n${BOX_VARYINGS}`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\n${BOX_VERTEX}`)
+      .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>\nvec4 pw = vec4(transformed, 1.0);\n#ifdef USE_INSTANCING\npw = instanceMatrix * pw;\n#endif\nvPW = (modelMatrix * pw).xyz;`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>\nvarying vec3 vPW;\n${BOX_VARYINGS}\n${HASH}`)
+      .replace(
+        '#include <color_fragment>',
+        /* glsl */ `#include <color_fragment>
+        if (vLNormal.y > 0.5 && vScale.x > 1.5 && vScale.z > 1.5) {
+          vec2 q = vPW.xz / vec2(1.6, 1.1);
+          q.x += step(1.0, mod(floor(q.y), 2.0)) * 0.5; // staggered rows
+          vec2 f = fract(q);
+          float joint = 1.0 - (1.0 - smoothstep(0.0, 0.04, f.x) * smoothstep(1.0, 0.96, f.x)) * 0.5
+                            - (1.0 - smoothstep(0.0, 0.06, f.y) * smoothstep(1.0, 0.94, f.y)) * 0.5;
+          float tint = 0.95 + 0.07 * hash12(floor(q));
+          diffuseColor.rgb *= tint * mix(0.84, 1.0, clamp(joint, 0.0, 1.0));
+          // worn border along the curb
+          float ex = min(vLocal.x, 1.0 - vLocal.x) * vScale.x;
+          float ez = min(vLocal.z, 1.0 - vLocal.z) * vScale.z;
+          diffuseColor.rgb *= mix(0.86, 1.0, smoothstep(0.15, 0.45, min(ex, ez)));
+        } else if (abs(vLNormal.y) < 0.5) {
+          diffuseColor.rgb *= 0.88; // curb sides read as stone
+        }`,
+      );
+  };
+  m.customProgramCacheKey = () => 'paving-v1';
+  return m;
+}
+
+/** Gradient sky dome with a sun halo and soft drifting clouds (no texture). */
+export function skyMaterial(top: THREE.Color, horizon: THREE.Color, sun = new THREE.Vector3(-0.45, 0.8, 0.35).normalize()): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     side: THREE.BackSide,
     depthWrite: false,
     fog: false,
-    uniforms: { uTop: { value: top }, uHorizon: { value: horizon } },
+    uniforms: { uTop: { value: top }, uHorizon: { value: horizon }, uSun: { value: sun }, uTime: sharedUniforms.uTime, uNight: sharedUniforms.uNight },
     vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); gl_Position.z = gl_Position.w; }`,
-    fragmentShader: `uniform vec3 uTop; uniform vec3 uHorizon; varying vec3 vDir;
-      void main(){ float t = clamp(vDir.y * 1.6, 0.0, 1.0); gl_FragColor = vec4(mix(uHorizon, uTop, pow(t, 0.7)), 1.0);
-      #include <colorspace_fragment>
+    fragmentShader: /* glsl */ `uniform vec3 uTop; uniform vec3 uHorizon; uniform vec3 uSun; uniform float uTime; uniform float uNight; varying vec3 vDir;
+      ${HASH}
+      float noise(vec2 p) {
+        vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), f.x), mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), f.x), f.y);
+      }
+      void main(){
+        vec3 d = normalize(vDir);
+        float t = clamp(d.y * 1.6, 0.0, 1.0);
+        vec3 col = mix(uHorizon, uTop, pow(t, 0.7));
+        // sun disc + warm halo
+        float sd = max(dot(d, uSun), 0.0);
+        col += vec3(1.0, 0.85, 0.6) * (pow(sd, 8.0) * 0.25 + pow(sd, 64.0) * 0.5) * (1.0 - uNight);
+        col = mix(col, vec3(1.0, 0.98, 0.9), smoothstep(0.9975, 0.999, sd) * (1.0 - uNight));
+        // soft cartoon clouds on a flat layer above the city
+        if (d.y > 0.02) {
+          vec2 uv = d.xz / (d.y + 0.15) * 1.6 + vec2(uTime * 0.01, uTime * 0.004);
+          float n = noise(uv) * 0.55 + noise(uv * 2.1) * 0.3 + noise(uv * 4.3) * 0.15;
+          float c = smoothstep(0.52, 0.68, n) * smoothstep(0.02, 0.25, d.y);
+          vec3 cloud = mix(vec3(0.93, 0.92, 0.98), vec3(1.0, 0.95, 0.88), sd);
+          col = mix(col, cloud * mix(1.0, 0.35, uNight), c * 0.85);
+        }
+        gl_FragColor = vec4(col, 1.0);
+        #include <colorspace_fragment>
       }`,
   });
 }

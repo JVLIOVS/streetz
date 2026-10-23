@@ -15,7 +15,7 @@ export interface QualityPreset {
 
 export const QUALITY: Record<QualityLevel, QualityPreset> = {
   low: { maxPixelRatio: 1, minPixelRatio: 0.5, antialias: false, shadows: false, shadowMapSize: 0, viewDistance: 200, lodDistance: 110 },
-  medium: { maxPixelRatio: 1.5, minPixelRatio: 0.7, antialias: false, shadows: true, shadowMapSize: 1024, viewDistance: 300, lodDistance: 180 },
+  medium: { maxPixelRatio: 1.5, minPixelRatio: 0.7, antialias: true, shadows: true, shadowMapSize: 1024, viewDistance: 300, lodDistance: 180 },
   high: { maxPixelRatio: 2, minPixelRatio: 0.9, antialias: true, shadows: true, shadowMapSize: 2048, viewDistance: 450, lodDistance: 300 },
 };
 
