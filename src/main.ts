@@ -41,6 +41,38 @@ function rejoinPublic() {
   location.replace(`${location.pathname}?${q}`);
 }
 
+/**
+ * Mobile browsers zoom on double-tap and pinch, even with user-scalable=no (iOS ignores
+ * it). Hammering the punch button triggered it. Block those gestures, and if the page
+ * still ends up zoomed, snap it back.
+ */
+function preventZoom() {
+  let lastTouch = 0;
+  addEventListener(
+    'touchend',
+    (e) => {
+      const now = performance.now();
+      if (now - lastTouch < 350 && e.cancelable) e.preventDefault();
+      lastTouch = now;
+    },
+    { passive: false },
+  );
+  addEventListener('touchmove', (e) => (e as TouchEvent & { scale?: number }).scale !== undefined && (e as TouchEvent & { scale: number }).scale !== 1 && e.cancelable && e.preventDefault(), { passive: false });
+  for (const ev of ['gesturestart', 'gesturechange', 'gestureend', 'dblclick']) addEventListener(ev, (e) => e.preventDefault(), { passive: false });
+  const meta = document.querySelector('meta[name=viewport]');
+  const base = meta?.getAttribute('content') ?? '';
+  const unzoom = () => {
+    if (!meta || !window.visualViewport || window.visualViewport.scale <= 1.01) return;
+    // rewriting the viewport tag makes the browser go back to scale 1
+    meta.setAttribute('content', base.replace('maximum-scale=1', 'maximum-scale=1.0001'));
+    requestAnimationFrame(() => meta.setAttribute('content', base));
+    scrollTo(0, 0);
+  };
+  window.visualViewport?.addEventListener('resize', unzoom);
+  setInterval(unzoom, 1000);
+}
+preventZoom();
+
 async function boot() {
   const save = loadSave();
   const qParam = params.get('quality') as QualityLevel | null;

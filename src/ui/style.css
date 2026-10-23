@@ -13,6 +13,8 @@
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
+  /* touch-action is not inherited: set it everywhere so no tap ever zooms the page */
+  touch-action: none;
 }
 html,
 body {
@@ -1104,4 +1106,16 @@ body {
 #pause .panel {
   max-height: 94vh;
   overflow-y: auto;
+}
+
+/* lists that scroll with the finger */
+.mp-list,
+#progress-panel .pp-body,
+#pause .panel {
+  touch-action: pan-y;
+}
+.mp-list *,
+#progress-panel .pp-body *,
+#pause .panel * {
+  touch-action: pan-y;
 }
