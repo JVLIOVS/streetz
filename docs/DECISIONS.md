@@ -44,3 +44,7 @@
 - 2026-10-22 — Effets de ralenti / arrêt sur image uniquement en solo (en multijoueur le monde ne peut pas ralentir pour un seul joueur) ; tremblement d'écran et vibrations partout.
 - 2026-10-22 — Business de planque : production calculée à partir de l'heure réelle (fonctionne hors ligne), plafonnée à 8 h pour donner envie de revenir.
 - 2026-10-22 — Instantanés réseau : les champs privés (inventaire, contrats, business…) ne sont envoyés qu'à leur propriétaire.
+- 2026-10-23 — Primes (multijoueur seulement) : un joueur à 4★ ou plus vaut 1 000 € + 750 €/étoile au-delà ; le joueur qui le met K.O. encaisse ; s'il survit 3 min il touche le double ; 2 min avant une nouvelle prime.
+- 2026-10-23 — Crews sans serveur : le crew est une étiquette (nom + couleur) dans le profil de chaque membre ; on fonde (500 €) depuis le menu pause, on rejoint en allant voir un membre. Effets : pas de dégâts entre membres, +25 % sur le chaos encaissé quand un membre est à moins de 60 m.
+- 2026-10-23 — Braquage coop « Le Coffre » : 2 joueurs minimum sur le point rouge près de la banque, tous dans la banque, au moins 2 au coffre pour percer (30 s à deux, plus vite à plus), puis chacun ramène son sac au point de dépôt (celui du receleur) ; 24 000 € partagés ; un joueur K.O. lâche la moitié de sa part dans la rue ; 10 min entre deux braquages.
+- 2026-10-23 — Classements : classement en direct des joueurs de la partie + records personnels de la semaine (remis à zéro le lundi). Un classement mondial demande le serveur (phase 3).

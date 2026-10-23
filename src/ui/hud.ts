@@ -76,6 +76,9 @@ export class Hud {
   }
 
   /** Level badge, XP bar, next unlock, chaos combo and the progression panel. */
+  /** Other players in the game (for the live leaderboard). */
+  others: PlayerState[] = [];
+
   updateProgress(s: PlayerState) {
     const lp = levelProgress(s.rep);
     if (this.changed('lvl', lp.level)) this.lvlNum.textContent = String(lp.level);
@@ -138,7 +141,8 @@ export class Hud {
   }
 
   private renderPanel(s: PlayerState, lp: { level: number; cur: number; need: number }) {
-    const key = JSON.stringify([s.rep, s.contracts.map((c) => c.progress), s.streak, s.fenceOrder, s.contractsDay]);
+    const board = [s, ...this.others].map((p) => [p.name, p.rep, p.crew?.name ?? '', p.bounty]);
+    const key = JSON.stringify([s.rep, s.contracts.map((c) => c.progress), s.streak, s.fenceOrder, s.contractsDay, s.week, board]);
     if (key === this.panelKey) return;
     this.panelKey = key;
     const esc = (t: string) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
@@ -155,6 +159,16 @@ export class Hud {
     h += `<div class="pp-row">🏆 Les 3 contrats : bonus 1 500 € · nouveaux contrats demain</div>`;
     const k = s.streak > 0 ? ((s.streak - 1) % 7) + 1 : 0;
     h += `<div class="pp-sec">SÉRIE DE CONNEXION 🔥</div><div class="pp-row">Jour ${k}/7 · demain : +${STREAK_REWARDS[k % 7].toLocaleString('fr-FR')} €${k === 6 ? ' + veste dorée exclusive' : ''}${bar(k / 7)}</div>`;
+    if (this.others.length) {
+      h += `<div class="pp-sec">CLASSEMENT DE LA PARTIE</div>`;
+      const all = [s, ...this.others].sort((a, b) => b.rep - a.rep);
+      all.forEach((p, i) => {
+        const medal = ['🥇', '🥈', '🥉'][i] ?? `${i + 1}.`;
+        h += `<div class="pp-row${p === s ? ' me' : ''}">${medal} ${p.crew ? `[${esc(p.crew.name)}] ` : ''}${esc(p.name)}<small>Niv. ${levelProgress(p.rep).level}${p.bounty > 0 ? ` · 🎯 ${p.bounty.toLocaleString('fr-FR')} €` : ''}</small></div>`;
+      });
+    }
+    const wk = s.week;
+    h += `<div class="pp-sec">TES RECORDS DE LA SEMAINE</div><div class="pp-row">Meilleur combo : <b>${wk.best.toLocaleString('fr-FR')}</b> · K.O. : <b>${wk.kos}</b><br>Joueurs K.O. : <b>${wk.pvp}</b> · primes : <b>${wk.bounties}</b> · braquages coop : <b>${wk.heists}</b></div>`;
     if (s.fenceOrder) h += `<div class="pp-sec">RECELEUR 💰</div><div class="pp-row">Il veut : <b>${esc(VEHICLES[s.fenceOrder].name)}</b>. Vole-la et amène-la au point 💰 de la carte. Une voiture dorée vaut une fortune.</div>`;
     this.panelBody.innerHTML = h;
   }
@@ -222,7 +236,7 @@ export class Hud {
   private tags = new Map<string, HTMLElement>();
 
   /** Nicknames floating above the other players. */
-  setNameTags(tags: { id: string; name: string; sub?: string; x: number; y: number }[]) {
+  setNameTags(tags: { id: string; name: string; sub?: string; color?: number; hunted?: boolean; x: number; y: number }[]) {
     const keep = new Set(tags.map((t) => t.id));
     for (const [id, el] of this.tags) {
       if (!keep.has(id)) {
@@ -238,10 +252,12 @@ export class Hud {
         $('hud').appendChild(el);
         this.tags.set(t.id, el);
       }
-      const key = `${t.name}|${t.sub ?? ''}`;
+      const key = `${t.name}|${t.sub ?? ''}|${t.color ?? ''}|${t.hunted}`;
       if (el.dataset.key !== key) {
         el.dataset.key = key;
         el.textContent = t.name;
+        el.style.borderColor = t.color !== undefined ? `#${t.color.toString(16).padStart(6, '0')}` : '';
+        el.classList.toggle('hunted', !!t.hunted);
         if (t.sub) {
           const sub = document.createElement('small');
           sub.textContent = t.sub;
@@ -265,6 +281,16 @@ export class Hud {
     this.targetHp.style.transform = `translate(${pos.x.toFixed(0)}px, ${pos.y.toFixed(0)}px)`;
     const w = `${Math.max(0, pos.ratio * 100).toFixed(0)}%`;
     if (this.changed('tfill', w)) this.targetFill.style.width = w;
+  }
+
+  /** Your own bounty: amount and time left to survive. */
+  setBounty(amount: number, timer: number) {
+    const el = $('bounty');
+    if (this.changed('bountyOn', amount > 0)) el.classList.toggle('hidden', amount <= 0);
+    if (amount <= 0) return;
+    const t = Math.ceil(timer);
+    const text = `🎯 Ta tête vaut ${amount.toLocaleString('fr-FR')} € · survis ${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+    if (this.changed('bountyTxt', text)) el.textContent = text;
   }
 
   updateZone(x: number, z: number, interior: string | null) {

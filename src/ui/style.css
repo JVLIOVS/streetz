@@ -1037,3 +1037,65 @@ body {
 #recap .goal {
   color: #7dff7a;
 }
+
+/* Bounties */
+.name-tag.hunted {
+  border-color: #ff3b4f !important;
+  background: rgba(120, 10, 30, 0.85);
+  animation: hunted 0.8s infinite alternate;
+}
+@keyframes hunted {
+  to {
+    box-shadow: 0 0 12px #ff3b4f;
+  }
+}
+#bounty {
+  position: absolute;
+  top: calc(130px + var(--safe-t));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(120, 10, 30, 0.9);
+  border: 2px solid #ff3b4f;
+  font-weight: 900;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* Crew box in the pause menu */
+#crew-box {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+  font-weight: 900;
+}
+#crew-box input {
+  width: 130px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: rgba(0, 0, 0, 0.3);
+  color: #fff;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+#crew-box button {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 0;
+  background: #ffd23f;
+  color: #1b1430;
+  font-weight: 900;
+}
+#crew-box .tag {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 2px solid;
+}
+
+.pp-row.me {
+  outline: 2px solid #ffd23f;
+}

@@ -1,6 +1,8 @@
 import { ALL_CONTRACTS_BONUS, dailyContracts, FENCE_PRICES, FENCE_SCRAP, FENCE_SPOT, GOLD_PAINT, GOLD_PRICE, STREAK_CLOTH, STREAK_REWARDS, type ContractStat } from '../data/contracts';
 import { VEHICLES, type VehicleType } from '../data/vehicles';
 import { bizStock } from '../data/business';
+import { weekOf } from '../data/social';
+import { emptyWeek } from './player';
 import type { ContextAction, Player } from './player';
 import type { SimWorld } from './world';
 
@@ -37,6 +39,7 @@ export class ContractSystem {
       const s = p.state;
       if (!s.fenceOrder) s.fenceOrder = ORDERS[this.w.rng.int(0, ORDERS.length - 1)];
       if (this.w.day <= 0) continue;
+      if (s.week.id !== weekOf(this.w.day)) s.week = emptyWeek(weekOf(this.w.day));
       if (s.contractsDay !== this.w.day) {
         s.contractsDay = this.w.day;
         s.contracts = dailyContracts(this.w.day);

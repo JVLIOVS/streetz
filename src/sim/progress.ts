@@ -78,7 +78,8 @@ export class ProgressSystem {
       if (s.chaosTimer > 0) continue;
       // cash in
       const score = Math.round(s.chaos);
-      const cash = Math.round(score * CHAOS_CASH);
+      const cash = Math.round(score * CHAOS_CASH * this.w.social.crewBonus(p));
+      s.week.best = Math.max(s.week.best, score);
       s.money += cash;
       this.w.events.push({ type: 'chaosEnd', playerId: s.id, score, cash, mult: s.chaosMult });
       this.w.contracts.track(p, 'chaos', score, true);
@@ -128,6 +129,7 @@ export class ProgressSystem {
     this.chaos(p, cop ? CHAOS_POINTS.cop : CHAOS_POINTS.ko, cop ? 'FLIC K.O.' : 'K.O.');
     this.addXp(p, cop ? XP_FOR.cop : XP_FOR.ko);
     this.w.contracts.track(p, cop ? 'cop' : 'ko', 1);
+    p.state.week.kos++;
   }
 
   onProp(p: Player) {

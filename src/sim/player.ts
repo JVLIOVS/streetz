@@ -29,7 +29,9 @@ export interface ContextAction {
     | 'store_vehicle'
     | 'mission'
     | 'fence'
-    | 'business';
+    | 'business'
+    | 'crew_join'
+    | 'heist';
   label: string;
   target: number | string;
 }
@@ -87,6 +89,12 @@ export interface PlayerState {
   /** Hideout businesses: stock produced and when it was last updated (epoch s). */
   biz: { id: string; stock: number; last: number }[];
   tutorialDone: boolean;
+  /** Bounty on this player's head (multiplayer, 4★+) and seconds left to survive it. */
+  bounty: number;
+  bountyTimer: number;
+  crew: { name: string; color: number } | null;
+  /** This week's records (reset every Monday). */
+  week: WeekStats;
   /** Vehicle id when driving, -1 on foot. */
   vehicle: number;
   /** Interior id when inside a building. */
@@ -202,6 +210,10 @@ export class Player {
       fenceOrder: null,
       biz: [],
       tutorialDone: true,
+      bounty: 0,
+      bountyTimer: 0,
+      crew: null,
+      week: emptyWeek(0),
       vehicle: -1,
       interior: null,
       action: null,
@@ -340,6 +352,18 @@ export function angleDiff(a: number, b: number): number {
   return d;
 }
 
+export interface WeekStats {
+  id: number;
+  /** Best chaos combo, K.O.s, players knocked out, bounties cashed, heists done. */
+  best: number;
+  kos: number;
+  pvp: number;
+  bounties: number;
+  heists: number;
+}
+
+export const emptyWeek = (id: number): WeekStats => ({ id, best: 0, kos: 0, pvp: 0, bounties: 0, heists: 0 });
+
 /** Loads a saved profile into a player. */
 export function applyProfile(s: PlayerState, p: Profile) {
   s.money = p.money;
@@ -359,6 +383,8 @@ export function applyProfile(s: PlayerState, p: Profile) {
   s.streakDay = p.streak.day;
   s.biz = p.biz.map((b) => ({ ...b }));
   s.tutorialDone = p.tutorial;
+  s.crew = p.crew ? { ...p.crew } : null;
+  s.week = { ...emptyWeek(0), ...p.week };
 }
 
 /** What gets saved from a player. */
@@ -378,5 +404,7 @@ export function profileOf(s: PlayerState): Profile {
     streak: { day: s.streakDay, count: s.streak },
     biz: s.biz.map((b) => ({ ...b })),
     tutorial: s.tutorialDone,
+    crew: s.crew ? { ...s.crew } : null,
+    week: { ...s.week },
   };
 }

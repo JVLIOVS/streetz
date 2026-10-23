@@ -49,7 +49,8 @@ export class Controls {
     addEventListener('pointerup', this.up);
     addEventListener('pointercancel', this.up);
     addEventListener('keydown', (e) => {
-      if (e.repeat) return;
+      // typing in a text field (crew name, nickname) is not playing
+      if (e.repeat || e.target instanceof HTMLInputElement) return;
       this.keys.add(e.code);
       if (e.code === 'Space') this.state.jumpPressed = true;
       if (e.code === 'KeyE' || e.code === 'KeyF' || e.code === 'Enter') this.pushAction('use');

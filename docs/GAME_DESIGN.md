@@ -164,7 +164,7 @@ Pour vendre quoi que ce soit, il faut d'abord :
 5. Le tutoriel des 5 premières minutes et l'écran récapitulatif de fin de session.
 6. Les business de la planque avec revenu passif plafonné.
 
-**Phase 2 — social** (le monde ouvert P2P suffit pour tester, un serveur pour le vrai) :
+**Phase 2 — social** — ✅ faite (version test 6, sans serveur : territoires et classement mondial attendront le serveur) :
 primes entre joueurs, braquage en coop, crews et territoires, classements hebdomadaires.
 
 **Phase 3 — monétisation** (nécessite serveur, comptes et paiement) :

@@ -64,10 +64,14 @@ try {
   const before = await posOnHost();
   await bob.evaluate(() => { window.__streetz.controls.keyHeld = () => ({ gas: false, brake: false, handbrake: false, attack: false }); });
   await bob.keyboard.down('KeyW');
-  await bob.waitForTimeout(2500);
+  // headless rendering is slow (~5 FPS, the sim then runs below real time): hold longer
+  await bob.waitForTimeout(4500);
   await bob.keyboard.up('KeyW');
   await bob.waitForTimeout(800);
   const after = await posOnHost();
+  results.bobFps = (await stats(bob)).fps;
+  results.aliceFps = (await stats(alice)).fps;
+  results.bobLocal = await bob.evaluate(() => { const p = window.__streetz.sim.players.get(window.__streetz.localId).state; return { x: p.x, z: p.z, anim: p.anim }; });
   results.bobMovedOnHost = +Math.hypot(after.x - before.x, after.z - before.z).toFixed(1);
   if (results.bobMovedOnHost < 4) fail(`host saw Bob move only ${results.bobMovedOnHost} m`);
 

@@ -19,6 +19,8 @@ export class MissionMarkers {
   private time = 0;
   private fence: THREE.Group;
   private vips: THREE.Mesh[] = [];
+  private heist: THREE.Group;
+  private hunted: THREE.Mesh[] = [];
 
   constructor(private sim: SimWorld) {
     const beamGeo = new THREE.CylinderGeometry(1.1, 1.1, 3.2, 20, 1, true);
@@ -51,6 +53,15 @@ export class MissionMarkers {
     fence.position.set(sim.contracts.fence.x, sim.groundY(sim.contracts.fence.x, sim.contracts.fence.z), sim.contracts.fence.z);
     this.fence = fence;
     this.root.add(fence);
+    // co-op heist marker (red)
+    const heist = new THREE.Group();
+    heist.add(new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 5, 24, 1, true).translate(0, 2.5, 0), beamMat(0xff3b4f, 0.35)));
+    const hRing = new THREE.Mesh(new THREE.RingGeometry(2.0, 2.5, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xff3b4f, transparent: true, opacity: 0.9, depthWrite: false }));
+    hRing.position.y = 0.06;
+    heist.add(hRing);
+    heist.position.set(sim.heist.spot.x, sim.groundY(sim.heist.spot.x, sim.heist.spot.z), sim.heist.spot.z);
+    this.heist = heist;
+    this.root.add(heist);
     const wpGeo = new THREE.CylinderGeometry(1.4, 1.4, 70, 16, 1, true);
     wpGeo.translate(0, 35, 0);
     this.waypoint = new THREE.Mesh(wpGeo, beamMat(0xffd23f, 0.3));
@@ -67,6 +78,13 @@ export class MissionMarkers {
       d.visible = false;
       this.vips.push(d);
       this.root.add(d);
+    }
+    const huntGeo = new THREE.ConeGeometry(0.5, 0.9, 4).rotateX(Math.PI);
+    for (let i = 0; i < 4; i++) {
+      const a = new THREE.Mesh(huntGeo, arrowMat);
+      a.visible = false;
+      this.hunted.push(a);
+      this.root.add(a);
     }
     for (let i = 0; i < MAX_TARGETS; i++) {
       const a = new THREE.Mesh(arrowGeo, arrowMat);
@@ -91,6 +109,20 @@ export class MissionMarkers {
       bang.rotation.y = this.time * 2;
     }
     this.fence.visible = !indoors;
+    this.heist.visible = !indoors && !me?.mission;
+    // players with a bounty: a big red arrow everybody can see
+    let h = 0;
+    if (!indoors && me) {
+      for (const p of this.sim.players.values()) {
+        const s = p.state;
+        if (h >= this.hunted.length || s.id === me.id || s.bounty <= 0 || s.interior) continue;
+        const a = this.hunted[h++];
+        a.visible = true;
+        a.position.set(s.x, s.y + 3.2 + bob, s.z);
+        a.rotation.y = this.time * 4;
+      }
+    }
+    for (let i = h; i < this.hunted.length; i++) this.hunted[i].visible = false;
     const wp = me?.waypoint;
     this.waypoint.visible = !!wp && !indoors;
     if (wp) this.waypoint.position.set(wp[0], this.sim.groundY(wp[0], wp[1]), wp[1]);

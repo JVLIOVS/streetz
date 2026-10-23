@@ -8,6 +8,7 @@ import type { SimWorld } from './sim/world';
 import type { Hud } from './ui/hud';
 import { MenuPanel, type MenuKind } from './ui/menus';
 import { missionById } from './data/missions';
+import { HEIST } from './data/social';
 import { levelProgress, nextUnlock } from './data/progression';
 
 export const LOCAL_PLAYER = 'local';
@@ -215,12 +216,16 @@ export class Game {
         case 'streak':
           if (e.playerId === this.localId) this.sound.cash();
           break;
+        case 'bounty':
+          this.sound.alert();
+          break;
         case 'mission':
           if (e.playerId === this.localId) {
             if (e.state === 'done') this.sound.cash();
             else if (e.state === 'fail') this.sound.alert();
             this.onSave?.();
           } else if (e.state === 'start') {
+            if (e.name === HEIST.name) break;
             const who = this.sim.players.get(e.playerId)?.state.name ?? 'Un joueur';
             this.hud.toast(`🎯 ${who} lance la mission « ${e.name} » : aide ou sabote !`);
           }
@@ -245,6 +250,16 @@ export class Game {
 
   private tmp = new Vector3();
   private slowmo = 0;
+  /** Sends an action from a menu (pause screen, panels) with the next tick. */
+  sendAction(action: ActionCommand['action'], arg: string) {
+    this.menuActions.push({ action, arg });
+    // solo pause: run one tick so the answer comes right away
+    if (this.paused) {
+      this.step(this.loop.tick);
+      this.loop.tick++;
+    }
+  }
+
   /** This session's stats, for the recap in the pause menu. */
   private session = { money: -1, xp: 0, level: 1, kos: 0, contracts: 0, crates: 0, best: 0, start: performance.now() };
 
@@ -308,14 +323,16 @@ export class Game {
   }
 
   private updateNameTags(me: { x: number; z: number; interior: string | null }) {
-    const tags: { id: string; name: string; sub?: string; x: number; y: number }[] = [];
+    const tags: { id: string; name: string; sub?: string; color?: number; hunted?: boolean; x: number; y: number }[] = [];
     for (const p of this.sim.players.values()) {
       const s = p.state;
       if (s.id === this.localId || s.interior !== me.interior || Math.hypot(s.x - me.x, s.z - me.z) > 70) continue;
       const v = this.tmp.set(s.x, s.y + 2.3, s.z).project(this.view.cam.camera);
       if (v.z > 1) continue;
-      const job = s.mission ? missionById(s.mission) : undefined;
-      tags.push({ id: s.id, name: s.name, sub: job ? `🎯 ${job.name}` : undefined, x: ((v.x + 1) / 2) * innerWidth, y: ((1 - v.y) / 2) * innerHeight });
+      const job = s.mission === HEIST.id ? HEIST.name : s.mission ? missionById(s.mission)?.name : undefined;
+      const sub = s.bounty > 0 ? `🎯 PRIME ${s.bounty.toLocaleString('fr-FR')} €` : job ? `📍 ${job}` : undefined;
+      const lvl = levelProgress(s.rep).level;
+      tags.push({ id: s.id, name: `${s.crew ? `[${s.crew.name}] ` : ''}${s.name} · ${lvl}`, sub, color: s.crew?.color, hunted: s.bounty > 0, x: ((v.x + 1) / 2) * innerWidth, y: ((1 - v.y) / 2) * innerHeight });
     }
     this.hud.setNameTags(tags);
   }
@@ -380,6 +397,9 @@ export class Game {
       this.hud.updateZone(me.x, me.z, me.interior);
       this.hud.setMoney(me.money);
       this.hud.setStars(me.wanted, me.wanted > 0 && !me.wantedSeen);
+      this.hud.setBounty(me.bounty, me.bountyTimer);
+      if (this.sim.players.size > 1) this.hud.others = [...this.sim.players.values()].filter((p) => p.state.id !== this.localId).map((p) => p.state);
+      else if (this.hud.others.length) this.hud.others = [];
       this.updateSiren(me);
     }
   }

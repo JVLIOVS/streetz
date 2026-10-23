@@ -16,6 +16,8 @@ import { PoliceSystem, type HeliState } from './police';
 import { MissionSystem } from './missions';
 import { ProgressSystem } from './progress';
 import { ContractSystem } from './contracts';
+import { SocialSystem } from './social';
+import { HeistSystem } from './heist';
 import { REPAINT_PRICE } from '../data/police';
 import { levelOf, requiredLevel } from '../data/progression';
 import { GOLD_PAINT } from '../data/contracts';
@@ -64,6 +66,7 @@ export type SimEvent =
   | { type: 'horn'; vehicle: number }
   | { type: 'wanted'; playerId: string; level: number }
   | { type: 'busted'; playerId: string }
+  | { type: 'bounty'; playerId: string; amount: number }
   | { type: 'crate'; playerId: string; text: string; rare: boolean }
   | { type: 'levelup'; playerId: string; level: number; unlocks: string[]; cash: number }
   | { type: 'chaos'; playerId: string; label: string; points: number }
@@ -144,6 +147,8 @@ export class SimWorld {
   readonly missions: MissionSystem;
   readonly progress: ProgressSystem;
   readonly contracts: ContractSystem;
+  readonly social: SocialSystem;
+  readonly heist: HeistSystem;
   /** Local calendar day number (set by the game from the clock; 0 = unknown). */
   day = 0;
   /** Wall-clock time in seconds (set by the game; used by hideout businesses). */
@@ -174,6 +179,8 @@ export class SimWorld {
     this.missions = new MissionSystem(this);
     this.progress = new ProgressSystem(this);
     this.contracts = new ContractSystem(this);
+    this.social = new SocialSystem(this);
+    this.heist = new HeistSystem(this);
     this.props = new PropField(map.props);
     this.buildProps();
     if (role === 'authority') for (const f of map.featured) this.spawnVehicle(f.type as VehicleType, f.x, 0.3, f.z, f.yaw, 'none', false);
@@ -206,6 +213,8 @@ export class SimWorld {
     if (p.state.vehicle >= 0) this.leaveVehicle(p);
     this.missions.drop(id);
     this.progress.drop(id);
+    this.social.drop(id);
+    if (this.heist.isMember(p)) this.heist.leave(p);
     this.physics.removeRigidBody(p.body);
     this.players.delete(id);
   }
@@ -415,6 +424,8 @@ export class SimWorld {
     this.missions.update();
     this.progress.update();
     this.contracts.update();
+    this.social.update();
+    this.heist.update();
     if (this.tick % 20 === 0) this.managePopulation();
     for (const p of this.players.values()) p.state.context = this.computeContext(p);
     this.physics.step();
@@ -829,6 +840,11 @@ export class SimWorld {
     s.speed = Math.hypot(vx, vz);
   }
 
+  /** Bank alarm (co-op heist): the police comes in force. */
+  alarm(p: Player) {
+    this.crime(p, 'robbery_big', p.state.x, p.state.z, null, true);
+  }
+
   /** Police lost track of the player. */
   clearWanted(p: Player, message?: string) {
     const s = p.state;
@@ -859,7 +875,8 @@ export class SimWorld {
     }
     this.events.push({ type: 'busted', playerId: s.id });
     this.progress.breakCombo(p);
-    if (s.mission) this.missions.abort(p, 'Mission échouée : arrêté');
+    if (this.heist.isMember(p)) this.heist.leave(p, 'Arrêté : ta part du butin est saisie');
+    else if (s.mission) this.missions.abort(p, 'Mission échouée : arrêté');
     this.toast(p, `ARRÊTÉ ! Amende -${fine.toLocaleString('fr-FR')} €, armes confisquées`);
   }
 
@@ -892,11 +909,20 @@ export class SimWorld {
       case 'garage_out':
         this.garageOut(p, Number(arg));
         break;
+      case 'crew':
+        if (arg) this.social.crew(p, arg);
+        break;
+      case 'heist':
+        this.heist.start(p);
+        break;
       case 'collect':
         if (arg) this.collectBusiness(p, arg);
         break;
       case 'mission':
-        if (arg === 'abort') this.missions.abort(p);
+        if (arg === 'abort') {
+          if (this.heist.isMember(p)) this.heist.leave(p);
+          else this.missions.abort(p);
+        }
         else if (arg) this.missions.start(p, arg);
         break;
       case 'horn':
@@ -993,6 +1019,12 @@ export class SimWorld {
         break;
       case 'fence':
         this.contracts.sell(p);
+        break;
+      case 'heist':
+        this.heist.start(p);
+        break;
+      case 'crew_join':
+        this.social.crew(p, `join:${ctx.target}`);
         break;
     }
   }
@@ -1099,7 +1131,7 @@ export class SimWorld {
       }
       return null;
     }
-    const job = this.missions.context(p);
+    const job = this.missions.context(p) ?? this.heist.context(p) ?? this.social.context(p);
     if (job) return job;
     // Vehicles
     let best: Vehicle | null = null;
@@ -1511,7 +1543,7 @@ export class SimWorld {
         if (t.ped.police) t.ped.police.target = s.id;
       } else this.crime(p, t.ped.alive ? (melee ? 'assault' : 'shoot_person') : 'knockout', t.ped.state.x, t.ped.state.z, t.ped, !melee);
     } else if (t.player) {
-      this.damagePlayer(t.player, damage * 0.8);
+      if (!this.social.friendly(p, t.player)) this.damagePlayer(t.player, damage * 0.8, p);
     } else if (t.vehicle) {
       t.vehicle.state.health -= damage * 0.8;
       t.vehicle.lastHitBy = s.id;
@@ -1586,7 +1618,7 @@ export class SimWorld {
     return this.map.terrain ? terrainHeight(this.map.terrain, x, z) : 0;
   }
 
-  damagePlayer(p: Player, amount: number) {
+  damagePlayer(p: Player, amount: number, by?: Player) {
     const s = p.state;
     if (s.dead) return;
     const absorbed = Math.min(s.armor, amount * 0.7);
@@ -1599,7 +1631,8 @@ export class SimWorld {
       s.dead = true;
       p.respawnTimer = 3.5;
       if (s.vehicle >= 0) this.leaveVehicle(p);
-      this.toast(p, 'K.O. !');
+      this.toast(p, by && by !== p ? `K.O. par ${by.state.name} !` : 'K.O. !');
+      if (by && by !== p) this.social.onPlayerKo(p, by);
     }
   }
 

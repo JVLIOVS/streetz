@@ -873,3 +873,94 @@ describe('hideout businesses', () => {
     expect(s.money).toBe(2800 + 400 * 8);
   });
 });
+
+describe('multiplayer social', () => {
+  async function two() {
+    const w = await world();
+    w.addPlayer('p2', { ...map.spawn, x: map.spawn.x + 1.5 });
+    run(w, 3);
+    return { w, a: w.players.get('p1')!, b: w.players.get('p2')! };
+  }
+
+  it('a 4-star player gets a bounty; the hunter who knocks them out cashes it', async () => {
+    const { w, a, b } = await two();
+    b.state.wanted = 4;
+    run(w, 2);
+    expect(b.state.bounty).toBeGreaterThan(0);
+    const prize = b.state.bounty;
+    const money = a.state.money;
+    w.damagePlayer(b, 999, a);
+    expect(b.state.bounty).toBe(0);
+    expect(a.state.money).toBeGreaterThanOrEqual(money + prize);
+    expect(a.state.week.bounties).toBe(1);
+  });
+
+  it('surviving the bounty pays double', async () => {
+    const { w, b } = await two();
+    b.state.wanted = 4;
+    run(w, 2);
+    const prize = b.state.bounty;
+    const money = b.state.money;
+    b.state.bountyTimer = 0.01;
+    run(w, 2);
+    expect(b.state.money).toBeGreaterThanOrEqual(money + prize * 2);
+  });
+
+  it('no bounty in solo', async () => {
+    const w = await world();
+    run(w, 2);
+    P(w).wanted = 5;
+    run(w, 2);
+    expect(P(w).bounty).toBe(0);
+  });
+
+  it('crews: found, join next to a member, no friendly fire', async () => {
+    const { w, a, b } = await two();
+    run(w, 1, (t) => [act(t, 'crew', 'create:Les Loups')]);
+    expect(a.state.crew?.name).toBe('LES LOUPS');
+    run(w, 2);
+    expect(b.state.context?.kind).toBe('crew_join');
+    w.step([{ type: 'action', playerId: 'p2', tick: w.tick, action: 'use' }]);
+    expect(b.state.crew?.name).toBe('LES LOUPS');
+    expect(w.social.friendly(a, b)).toBe(true);
+  });
+
+  it('co-op heist: needs two players, drill together, each one carries a share to the drop-off', async () => {
+    const { w, a, b } = await two();
+    w.density = { peds: 0, traffic: 0, parkedRadius: 0 };
+    const spot = w.heist.spot;
+    for (const p of [a, b]) w.teleportPlayer(p, spot.x + (p === a ? 0 : 1.5), 0.5, spot.z);
+    run(w, 3);
+    expect(a.state.context?.kind).toBe('heist');
+    run(w, 1, (t) => [act(t, 'heist')]);
+    expect(a.state.mission).toBe('coffre');
+    expect(b.state.mission).toBe('coffre');
+    // both walk into the bank
+    const bank = map.interiors.find((i) => i.kind === 'bank')!;
+    const room = w.rooms.get(bank.id)!;
+    for (const p of [a, b]) {
+      p.state.interior = bank.id;
+      w.teleportPlayer(p, room.spawn.x, 0.3, room.spawn.z);
+    }
+    run(w, 3);
+    expect(a.state.wanted).toBeGreaterThanOrEqual(3);
+    // to the vault
+    const vx = bank.origin.x + bank.w / 2 - 3;
+    const vz = bank.origin.z - bank.d / 2 + 1.8;
+    for (const p of [a, b]) w.teleportPlayer(p, vx + (p === a ? 0.5 : -0.5), 0.3, vz);
+    for (const p of [a, b]) w.clearWanted(p);
+    run(w, 60 * 31);
+    expect(a.state.objective).toContain('dépôt');
+    // out to the drop-off
+    const drop = w.contracts.fence;
+    const money = a.state.money;
+    for (const p of [a, b]) {
+      p.state.interior = null;
+      w.teleportPlayer(p, drop.x, 0.5, drop.z + (p === a ? 0 : 2));
+    }
+    run(w, 3);
+    expect(a.state.mission).toBeNull();
+    expect(a.state.money).toBeGreaterThanOrEqual(money + 12000);
+    expect(a.state.week.heists).toBe(1);
+  });
+});

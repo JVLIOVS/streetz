@@ -15,6 +15,7 @@ import { GameRenderer } from './render/renderer';
 import { SimWorld } from './sim/world';
 import { Hud } from './ui/hud';
 import { localDay, nowSeconds } from './core/clock';
+import { CREW_PRICE } from './data/social';
 
 const $ = (id: string) => document.getElementById(id)!;
 const params = new URLSearchParams(location.search);
@@ -251,7 +252,40 @@ async function launch(map: MapData, assets: GameAssets, quality: QualityLevel, s
   const qButtons = [...$('quality').querySelectorAll('button')] as HTMLButtonElement[];
   const markQuality = () => qButtons.forEach((b) => b.classList.toggle('on', b.dataset.q === view.quality));
   markQuality();
+  // crew: found one (name + price) or leave it, from the pause menu
+  const crewBox = $('crew-box');
+  const renderCrew = () => {
+    const c = game.player.crew;
+    crewBox.innerHTML = '';
+    if (c) {
+      const tag = document.createElement('span');
+      tag.className = 'tag';
+      tag.style.borderColor = `#${c.color.toString(16).padStart(6, '0')}`;
+      tag.textContent = `Crew [${c.name}]`;
+      const leave = document.createElement('button');
+      leave.textContent = 'Quitter';
+      leave.addEventListener('click', () => {
+        game.sendAction('crew', 'leave');
+        setTimeout(renderCrew, 150);
+      });
+      crewBox.append(tag, leave);
+    } else {
+      const input = document.createElement('input');
+      input.placeholder = 'Nom du crew';
+      input.maxLength = 12;
+      const make = document.createElement('button');
+      make.textContent = `Fonder · ${CREW_PRICE} €`;
+      make.addEventListener('click', () => {
+        if (!input.value.trim()) return input.focus();
+        game.sendAction('crew', `create:${input.value}`);
+        // the sim answers on the next tick (paused in solo: step once)
+        setTimeout(renderCrew, 150);
+      });
+      crewBox.append(input, make);
+    }
+  };
   tap($('btn-pause'), () => {
+    renderCrew();
     $('recap').innerHTML = game.recapHtml();
     game.setPaused(true);
     pause.classList.remove('hidden');

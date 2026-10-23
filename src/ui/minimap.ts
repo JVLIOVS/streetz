@@ -129,6 +129,19 @@ export class Minimap {
         g.fillText(open ? '!' : '🔒', mx, mz + 1 / k);
       }
     }
+    // co-op heist start
+    if (!me.mission) {
+      const [hx, hz] = at(sim.heist.spot.x, sim.heist.spot.z);
+      g.fillStyle = '#ff3b4f';
+      g.strokeStyle = '#fff';
+      g.lineWidth = 2 / k;
+      g.beginPath();
+      g.arc(hx, hz, 9 / k, 0, Math.PI * 2);
+      g.fill();
+      g.stroke();
+      g.fillStyle = '#fff';
+      g.fillText('$$', hx, hz + 1 / k);
+    }
     // fence (receleur)
     {
       const f = sim.contracts.fence;
@@ -230,7 +243,13 @@ export class Minimap {
         for (const ped of sim.peds.values()) if (ped.state.role !== 'civ' && ped.alive) dot(ped.state.x, ped.state.z, 3.5, police);
         for (const v of sim.vehicles.values()) if (v.state.siren) dot(v.state.x, v.state.z, 5, police);
         for (const h of sim.police.helis.values()) if (h.state.down < 0) dot(h.state.x, h.state.z, 6.5, police);
-        for (const p of sim.players.values()) if (me && p.state.id !== me.id && !p.state.interior) dot(p.state.x, p.state.z, 5, '#ffd23f');
+        for (const p of sim.players.values()) {
+          const o = p.state;
+          if (!me || o.id === me.id || o.interior) continue;
+          // bounty targets blink red and big; crewmates in the crew color
+          if (o.bounty > 0) dot(o.x, o.z, blink ? 8 : 6, '#ff3b4f');
+          else dot(o.x, o.z, 5, o.crew && me.crew?.name === o.crew.name ? `#${o.crew.color.toString(16).padStart(6, '0')}` : '#ffd23f');
+        }
         if (me) this.drawMissions(g, k, sim, me, at, dot, blink);
       }
       g.restore();
