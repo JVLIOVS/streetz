@@ -51,6 +51,9 @@ function preventZoom() {
   addEventListener(
     'touchend',
     (e) => {
+      // only on the game screen: menus need their quick taps to become clicks
+      const t = e.target as Element | null;
+      if (!t?.closest?.('#hud, #touch')) return;
       const now = performance.now();
       if (now - lastTouch < 350 && e.cancelable) e.preventDefault();
       lastTouch = now;
