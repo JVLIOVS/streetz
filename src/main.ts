@@ -30,7 +30,8 @@ const DENSITY: Record<QualityLevel, { peds: number; traffic: number; parkedRadiu
 };
 
 /** `public`: the shared open world (rooms PUB1, PUB2…, the first player there hosts). */
-type Mode = { kind: 'solo' } | { kind: 'host'; t: Transport; code: string; public?: boolean } | { kind: 'guest'; t: Transport; code: string; id: string; host: string; public?: boolean };
+/** Solo `after`: what to do once the prologue is over (first time online: prologue first). */
+type Mode = { kind: 'solo'; after?: string } | { kind: 'host'; t: Transport; code: string; public?: boolean } | { kind: 'guest'; t: Transport; code: string; id: string; host: string; public?: boolean };
 
 const PUBLIC_SHARDS = 6;
 
@@ -130,6 +131,12 @@ async function boot() {
   };
 
   $('btn-play').addEventListener('click', () => start({ kind: 'solo' }));
+  /** First time going online: play the prologue in solo first, then come back here automatically. */
+  const prologueFirst = (after: string) => {
+    if (loadSave().profile.prologue) return false;
+    void start({ kind: 'solo', after });
+    return true;
+  };
   /** Open world: join the first public room with a host and room left, or host an empty one. */
   const joinPublic = async () => {
     if (busy) return;
@@ -160,8 +167,24 @@ async function boot() {
     }
     busy = false;
   };
-  $('btn-public').addEventListener('click', () => void joinPublic());
-  if (params.get('auto') === 'public') void joinPublic();
+  $('btn-public').addEventListener('click', () => prologueFirst('public') || void joinPublic());
+  const hostGame = async () => {
+    if (busy) return;
+    void enterFullscreen();
+    const code = newRoomCode();
+    netStatus.textContent = `Création de la partie ${code}…`;
+    const t = await join(code);
+    await start({ kind: 'host', t, code });
+  };
+  const auto = params.get('auto') ?? '';
+  if (auto === 'public') void joinPublic();
+  else if (auto === 'host') void hostGame();
+  else if (auto.startsWith('join:')) {
+    $('menu').classList.add('hidden');
+    $('multi').classList.remove('hidden');
+    codeIn.value = auto.slice(5);
+    netStatus.textContent = 'Prologue terminé : touche REJOINDRE';
+  }
   $('btn-multi').addEventListener('click', () => {
     $('menu').classList.add('hidden');
     $('multi').classList.remove('hidden');
@@ -171,14 +194,7 @@ async function boot() {
     $('menu').classList.remove('hidden');
     netStatus.textContent = '';
   });
-  $('btn-host').addEventListener('click', async () => {
-    if (busy) return;
-    void enterFullscreen();
-    const code = newRoomCode();
-    netStatus.textContent = `Création de la partie ${code}…`;
-    const t = await join(code);
-    await start({ kind: 'host', t, code });
-  });
+  $('btn-host').addEventListener('click', () => prologueFirst('host') || void hostGame());
   $('btn-join').addEventListener('click', async () => {
     if (busy) return;
     const code = codeIn.value.trim().toUpperCase();
@@ -186,6 +202,7 @@ async function boot() {
       netStatus.textContent = 'Entre le code à 4 caractères de ton pote';
       return;
     }
+    if (prologueFirst(`join:${code}`)) return;
     busy = true;
     void enterFullscreen();
     netStatus.textContent = `Connexion à la partie ${code}…`;
@@ -383,7 +400,20 @@ async function launch(map: MapData, assets: GameAssets, quality: QualityLevel, s
   if (mode.kind !== 'solo' && mode.public) hud.toast(mode.kind === 'host' ? 'Monde ouvert : tu es le premier, les autres te rejoignent ici' : `Monde ouvert : ${sim.players.size} joueurs connectés`, 4);
   else if (mode.kind === 'host') hud.toast(`Partie ${mode.code} : donne ce code à tes potes !`, 6);
   else if (mode.kind === 'guest') hud.toast(`Connecté à la partie ${mode.code}`, 3);
+  else if (mode.after) hud.toast('Avant d’aller en ligne : le prologue avec Momo (✕ pour le passer)', 5);
   else hud.toast('Joystick à gauche · glisse à droite pour la caméra', 3.5);
+  // prologue done (or skipped): remember it, and go online if that was the plan
+  game.onPrologueDone = () => {
+    persist();
+    if (mode.kind !== 'solo' || !mode.after) return;
+    const after = mode.after;
+    hud.toast('Direction le jeu en ligne…', 4);
+    setTimeout(() => {
+      const q = new URLSearchParams(location.search);
+      q.set('auto', after);
+      location.replace(`${location.pathname}?${q}`);
+    }, 6500);
+  };
 
   (window as unknown as { __streetz: unknown }).__streetz = {
     game,

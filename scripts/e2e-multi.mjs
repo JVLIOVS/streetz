@@ -21,7 +21,22 @@ const fail = (m) => {
   console.error('FAIL:', m);
 };
 try {
+  // First time online = prologue in solo first. Check it, then use profiles that already did it.
+  {
+    const fresh = await browser.newContext({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
+    const p = await fresh.newPage();
+    await p.goto(base);
+    await p.locator('#btn-public').waitFor({ state: 'visible', timeout: 60000 });
+    await p.locator('#btn-public').tap();
+    await p.waitForFunction(() => window.__streetz?.sim.players.get(window.__streetz.localId)?.state.mission === 'tuto', null, { timeout: 60000 });
+    results.prologueBeforeOnline = await p.evaluate(() => ({ role: window.__streetz.sim.role, players: window.__streetz.sim.players.size, net: !!window.__streetz.net }));
+    if (results.prologueBeforeOnline.net) fail('went online before the prologue');
+    await fresh.close();
+  }
   const ctx = await browser.newContext({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
+  await ctx.addInitScript(() => {
+    if (!localStorage.getItem('streetz.save')) localStorage.setItem('streetz.save', JSON.stringify({ version: 2, settings: { quality: 'low', music: true, sfx: true }, profile: { prologue: true, money: 500 } }));
+  });
   const alice = await ctx.newPage();
   const bob = await ctx.newPage();
   for (const [n, p] of [['alice', alice], ['bob', bob]]) {

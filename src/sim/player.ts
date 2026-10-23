@@ -411,7 +411,7 @@ export function applyProfile(s: PlayerState, p: Profile) {
   s.streak = p.streak.count;
   s.streakDay = p.streak.day;
   s.biz = p.biz.map((b) => ({ ...b }));
-  s.tutorialDone = p.tutorial;
+  s.tutorialDone = p.prologue;
   s.crew = p.crew ? { ...p.crew } : null;
   s.bank = p.bank;
   s.fines = p.fines;
@@ -437,7 +437,8 @@ export function profileOf(s: PlayerState): Profile {
     daily: { day: s.contractsDay, progress: s.contracts.map((c) => c.progress) },
     streak: { day: s.streakDay, count: s.streak },
     biz: s.biz.map((b) => ({ ...b })),
-    tutorial: s.tutorialDone,
+    tutorial: true,
+    prologue: s.tutorialDone,
     crew: s.crew ? { ...s.crew } : null,
     week: { ...s.week },
     bank: s.bank,

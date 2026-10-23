@@ -39,6 +39,8 @@ export class Game {
   private raf = 0;
   private lastWanted = 0;
   onSave?: () => void;
+  /** The prologue is over (finished or skipped). */
+  onPrologueDone?: () => void;
   net: NetSession | null = null;
   readonly menu: MenuPanel;
   private audio: AudioDirector;
@@ -233,6 +235,7 @@ export class Game {
           break;
         case 'freeRoam':
           if (e.playerId === this.localId) {
+            this.onPrologueDone?.();
             this.hud.banner('PROLOGUE TERMINÉ', 'LA VILLE EST À TOI', 'Missions « ! » · contrats 📋 · receleur € · colis 📦 · ou fais ce que tu veux', 6);
             this.sound.fanfare();
           }
@@ -241,6 +244,7 @@ export class Game {
           this.sound.alert();
           break;
         case 'mission':
+          if (e.playerId === this.localId && e.state === 'fail' && e.name === missionById('tuto')?.name) this.onPrologueDone?.();
           if (e.playerId === this.localId) {
             if (e.state === 'done') this.sound.cash();
             else if (e.state === 'fail') this.sound.alert();
