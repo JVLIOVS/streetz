@@ -1,4 +1,5 @@
 import type { VehicleType } from './vehicles';
+import type { WeaponId } from './weapons';
 
 /**
  * Story missions, as pure data. Each mission is a list of steps run by the
@@ -25,7 +26,14 @@ export type MissionStep =
   /** Tutorial: knock somebody out / drive any vehicle / park it in your garage. */
   | { kind: 'ko'; text: string }
   | { kind: 'drive'; text: string }
-  | { kind: 'store'; text: string };
+  | { kind: 'store'; text: string }
+  /** Hold this weapon (switch with the weapon button). */
+  | { kind: 'equip'; text: string; weapon: WeaponId }
+  /** Break street props. */
+  | { kind: 'break'; text: string; count: number };
+
+/** Extras any step can have: a partner line when it starts, a weapon handed over. */
+export type MissionStepFull = MissionStep & { say?: string; give?: { weapon: WeaponId; ammo: number } };
 
 export interface MissionDef {
   id: string;
@@ -39,27 +47,46 @@ export interface MissionDef {
   requires?: string;
   /** Started automatically (tutorial), no marker on the map. */
   auto?: boolean;
+  /** A partner (bot) who follows you and talks you through the job. */
+  partner?: string;
+  /** Partner's last words. */
+  outro?: string;
   reward: number;
   rep: number;
-  steps: MissionStep[];
+  steps: MissionStepFull[];
 }
 
 export const MISSIONS: MissionDef[] = [
   {
+    // The prologue: a bank job with Momo, who teaches every button on the way.
     id: 'tuto',
-    name: 'Bienvenue à Belleplace',
+    name: 'Le premier coup',
     giver: 'Momo',
-    pitch: 'Nouveau dans le quartier ? Montre-moi ce que tu vaux.',
+    pitch: 'Yo, moi c’est Momo. On va braquer la Banque Centrale, toi et moi. Mais d’abord, montre-moi ce que tu vaux.',
     x: 0,
     z: 0,
     auto: true,
-    reward: 500,
-    rep: 100,
+    partner: 'Momo',
+    reward: 1500,
+    rep: 250,
     steps: [
-      { kind: 'ko', text: 'Mets un passant K.O. (bouton rouge)' },
-      { kind: 'drive', text: 'Vole une voiture (approche-toi, bouton Monter)' },
-      { kind: 'store', text: 'Fonce à ta planque et gare-la : elle sera à toi' },
+      { kind: 'ko', text: 'Mets un passant K.O. (bouton rouge, tape plusieurs fois)', say: 'Choisis un passant et mets-le K.O. Le bouton rouge, c’est tes poings.' },
+      {
+        kind: 'equip',
+        weapon: 'pistol',
+        give: { weapon: 'pistol', ammo: 36 },
+        text: 'Sors le pistolet : touche l’arme en haut à droite',
+        say: 'Pas mal. Tiens, un pistolet. Touche ton arme en haut à droite pour le sortir.',
+      },
+      { kind: 'break', count: 3, text: 'Tire sur 3 objets de la rue (la visée est automatique)', say: 'Entraîne-toi : tire sur des poubelles ou des lampadaires. Ça vise tout seul.' },
+      { kind: 'drive', text: 'Vole une voiture : approche-toi d’une portière, bouton Monter', say: 'Il nous faut une caisse. Vole celle que tu veux, je monte avec toi.' },
+      { kind: 'door', interior: 'bank', text: 'Conduis jusqu’à la banque (colonne jaune, flèche sur la carte)', say: 'Direction la Banque Centrale. Suis la colonne jaune, gaz à droite, frein à gauche.' },
+      { kind: 'rob', interior: 'bank', text: 'Entre et braque le comptoir : reste près jusqu’au bout', say: 'On entre. Va au comptoir, appuie sur Braquer et reste collé jusqu’à la fin. Je surveille la porte.' },
+      { kind: 'lose', text: 'Sème la police : sors du cercle de la carte et cache-toi', say: 'L’alarme ! Sors, prends une autre caisse ou un scooter, et sème-les : quitte le cercle sur la carte et planque-toi. Le garage 🔧 repeint les voitures.' },
+      { kind: 'door', interior: 'hideout', text: 'Rentre à ta planque pour partager le butin', say: 'On les a semés ! Rendez-vous à ta planque, maison jaune sur la carte.' },
     ],
+    outro:
+      'Bien joué, associé. Maintenant la ville est à toi : missions avec les « ! » jaunes, contrats du jour 📋, le receleur €, les colis… ou fous juste le bordel. À plus !',
   },
   {
     id: 'colis',

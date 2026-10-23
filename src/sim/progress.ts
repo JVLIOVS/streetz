@@ -134,6 +134,7 @@ export class ProgressSystem {
 
   onProp(p: Player) {
     this.chaos(p, CHAOS_POINTS.prop);
+    this.w.missions.onProp(p);
     this.w.contracts.track(p, 'prop', 1);
   }
 

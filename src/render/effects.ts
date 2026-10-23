@@ -26,7 +26,9 @@ const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
 const _p = new THREE.Vector3();
 const _s = new THREE.Vector3();
+const MAX_POOLS = 30;
 const C = {
+  blood: new THREE.Color(0x8a0a12),
   smoke: new THREE.Color(0x6b6b70),
   dark: new THREE.Color(0x2a2a2e),
   fire: new THREE.Color(0xff7a1a),
@@ -49,6 +51,9 @@ export class Effects {
   private tracerLife = new Float32Array(MAX_TRACERS);
   private tracerNext = 0;
   private money: THREE.InstancedMesh;
+  private pools: THREE.InstancedMesh;
+  private poolData = Array.from({ length: MAX_POOLS }, () => ({ x: 0, y: 0, z: 0, age: 0, size: 1, rot: 0, on: false }));
+  private poolNext = 0;
   private crates: THREE.InstancedMesh;
   private crateGlow: THREE.InstancedMesh;
   private guns: THREE.InstancedMesh;
@@ -101,6 +106,36 @@ export class Effects {
     this.root.add(this.guns, this.gunGlow);
 
     this.root.add(this.puffMesh, tracers, this.money);
+    // blood pools: flat dark-red discs that spread under knocked-out people
+    const poolGeo = new THREE.CircleGeometry(1, 14);
+    poolGeo.rotateX(-Math.PI / 2);
+    // irregular outline
+    const pos = poolGeo.getAttribute('position') as THREE.BufferAttribute;
+    for (let i = 1; i < pos.count; i++) {
+      const k = 0.75 + ((i * 7919) % 13) / 30;
+      pos.setXYZ(i, pos.getX(i) * k, 0, pos.getZ(i) * k);
+    }
+    this.pools = new THREE.InstancedMesh(
+      poolGeo,
+      new THREE.MeshBasicMaterial({ color: 0x5e0610, transparent: true, opacity: 0.88, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }),
+      MAX_POOLS,
+    );
+    this.pools.frustumCulled = false;
+    this.pools.count = 0;
+    this.pools.renderOrder = 1;
+    this.root.add(this.pools);
+  }
+
+  /** Blood spurting from a hit (red droplets falling). */
+  bleed(x: number, y: number, z: number, amount = 6) {
+    for (let k = 0; k < amount; k++) this.spawn(x + rnd(0.15), y + rnd(0.2), z + rnd(0.15), rnd(2.2), 1 + Math.random() * 2.2, rnd(2.2), 0.07 + Math.random() * 0.06, 0.1, 0.45 + Math.random() * 0.3, C.blood, 12);
+  }
+
+  /** A pool of blood spreading under someone on the ground. */
+  bloodPool(x: number, y: number, z: number) {
+    const p = this.poolData[this.poolNext];
+    this.poolNext = (this.poolNext + 1) % MAX_POOLS;
+    Object.assign(p, { x, y: y + 0.03, z, age: 0, size: 0.7 + Math.random() * 0.6, rot: Math.random() * 6.28, on: true });
   }
 
   private spawn(x: number, y: number, z: number, vx: number, vy: number, vz: number, size: number, grow: number, life: number, color: THREE.Color, g = 0) {
@@ -170,6 +205,23 @@ export class Effects {
 
   update(dt: number, pickups: Map<number, PickupState>) {
     this.time += dt;
+    // blood pools grow for 2 s, stay, then dry up after a minute
+    let np = 0;
+    for (const b of this.poolData) {
+      if (!b.on) continue;
+      b.age += dt;
+      if (b.age > 75) {
+        b.on = false;
+        continue;
+      }
+      const grow = Math.min(1, b.age / 2.2);
+      const dry = b.age > 60 ? 1 - (b.age - 60) / 15 : 1;
+      _q.setFromAxisAngle(_p.set(0, 1, 0), b.rot);
+      _m.compose(_p.set(b.x, b.y, b.z), _q, _s.set(b.size * (0.25 + 0.75 * grow) * dry, 1, b.size * (0.25 + 0.75 * grow) * dry));
+      this.pools.setMatrixAt(np++, _m);
+    }
+    this.pools.count = np;
+    this.pools.instanceMatrix.needsUpdate = true;
     let n = 0;
     for (const p of this.puffs) {
       if (!p.alive) continue;

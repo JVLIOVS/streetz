@@ -92,6 +92,8 @@ export class GameRenderer {
     this.vehicles = new VehicleRenderer(assets);
     this.interiors = new InteriorsView(map);
     this.missions = new MissionMarkers(sim);
+    // pools sit on the real ground (sidewalks and squares are raised above y = 0)
+    this.peds.onBlood = (kind, x, y, z) => (kind === 'pool' ? this.effects.bloodPool(x, sim.groundAt(x, z, y + 0.8) ?? y, z) : this.effects.bleed(x, y, z));
     this.scene.add(this.vehicles.root, this.peds.root, this.effects.root, this.interiors.root, this.helis.root, this.missions.root);
 
     this.player = { view: new HumanView(DEFAULT_LOOK), seq: 0, weapon: '', key: '-1|{}' };

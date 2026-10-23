@@ -83,6 +83,7 @@ export type NetPlayer = Pick<
   | 'missionTimer'
   | 'waypoint'
   | 'missionTargets'
+  | 'ally'
   | 'chaos'
   | 'chaosMult'
   | 'chaosTimer'
@@ -157,6 +158,7 @@ function packFull(s: PlayerState): NetPlayer {
     missionTimer: q(s.missionTimer),
     waypoint: s.waypoint ? [q(s.waypoint[0]), q(s.waypoint[1])] : null,
     missionTargets: s.missionTargets,
+    ally: s.ally,
     chaos: Math.round(s.chaos),
     chaosMult: s.chaosMult,
     chaosTimer: q(s.chaosTimer),

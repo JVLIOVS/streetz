@@ -813,29 +813,83 @@ describe('surprises', () => {
 });
 
 describe('tutorial', () => {
-  it('starts by itself for new players: K.O., steal a car, park it at the hideout', async () => {
+  it('the prologue: Momo walks you through fists, pistol, a car, the bank job, the escape, the hideout', async () => {
     const w = await world();
+    w.density = { peds: 0, traffic: 0, parkedRadius: 0 };
+    const p = w.players.get('p1')!;
     const s = P(w);
     s.tutorialDone = false;
     run(w, 61);
     expect(s.mission).toBe('tuto');
+    // a partner follows you
+    expect(s.ally).toBeGreaterThan(0);
+    const ally = w.peds.get(s.ally)!;
+    w.damagePed(ally, 999, p, s.x, s.z);
+    expect(ally.alive).toBe(true);
+    expect(w.drainEvents().some((e) => e.type === 'say')).toBe(true);
+    // 1. fists
     const ped = w.spawnPed(s.x + 1, s.z, { mode: 'idle' });
-    w.damagePed(ped, 999, w.players.get('p1')!, s.x, s.z);
+    w.damagePed(ped, 999, p, s.x, s.z);
     run(w, 2);
     expect(s.missionStep).toBe(1);
-    const home = map.interiors.find((i) => i.kind === 'hideout')!;
-    const v = w.spawnVehicle('compact', home.door.x, 0.3, home.door.z + 6, 0, 'none', false);
-    w.teleportPlayer(w.players.get('p1')!, home.door.x + 2.2, 0.5, home.door.z + 6);
-    run(w, 3);
+    // 2. a pistol is handed over: take it out with the weapon button
+    expect(s.weapons).toContain('pistol');
+    run(w, 1, (t) => [act(t, 'weapon')]);
+    run(w, 2);
+    expect(s.missionStep).toBe(2);
+    // 3. shoot 3 props
+    for (let i = 0; i < 3; i++) w.progress.onProp(p);
+    expect(s.missionStep).toBe(3);
+    // 4. steal a car
+    const v = w.spawnVehicle('compact', s.x + 2.4, 0.3, s.z, 0, 'none', false);
+    run(w, 2);
     run(w, 1, (t) => [act(t, 'use')]);
     expect(s.vehicle).toBe(v.state.id);
+    run(w, 2);
+    expect(s.missionStep).toBe(4);
+    // 5. drive to the bank
+    const bank = map.interiors.find((i) => i.kind === 'bank')!;
+    run(w, 1, (t) => [act(t, 'use')]); // get out
+    w.teleportPlayer(p, bank.door.x, 0.5, bank.door.z + 2);
     run(w, 3);
-    expect(s.missionStep).toBe(2);
-    expect(s.context?.kind).toBe('store_vehicle');
+    expect(s.missionStep).toBe(5);
+    // 6. rob it (the partner comes in too)
+    w.teleportPlayer(p, bank.door.x, 0.5, bank.door.z + 1.5);
+    run(w, 2);
     run(w, 1, (t) => [act(t, 'use')]);
+    expect(s.interior).toBe(bank.id);
+    const room = w.rooms.get(bank.id)!;
+    w.teleportPlayer(p, room.counter!.x, 0.3, room.counter!.z);
+    run(w, 3);
+    expect(s.weapon).not.toBe('fist');
+    run(w, 1, (t) => [act(t, 'use')]);
+    run(w, 60 * 11);
+    expect(s.missionStep).toBe(6);
+    expect(Math.hypot(w.peds.get(s.ally)!.state.x - s.x, w.peds.get(s.ally)!.state.z - s.z)).toBeLessThan(15);
+    // 7. lose the police, 8. back to the hideout
+    w.clearWanted(p);
+    run(w, 2);
+    expect(s.missionStep).toBe(7);
+    const home = map.interiors.find((i) => i.kind === 'hideout')!;
+    s.interior = null;
+    w.drainEvents();
+    w.teleportPlayer(p, home.door.x, 0.5, home.door.z + 2);
+    run(w, 3);
     expect(s.tutorialDone).toBe(true);
-    expect(s.garage.length).toBe(1);
     expect(s.mission).toBeNull();
+    expect(w.peds.has(ally.state.id)).toBe(false);
+    expect(w.drainEvents().some((e) => e.type === 'freeRoam')).toBe(true);
+  });
+
+  it('the prologue survives a K.O.', async () => {
+    const w = await world();
+    const s = P(w);
+    s.tutorialDone = false;
+    run(w, 61);
+    w.damagePlayer(w.players.get('p1')!, 999);
+    run(w, 60 * 5);
+    expect(s.dead).toBe(false);
+    expect(s.mission).toBe('tuto');
   });
 
   it('can be skipped', async () => {

@@ -75,6 +75,8 @@ export interface PlayerState {
   /** Where to go next (minimap / 3D marker), and mission entities to show (ped or vehicle ids). */
   waypoint: [number, number] | null;
   missionTargets: number[];
+  /** Mission partner (ped id) shown with a green marker, -1 = none. */
+  ally: number;
   /** Chaos combo: score, multiplier (1–5) and seconds left before it is cashed in. */
   chaos: number;
   chaosMult: number;
@@ -200,6 +202,7 @@ export class Player {
       missionTimer: -1,
       waypoint: null,
       missionTargets: [],
+      ally: -1,
       chaos: 0,
       chaosMult: 1,
       chaosTimer: 0,

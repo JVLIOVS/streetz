@@ -21,6 +21,7 @@ export class MissionMarkers {
   private vips: THREE.Mesh[] = [];
   private heist: THREE.Group;
   private hunted: THREE.Mesh[] = [];
+  private allyMark: THREE.Mesh;
 
   constructor(private sim: SimWorld) {
     const beamGeo = new THREE.CylinderGeometry(1.1, 1.1, 3.2, 20, 1, true);
@@ -79,6 +80,9 @@ export class MissionMarkers {
       this.vips.push(d);
       this.root.add(d);
     }
+    this.allyMark = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.5, 4).rotateX(Math.PI), new THREE.MeshBasicMaterial({ color: 0x5ee86a }));
+    this.allyMark.visible = false;
+    this.root.add(this.allyMark);
     const huntGeo = new THREE.ConeGeometry(0.5, 0.9, 4).rotateX(Math.PI);
     for (let i = 0; i < 4; i++) {
       const a = new THREE.Mesh(huntGeo, arrowMat);
@@ -123,6 +127,13 @@ export class MissionMarkers {
       }
     }
     for (let i = h; i < this.hunted.length; i++) this.hunted[i].visible = false;
+    // your mission partner: small green arrow
+    const ally = me && me.ally >= 0 ? this.sim.peds.get(me.ally) : undefined;
+    this.allyMark.visible = !!ally;
+    if (ally) {
+      this.allyMark.position.set(ally.state.x, ally.state.y + 2.4 + bob, ally.state.z);
+      this.allyMark.rotation.y = this.time * 2;
+    }
     const wp = me?.waypoint;
     this.waypoint.visible = !!wp && !indoors;
     if (wp) this.waypoint.position.set(wp[0], this.sim.groundY(wp[0], wp[1]), wp[1]);

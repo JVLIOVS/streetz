@@ -114,6 +114,26 @@ export class Voices {
     n.start(t, Math.random() * 0.5, dur);
   }
 
+  /** Says an exact sentence (mission partner). Interrupts other voices. */
+  say(text: string, seed: number, vol = 1) {
+    if (!this.enabled || typeof speechSynthesis === 'undefined') return;
+    const u = new SpeechSynthesisUtterance(text.replace(/[«»📋€🔧]/g, ''));
+    const voice = this.fr ?? this.en;
+    if (voice) {
+      u.voice = voice;
+      u.lang = voice.lang;
+    } else u.lang = 'fr-FR';
+    const v = voiceOf(seed);
+    u.pitch = v.pitch;
+    u.rate = 1.08;
+    u.volume = vol;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+    const now = performance.now();
+    this.lastLine = now;
+    this.speaking = now + 400 + text.length * 65;
+  }
+
   /**
    * Says a sentence of the given kind with the speaker's voice. Rate-limited (one at a
    * time, and not too often) so the city doesn't turn into a choir.

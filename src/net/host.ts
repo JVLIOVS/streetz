@@ -124,7 +124,7 @@ export class NetHost implements NetSession {
       const H: number[][] = [];
       for (const h of this.sim.police.helis.values()) if (near(h.state.x, h.state.z, AOI + 80)) H.push(packHeli(h.state));
       const E = this.events.filter((e) => {
-        if (e.type === 'toast' || e.type === 'money' || e.type === 'respawn' || e.type === 'levelup' || e.type === 'chaos' || e.type === 'chaosEnd' || e.type === 'contract' || e.type === 'streak' || e.type === 'dmg' || e.type === 'crate') return e.playerId === g.peer;
+        if (e.type === 'toast' || e.type === 'money' || e.type === 'respawn' || e.type === 'levelup' || e.type === 'chaos' || e.type === 'chaosEnd' || e.type === 'contract' || e.type === 'streak' || e.type === 'dmg' || e.type === 'crate' || e.type === 'say' || e.type === 'freeRoam') return e.playerId === g.peer;
         if ('x' in e) return near((e as { x: number }).x, (e as { z: number }).z, AOI + 30);
         if (e.type === 'shot') return near(e.fx, e.fz, AOI + 30);
         return true;

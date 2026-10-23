@@ -8,6 +8,7 @@ const LOOK_VARIANTS = 40;
 
 interface Entry {
   weapon: string;
+  ko: boolean;
   view: HumanView;
   hitSeq: number;
   actionSeq: number;
@@ -19,6 +20,9 @@ export class PedRenderer {
   readonly root = new THREE.Group();
   private views = new Map<number, Entry>();
   private riders = new Map<number, HumanView>();
+
+  /** Blood effects requested by the pedestrians (hit = spurt, pool = on the ground). */
+  onBlood?: (kind: 'hit' | 'pool', x: number, y: number, z: number) => void;
 
   constructor() {
     this.root.name = 'peds';
@@ -38,7 +42,7 @@ export class PedRenderer {
       if (!e) {
         if (d > viewDist) continue;
         const look = s.role === 'civ' ? randomLook(s.look % LOOK_VARIANTS) : roleLook(s.role, s.look % 12);
-        e = { view: new HumanView(look), hitSeq: s.hitSeq, actionSeq: s.actionSeq, far: 0, weapon: 'none' };
+        e = { view: new HumanView(look), hitSeq: s.hitSeq, actionSeq: s.actionSeq, far: 0, weapon: 'none', ko: false };
         this.views.set(s.id, e);
         this.root.add(e.view.root);
       }
@@ -80,6 +84,12 @@ export class PedRenderer {
       if (s.hitSeq !== e.hitSeq) {
         e.hitSeq = s.hitSeq;
         if (s.mode !== 'ko') v.playOverlay('hit');
+        this.onBlood?.('hit', s.x, s.y + 1.3, s.z);
+      }
+      if ((s.mode === 'ko') !== e.ko) {
+        e.ko = s.mode === 'ko';
+        // fell down: a pool spreads under them (offset towards where the body lies)
+        if (e.ko) this.onBlood?.('pool', s.x + Math.sin(s.facing) * 0.6, s.y, s.z + Math.cos(s.facing) * 0.6);
       }
       if (s.weapon !== e.weapon) {
         e.weapon = s.weapon;

@@ -224,6 +224,18 @@ export class Game {
         case 'streak':
           if (e.playerId === this.localId) this.sound.cash();
           break;
+        case 'say':
+          if (e.playerId === this.localId) {
+            this.hud.toast(`${e.name} : « ${e.text} »`, Math.max(4, e.text.length / 14));
+            this.sound.voices?.say(e.text, e.seed);
+          }
+          break;
+        case 'freeRoam':
+          if (e.playerId === this.localId) {
+            this.hud.banner('PROLOGUE TERMINÉ', 'LA VILLE EST À TOI', 'Missions « ! » · contrats 📋 · receleur € · colis 📦 · ou fais ce que tu veux', 6);
+            this.sound.fanfare();
+          }
+          break;
         case 'bounty':
           this.sound.alert();
           break;

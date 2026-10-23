@@ -119,14 +119,22 @@ export class Hud {
     void score;
   }
 
-  levelUp(level: number, unlocks: string[]) {
+  /** Big centered banner (same look as the level-up). */
+  banner(small: string, big: string, sub: string, seconds = 2.8) {
     const el = $('levelup');
-    el.querySelector('b')!.textContent = String(level);
-    el.querySelector('span')!.textContent = unlocks.length ? `Débloqué : ${unlocks.join(' · ')}` : '';
+    el.querySelector('small')!.textContent = small;
+    const b = el.querySelector('b')!;
+    b.textContent = big;
+    b.style.fontSize = big.length > 4 ? '40px' : '';
+    el.querySelector('span')!.textContent = sub;
     el.classList.remove('hidden');
     el.style.animation = 'none';
     void el.offsetWidth;
-    el.style.animation = '';
+    el.style.animation = `levelup ${seconds}s ease-out forwards`;
+  }
+
+  levelUp(level: number, unlocks: string[]) {
+    this.banner('NIVEAU', String(level), unlocks.length ? `Débloqué : ${unlocks.join(' · ')}` : '');
   }
 
   /** Floating text at a screen position (damage numbers, stunts). */

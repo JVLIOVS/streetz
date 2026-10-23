@@ -71,6 +71,10 @@ export type SimEvent =
   | { type: 'wanted'; playerId: string; level: number }
   | { type: 'busted'; playerId: string }
   | { type: 'bounty'; playerId: string; amount: number }
+  /** A mission partner / giver speaks to this player. */
+  | { type: 'say'; playerId: string; name: string; text: string; seed: number }
+  /** Prologue done: the open world is yours. */
+  | { type: 'freeRoam'; playerId: string }
   | { type: 'crate'; playerId: string; text: string; rare: boolean; pickup?: boolean }
   | { type: 'levelup'; playerId: string; level: number; unlocks: string[]; cash: number }
   | { type: 'chaos'; playerId: string; label: string; points: number }
@@ -1590,7 +1594,7 @@ export class SimWorld {
   }
 
   damagePed(ped: Ped, amount: number, by: Player | null, fromX: number, fromZ: number) {
-    if (!ped.alive) return;
+    if (!ped.alive || ped.invulnerable) return;
     ped.state.health -= amount;
     ped.state.hitSeq++;
     if (by) {

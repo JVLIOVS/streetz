@@ -54,6 +54,8 @@ export class Ped {
   kvx = 0;
   kvz = 0;
   ambient = true;
+  /** Mission partner: can't be hurt. */
+  invulnerable = false;
   walkSpeed: number;
   /** Chase target set by the world each tick while fighting. */
   chase = { x: 0, z: 0, stop: 1.2 };

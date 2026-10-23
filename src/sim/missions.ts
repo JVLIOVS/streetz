@@ -27,6 +27,10 @@ interface Run {
   dist0: number;
   ambushed: boolean;
   warned: boolean;
+  /** Partner bot (ped id, -1 while riding in your car), props broken this step. */
+  ally: number;
+  broken: number;
+  allyCooldown: number;
 }
 
 const GIVER_RADIUS = 2.6;
@@ -74,16 +78,27 @@ export class MissionSystem {
       return;
     }
     s.mission = def.id;
-    this.runs.set(s.id, { def, step: -1, ready: false, timer: -1, peds: [], vehicle: -1, witness: -1, dist0: 0, ambushed: false, warned: false });
-    this.w.toast(p, `${def.giver} : « ${def.pitch} »`);
+    const run: Run = { def, step: -1, ready: false, timer: -1, peds: [], vehicle: -1, witness: -1, dist0: 0, ambushed: false, warned: false, ally: -1, broken: 0, allyCooldown: 0 };
+    this.runs.set(s.id, run);
+    if (def.partner) {
+      this.spawnAlly(p, run);
+      this.say(p, def.pitch);
+    } else this.w.toast(p, `${def.giver} : « ${def.pitch} »`);
     this.w.events.push({ type: 'mission', playerId: s.id, name: def.name, state: 'start' });
     this.next(p);
   }
 
-  abort(p: Player, reason = 'Mission abandonnée') {
+  /** `reason` set = failure (K.O., arrested, too late); none = the player gave up. */
+  abort(p: Player, reason?: string) {
     const s = p.state;
     const run = this.runs.get(s.id);
     if (!run) return;
+    // the prologue never fails: you get back up and carry on
+    if (run.def.auto && reason) {
+      if (s.dead || s.arrest > 0 || reason.includes('arrêté')) this.say(p, 'Pas grave, relève-toi. On reprend où on en était.');
+      return;
+    }
+    reason ??= 'Mission abandonnée';
     if (run.def.auto) {
       // skipping the tutorial is fine, it never comes back
       s.tutorialDone = true;
@@ -108,6 +123,16 @@ export class MissionSystem {
     const run = this.runs.get(p.state.id);
     const step = run?.def.steps[run.step];
     if (step?.kind === 'ko') this.next(p);
+  }
+
+  /** Called by the world when a player breaks a street prop. */
+  onProp(p: Player) {
+    const run = this.runs.get(p.state.id);
+    const step = run?.def.steps[run.step];
+    if (step?.kind !== 'break') return;
+    run!.broken++;
+    p.state.objective = `${step.text} (${Math.min(run!.broken, step.count)}/${step.count})`;
+    if (run!.broken >= step.count) this.next(p);
   }
 
   /** Called by the world when a robbery is completed. */
@@ -138,9 +163,11 @@ export class MissionSystem {
         continue;
       }
       if (p.state.dead) {
+        if (run.def.auto) continue; // wait for the respawn
         this.abort(p, 'Mission échouée : tu es K.O.');
         continue;
       }
+      if (run.def.partner) this.updateAlly(p, run);
       this.updateStep(p, run);
     }
   }
@@ -158,10 +185,93 @@ export class MissionSystem {
       return;
     }
     s.missionStep = run.step;
-    s.objective = run.def.steps[run.step].text;
+    const step = run.def.steps[run.step];
+    s.objective = step.text;
     s.missionTimer = -1;
     s.missionTargets = [];
     s.waypoint = null;
+    run.broken = 0;
+    if (step.give) {
+      const w = step.give.weapon;
+      if (!s.weapons.includes(w)) s.weapons.push(w);
+      s.ammo[w] += step.give.ammo;
+    }
+    if (step.say) this.say(p, step.say);
+  }
+
+  /** The partner talks (subtitle + voice on the player's phone). */
+  private say(p: Player, text: string) {
+    const run = this.runs.get(p.state.id);
+    this.w.events.push({ type: 'say', playerId: p.state.id, name: run?.def.partner ?? run?.def.giver ?? '', text, seed: 777 });
+  }
+
+  private spawnAlly(p: Player, run: Run) {
+    const s = p.state;
+    const fx = -Math.sin(s.facing);
+    const fz = -Math.cos(s.facing);
+    const ped = this.w.spawnPed(s.x - fz * 1.6 - fx, s.z + fx * 1.6 - fz, { ambient: false, mode: 'follow', facing: s.facing });
+    ped.invulnerable = true;
+    ped.state.look = 777;
+    ped.state.temper = 'fighter';
+    ped.state.money = 0;
+    ped.state.weapon = 'pistol';
+    run.ally = ped.state.id;
+  }
+
+  /**
+   * The partner follows you on foot, rides along in your car (hidden), walks into
+   * buildings with you and shoots at the cops chasing you.
+   */
+  private updateAlly(p: Player, run: Run) {
+    const s = p.state;
+    let ally = this.w.peds.get(run.ally);
+    if (s.vehicle >= 0) {
+      // in the car with you
+      if (ally) {
+        this.w.removePed(ally.state.id);
+        run.ally = -1;
+      }
+      return;
+    }
+    if (!ally) {
+      this.spawnAlly(p, run);
+      ally = this.w.peds.get(run.ally)!;
+    }
+    const a = ally.state;
+    const d = Math.hypot(a.x - s.x, a.z - s.z);
+    if (d > 25 || (s.interior && d > 12)) {
+      // catch up (doors, respawn…)
+      a.x = s.x + 1.5;
+      a.z = s.z + 1;
+      ally.savePrev();
+    }
+    a.mode = 'follow';
+    ally.chase.x = s.x;
+    ally.chase.z = s.z;
+    ally.chase.stop = 2.4;
+    s.ally = a.id;
+    // cover fire
+    run.allyCooldown -= DT;
+    if (s.wanted > 0 && run.allyCooldown <= 0) {
+      let best: Ped | null = null;
+      let bd = 24;
+      for (const c of this.w.peds.values()) {
+        if (c.state.role === 'civ' || !c.alive) continue;
+        const dc = Math.hypot(c.state.x - a.x, c.state.z - a.z);
+        if (dc < bd) {
+          bd = dc;
+          best = c;
+        }
+      }
+      if (best) {
+        run.allyCooldown = 0.9;
+        a.facing = Math.atan2(-(best.state.x - a.x), -(best.state.z - a.z));
+        a.action = 'shoot';
+        a.actionSeq++;
+        this.w.events.push({ type: 'shot', fx: a.x, fy: a.y + 1.4, fz: a.z, tx: best.state.x, ty: best.state.y + 1.1, tz: best.state.z, hit: true, w: 'pistol' });
+        this.w.damagePed(best, 34, null, a.x, a.z);
+      }
+    }
   }
 
   private complete(p: Player, run: Run) {
@@ -180,7 +290,8 @@ export class MissionSystem {
     this.w.events.push({ type: 'money', playerId: s.id, amount: money });
     this.w.events.push({ type: 'mission', playerId: s.id, name: run.def.name, state: 'done' });
     if (run.def.auto) {
-      this.w.toast(p, `✔ Bien joué ! +${money} € · Missions = marqueurs « ! » jaunes · contrats du jour = 📋 sous la carte`);
+      this.w.events.push({ type: 'say', playerId: s.id, name: run.def.partner ?? run.def.giver, text: run.def.outro ?? '', seed: 777 });
+      this.w.events.push({ type: 'freeRoam', playerId: s.id });
       return;
     }
     const nextDef = MISSIONS.find((m) => m.requires === run.def.id);
@@ -195,12 +306,15 @@ export class MissionSystem {
     s.missionTimer = -1;
     s.waypoint = null;
     s.missionTargets = [];
+    s.ally = -1;
   }
 
   /** Mission entities go back to the ambient world (despawned later by the population manager). */
   private cleanup(run: Run) {
     for (const id of run.peds) this.release(this.w.peds.get(id));
     this.release(this.w.peds.get(run.witness));
+    if (run.ally >= 0) this.w.removePed(run.ally);
+    run.ally = -1;
     const v = this.w.vehicles.get(run.vehicle);
     if (v) {
       v.ambient = true;
@@ -291,6 +405,16 @@ export class MissionSystem {
       case 'rob': {
         const d = this.door(step.interior);
         s.waypoint = d ? [d.door.x, d.door.z] : null;
+        // you need a weapon out to rob: hand it over if it's in the pocket
+        if (run.def.auto && s.interior === d?.id && s.weapon === 'fist') {
+          const gun = s.weapons.find((w) => !WEAPONS[w].melee && s.ammo[w] > 0);
+          if (gun) s.weapon = gun;
+          else {
+            if (!s.weapons.includes('pistol')) s.weapons.push('pistol');
+            s.ammo.pistol += 24;
+            s.weapon = 'pistol';
+          }
+        }
         break;
       }
       case 'lose':
@@ -313,6 +437,13 @@ export class MissionSystem {
         s.waypoint = null;
         break;
       }
+      case 'equip':
+        s.waypoint = null;
+        if (s.weapon === step.weapon) this.next(p);
+        break;
+      case 'break':
+        s.waypoint = null;
+        break;
       case 'drive': {
         if (s.vehicle >= 0) return this.next(p);
         let best: number | null = null;

@@ -240,6 +240,7 @@ export class NetClient implements NetSession {
     s.missionTimer = np.missionTimer;
     s.waypoint = np.waypoint;
     s.missionTargets = np.missionTargets ?? [];
+    s.ally = np.ally ?? -1;
     s.chaos = np.chaos;
     s.chaosMult = np.chaosMult;
     s.chaosTimer = np.chaosTimer;
