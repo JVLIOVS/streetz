@@ -251,7 +251,7 @@ export class PoliceSystem {
   private dispatch() {
     const w = this.w;
     // (a player waiting for a fine only gets the one officer)
-    const wantedPlayers = [...w.players.values()].filter((p) => p.state.wanted > 0 && p.state.fine <= 0 && !p.state.dead && !p.state.interior);
+    const wantedPlayers = [...w.players.values()].filter((p) => p.state.wanted > 0 && !w.law.handling(p) && !p.state.dead && !p.state.interior);
     // Units with nobody to chase go home (removed out of sight)
     for (const ped of [...w.peds.values()]) {
       if (ped.state.role === 'civ' || !ped.police || w.law.isStopCop(ped)) continue;

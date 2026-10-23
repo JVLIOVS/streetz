@@ -113,6 +113,11 @@ export class LawSystem {
     return true;
   }
 
+  /** Is a fine officer handling this player (instead of the normal police response)? */
+  handling(p: Player) {
+    return this.stops.get(p.state.id)?.kind === 'fine' && p.state.wanted <= 1;
+  }
+
   /** Is this officer busy fining someone? (the normal police AI leaves him alone) */
   isStopCop(ped: Ped) {
     for (const st of this.stops.values()) if (st.cop === ped.state.id) return true;
@@ -200,7 +205,8 @@ export class LawSystem {
       if (!st) continue;
       // the stop is over if things escalated, or you got away / knocked out
       if (s.dead || (st.kind === 'fine' && (s.wanted === 0 || s.wanted > 1)) || (st.kind === 'check' && s.wanted > 0)) {
-        if (st.kind === 'fine' && s.wanted === 0) s.fine = 0;
+        // escalated, escaped or knocked out: no fine pending any more (or the police would never come)
+        s.fine = 0;
         this.endStop(p, s.wanted === 0 || s.dead);
         continue;
       }

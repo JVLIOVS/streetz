@@ -1218,3 +1218,18 @@ describe('police and cars', () => {
     expect(worst).toBeGreaterThan(40);
   });
 });
+
+describe('fines then escalation', () => {
+  it('a fine, then more crimes: the full police response still comes', async () => {
+    const w = await world();
+    run(w, 2);
+    const p = w.players.get('p1')!;
+    w.law.fineInstead(p, 'assault');
+    expect(P(w).fine).toBeGreaterThan(0);
+    P(w).wanted = 5;
+    w.police.reported(p, P(w).x, P(w).z);
+    run(w, 60 * 12);
+    expect(P(w).fine).toBe(0);
+    expect([...w.peds.values()].some((x) => x.state.role !== 'civ' && !w.law.isStopCop(x)) || w.police.helis.size > 0).toBe(true);
+  });
+});
