@@ -129,6 +129,19 @@ export class Minimap {
         g.fillText(open ? '!' : '🔒', mx, mz + 1 / k);
       }
     }
+    // rooftop sniper spots
+    for (const q of sim.roofs.spots) {
+      const [sx, sz] = at(q.x, q.z);
+      g.strokeStyle = '#ff3b4f';
+      g.lineWidth = 2.5 / k;
+      g.beginPath();
+      g.arc(sx, sz, 6 / k, 0, Math.PI * 2);
+      g.moveTo(sx - 9 / k, sz);
+      g.lineTo(sx + 9 / k, sz);
+      g.moveTo(sx, sz - 9 / k);
+      g.lineTo(sx, sz + 9 / k);
+      g.stroke();
+    }
     // co-op heist start
     if (!me.mission) {
       const [hx, hz] = at(sim.heist.spot.x, sim.heist.spot.z);

@@ -129,8 +129,10 @@ export class NetHost implements NetSession {
         if (e.type === 'shot') return near(e.fx, e.fz, AOI + 30);
         return true;
       });
+      // rooftop stashes: 1 = full
+      const C = this.sim.roofs.chests.map((c) => (c.refill === 0 || this.sim.tick >= c.refill ? 1 : 0));
       const P = players.map((p, i) => (p.state.id === g.peer ? packPlayer(p.state) : shared[i]));
-      this.t.send({ t: 'snap', k: tick, P, D, V, K, X, H, E } satisfies HostMessage, g.peer);
+      this.t.send({ t: 'snap', k: tick, P, D, V, K, X, H, C, E } satisfies HostMessage, g.peer);
     }
     this.events = [];
   }

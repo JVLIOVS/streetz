@@ -1233,3 +1233,61 @@ describe('fines then escalation', () => {
     expect([...w.peds.values()].some((x) => x.state.role !== 'civ' && !w.law.isStopCop(x)) || w.police.helis.size > 0).toBe(true);
   });
 });
+
+describe('rooftops', () => {
+  it('a fully charged super jump goes roof-high', async () => {
+    const w = await world();
+    w.density = { peds: 0, traffic: 0, parkedRadius: 0 };
+    run(w, 30);
+    const y0 = P(w).y;
+    let top = y0;
+    run(w, 1, (t) => [move(t, { jump: true, jumpPower: 1 })]);
+    for (let i = 0; i < 120; i++) {
+      run(w, 1);
+      top = Math.max(top, P(w).y);
+    }
+    expect(top - y0).toBeGreaterThan(19);
+    // a tap is still a small hop
+    run(w, 120);
+    const y1 = P(w).y;
+    let hop = y1;
+    run(w, 1, (t) => [move(t, { jump: true })]);
+    for (let i = 0; i < 60; i++) {
+      run(w, 1);
+      hop = Math.max(hop, P(w).y);
+    }
+    expect(hop - y1).toBeLessThan(2);
+  });
+
+  it('rooftop stashes: loot once, then empty until they refill; reachable heights only', async () => {
+    const w = await world();
+    run(w, 2);
+    expect(w.roofs.chests.length).toBeGreaterThan(10);
+    for (const c of w.roofs.chests) expect(c.y).toBeLessThanOrEqual(22.5);
+    const c = w.roofs.chests.find((q) => q.refill === 0)!;
+    w.teleportPlayer(w.players.get('p1')!, c.x + 0.5, c.y + 0.5, c.z);
+    run(w, 30);
+    expect(P(w).context?.kind).toBe('chest');
+    run(w, 1, (t) => [act(t, 'use')]);
+    expect(c.refill).toBeGreaterThan(w.tick);
+    expect(w.drainEvents().some((e) => e.type === 'crate')).toBe(true);
+  });
+
+  it('sniper spot: rent the rifle, it is returned when you leave the roof', async () => {
+    const w = await world();
+    w.density = { peds: 0, traffic: 0, parkedRadius: 0 };
+    run(w, 2);
+    const q = w.roofs.spots[0];
+    const p = w.players.get('p1')!;
+    P(w).money = 1000;
+    w.teleportPlayer(p, q.x + 1, q.y + 0.5, q.z);
+    run(w, 30);
+    expect(P(w).context?.kind).toBe('sniper');
+    run(w, 1, (t) => [act(t, 'use')]);
+    expect(P(w).weapon).toBe('sniper');
+    expect(P(w).money).toBe(700);
+    w.teleportPlayer(p, q.x + 60, 1, q.z);
+    run(w, 30);
+    expect(P(w).weapons).not.toContain('sniper');
+  });
+});

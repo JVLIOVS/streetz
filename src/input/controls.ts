@@ -52,12 +52,15 @@ export class Controls {
       // typing in a text field (crew name, nickname) is not playing
       if (e.repeat || e.target instanceof HTMLInputElement) return;
       this.keys.add(e.code);
-      if (e.code === 'Space') this.state.jumpPressed = true;
+      if (e.code === 'Space') this.startJump();
       if (e.code === 'KeyE' || e.code === 'KeyF' || e.code === 'Enter') this.pushAction('use');
       if (e.code === 'KeyR' || e.code === 'Tab') this.pushAction('weapon');
       if (e.code === 'KeyH') this.pushAction('horn');
     });
-    addEventListener('keyup', (e) => this.keys.delete(e.code));
+    addEventListener('keyup', (e) => {
+      this.keys.delete(e.code);
+      if (e.code === 'Space') this.releaseJump();
+    });
     addEventListener('blur', () => this.keys.clear());
   }
 
@@ -156,8 +159,30 @@ export class Controls {
     };
   }
 
-  pressJump() {
+  /** A quick tap jumps; holding charges a super jump (released = jump). */
+  pressJump(power = 0) {
     this.state.jumpPressed = true;
+    this.jumpPower = power;
+  }
+
+  private jumpStart = -1;
+  private jumpPower = 0;
+
+  startJump() {
+    this.jumpStart = performance.now();
+  }
+
+  releaseJump() {
+    if (this.jumpStart < 0) return;
+    const power = this.jumpCharge();
+    this.jumpStart = -1;
+    this.pressJump(power);
+  }
+
+  /** Current charge of a held jump, 0..1 (taps under 0.18 s stay normal jumps). */
+  jumpCharge() {
+    if (this.jumpStart < 0) return 0;
+    return Math.max(0, Math.min(1, ((performance.now() - this.jumpStart) / 1000 - 0.18) / 0.7));
   }
 
   toggleSprint() {
@@ -204,10 +229,10 @@ export class Controls {
     this.state.sprint = this.sprintToggle || k.has('ShiftLeft') || k.has('ShiftRight');
   }
 
-  /** Returns true once per jump press. */
-  consumeJump(): boolean {
+  /** Returns the jump once per press, with its charge. */
+  consumeJump(): { jump: boolean; power: number } {
     const j = this.state.jumpPressed;
     this.state.jumpPressed = false;
-    return j;
+    return { jump: j, power: j ? this.jumpPower : 0 };
   }
 }

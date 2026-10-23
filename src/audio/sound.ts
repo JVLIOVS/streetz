@@ -245,6 +245,10 @@ export class Sound {
         this.burst(0.05, 2500, 0.3 * vol, 3, pan, 'bandpass', 0.35);
         this.burst(0.05, 2000, 0.3 * vol, 3, pan, 'bandpass', 0.45);
         break;
+      case 'sniper':
+        this.burst(0.5, 2600, 1.2 * vol, 0.4, pan);
+        this.tone('sine', 140, 30, 0.45, 0.9 * vol, 0, pan);
+        break;
       case 'rifle':
         this.burst(0.14, 3200, 0.85 * vol, 0.5, pan);
         this.tone('sawtooth', 180, 60, 0.1, 0.35 * vol, 0, pan);

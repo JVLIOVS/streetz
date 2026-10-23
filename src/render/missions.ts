@@ -22,6 +22,7 @@ export class MissionMarkers {
   private heist: THREE.Group;
   private hunted: THREE.Mesh[] = [];
   private allyMark: THREE.Mesh;
+  private chests: THREE.Group[] = [];
 
   constructor(private sim: SimWorld) {
     const beamGeo = new THREE.CylinderGeometry(1.1, 1.1, 3.2, 20, 1, true);
@@ -63,6 +64,35 @@ export class MissionMarkers {
     heist.position.set(sim.heist.spot.x, sim.groundY(sim.heist.spot.x, sim.heist.spot.z), sim.heist.spot.z);
     this.heist = heist;
     this.root.add(heist);
+    // rooftop stashes (shown while full) and sniper spots (always: a goal to climb to)
+    const chestBox = new THREE.BoxGeometry(0.9, 0.55, 0.6);
+    const chestMat = new THREE.MeshToonMaterial({ color: 0x6b4423 });
+    const bandMat = new THREE.MeshBasicMaterial({ color: 0xffd23f });
+    const glowGeo = new THREE.CylinderGeometry(0.7, 0.7, 2.5, 12, 1, true).translate(0, 1.25, 0);
+    const glowMat = beamMat(0xffd23f, 0.25);
+    for (const c of sim.roofs.chests) {
+      const g = new THREE.Group();
+      const box = new THREE.Mesh(chestBox, chestMat);
+      box.position.y = 0.28;
+      const band = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.08, 0.65), bandMat);
+      band.position.y = 0.4;
+      g.add(box, band, new THREE.Mesh(glowGeo, glowMat));
+      g.position.set(c.x, c.y, c.z);
+      this.chests.push(g);
+      this.root.add(g);
+    }
+    const spotBeam = new THREE.CylinderGeometry(1.6, 1.6, 9, 20, 1, true).translate(0, 4.5, 0);
+    const spotMat = beamMat(0xff3b4f, 0.3);
+    const spotRing = new THREE.RingGeometry(1.4, 1.9, 4).rotateX(-Math.PI / 2);
+    const spotRingMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthWrite: false });
+    for (const q of sim.roofs.spots) {
+      const g = new THREE.Group();
+      const ring = new THREE.Mesh(spotRing, spotRingMat);
+      ring.position.y = 0.06;
+      g.add(new THREE.Mesh(spotBeam, spotMat), ring);
+      g.position.set(q.x, q.y, q.z);
+      this.root.add(g);
+    }
     const wpGeo = new THREE.CylinderGeometry(1.4, 1.4, 70, 16, 1, true);
     wpGeo.translate(0, 35, 0);
     this.waypoint = new THREE.Mesh(wpGeo, beamMat(0xffd23f, 0.3));
@@ -113,6 +143,10 @@ export class MissionMarkers {
       bang.rotation.y = this.time * 2;
     }
     this.fence.visible = !indoors;
+    this.sim.roofs.chests.forEach((c, i) => {
+      const full = c.refill === 0 || this.sim.tick >= c.refill;
+      this.chests[i].visible = full && !indoors && !!me && Math.abs(c.x - me.x) < 120 && Math.abs(c.z - me.z) < 120;
+    });
     this.heist.visible = !indoors && !me?.mission;
     // players with a bounty: a big red arrow everybody can see
     let h = 0;

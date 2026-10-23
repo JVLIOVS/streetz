@@ -19,6 +19,7 @@ import { ContractSystem } from './contracts';
 import { SocialSystem } from './social';
 import { HeistSystem } from './heist';
 import { LawSystem } from './law';
+import { RoofSystem } from './roofs';
 import { RESPECT } from '../data/law';
 import { REPAINT_PRICE } from '../data/police';
 import { levelOf, requiredLevel } from '../data/progression';
@@ -162,6 +163,7 @@ export class SimWorld {
   readonly social: SocialSystem;
   readonly heist: HeistSystem;
   readonly law: LawSystem;
+  readonly roofs: RoofSystem;
   /** Local calendar day number (set by the game from the clock; 0 = unknown). */
   day = 0;
   /** Wall-clock time in seconds (set by the game; used by hideout businesses). */
@@ -195,6 +197,7 @@ export class SimWorld {
     this.social = new SocialSystem(this);
     this.heist = new HeistSystem(this);
     this.law = new LawSystem(this);
+    this.roofs = new RoofSystem(this);
     this.props = new PropField(map.props);
     this.buildProps();
     if (role === 'authority') for (const f of map.featured) this.spawnVehicle(f.type as VehicleType, f.x, 0.3, f.z, f.yaw, 'none', false);
@@ -229,6 +232,7 @@ export class SimWorld {
     this.progress.drop(id);
     this.social.drop(id);
     this.law.drop(id);
+    this.roofs.drop(id);
     if (this.heist.isMember(p)) this.heist.leave(p);
     this.physics.removeRigidBody(p.body);
     this.players.delete(id);
@@ -442,6 +446,7 @@ export class SimWorld {
     this.social.update();
     this.heist.update();
     this.law.update();
+    this.roofs.update();
     if (this.tick % 20 === 0) this.managePopulation();
     for (const p of this.players.values()) p.state.context = this.computeContext(p);
     this.physics.step();
@@ -1051,6 +1056,12 @@ export class SimWorld {
       case 'fence':
         this.contracts.sell(p);
         break;
+      case 'chest':
+        this.roofs.open(p, ctx.target as number);
+        break;
+      case 'sniper':
+        this.roofs.rent(p, ctx.target as number);
+        break;
       case 'heist':
         this.heist.start(p);
         break;
@@ -1168,7 +1179,7 @@ export class SimWorld {
       }
       return null;
     }
-    const job = this.missions.context(p) ?? this.heist.context(p) ?? this.social.context(p);
+    const job = this.roofs.context(p) ?? this.missions.context(p) ?? this.heist.context(p) ?? this.social.context(p);
     if (job) return job;
     // Vehicles
     let best: Vehicle | null = null;

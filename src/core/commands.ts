@@ -16,6 +16,8 @@ export interface MoveCommand {
   sprint: boolean;
   /** Jump pressed this tick (on foot). */
   jump: boolean;
+  /** Charge of the jump (0 = tap, 1 = fully charged super jump). */
+  jumpPower?: number;
   /** Vehicle pedals: 1 accelerate, -1 brake/reverse, 0 none. */
   throttle: number;
   handbrake: boolean;

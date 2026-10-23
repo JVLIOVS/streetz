@@ -307,7 +307,7 @@ export class GameRenderer {
       if (anim === 'walk') view.setSpeedScale(Math.max(0.6, s.speed / 2.2));
       else if (anim === 'run') view.setSpeedScale(Math.max(0.8, s.speed / 5.6));
     }
-    const weapon: WeaponModel = s.vehicle >= 0 || s.weapon === 'fist' ? 'none' : s.weapon;
+    const weapon: WeaponModel = s.vehicle >= 0 || s.weapon === 'fist' ? 'none' : s.weapon === 'sniper' ? 'rifle' : s.weapon;
     if (weapon !== slot.weapon) {
       slot.weapon = weapon;
       view.setWeapon(weapon);

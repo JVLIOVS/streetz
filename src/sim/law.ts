@@ -308,7 +308,7 @@ export class LawSystem {
     }
     let k = 0;
     for (const wpn of [...s.weapons] as WeaponId[]) {
-      if (wpn === 'fist') continue;
+      if (wpn === 'fist' || wpn === 'sniper') continue;
       const spec = WEAPONS[wpn];
       const id = w.newId();
       const a = (k++ / 3) * Math.PI;

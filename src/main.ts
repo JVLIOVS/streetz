@@ -294,7 +294,22 @@ async function launch(map: MapData, assets: GameAssets, quality: QualityLevel, s
       setTimeout(() => el.classList.remove('pressed'), 120);
       fn();
     });
-  tap($('btn-jump'), () => controls.pressJump());
+  // tap = jump, hold = charge a super jump (rooftops!)
+  const jumpBtn = $('btn-jump');
+  jumpBtn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    jumpBtn.setPointerCapture?.(e.pointerId);
+    jumpBtn.classList.add('pressed');
+    controls.startJump();
+  });
+  const releaseJump = (e: PointerEvent) => {
+    e.stopPropagation();
+    jumpBtn.classList.remove('pressed');
+    controls.releaseJump();
+  };
+  jumpBtn.addEventListener('pointerup', releaseJump);
+  jumpBtn.addEventListener('pointercancel', releaseJump);
   const sprint = $('btn-sprint');
   tap(sprint, () => controls.toggleSprint());
   controls.onSprintChange = (on) => sprint.classList.toggle('on', on);

@@ -34,7 +34,9 @@ export interface ContextAction {
     | 'crew_join'
     | 'heist'
     | 'fine'
-    | 'bank';
+    | 'bank'
+    | 'chest'
+    | 'sniper';
   label: string;
   target: number | string;
 }
@@ -152,6 +154,8 @@ export const PLAYER_TUNING = {
   runSpeed: 5.6,
   sprintSpeed: 8.8,
   jumpSpeed: 8.2,
+  /** Fully charged super jump (hold the jump button): up onto the rooftops. */
+  superJump: 27,
   gravity: 26,
   groundAccel: 14,
   airAccel: 3.5,
@@ -165,6 +169,7 @@ export class Player {
   prev = { x: 0, y: 0, z: 0, facing: 0 };
   input: MoveCommand | null = null;
   private jumpQueued = false;
+  private jumpPower = 0;
   attackCooldown = 0;
   /** Pending melee hit (applied a few ticks after the punch starts). */
   pendingHit = -1;
@@ -205,7 +210,7 @@ export class Player {
       money: 500,
       weapon: 'fist',
       weapons: ['fist'],
-      ammo: { fist: 0, knife: 0, baton: 0, bat: 0, pistol: 0, smg: 0, shotgun: 0, rifle: 0 },
+      ammo: { fist: 0, knife: 0, baton: 0, bat: 0, pistol: 0, smg: 0, shotgun: 0, rifle: 0, sniper: 0 },
       outfit: {},
       clothes: [],
       garage: [],
@@ -265,7 +270,10 @@ export class Player {
   }
 
   setInput(cmd: MoveCommand) {
-    if (cmd.jump) this.jumpQueued = true;
+    if (cmd.jump) {
+      this.jumpQueued = true;
+      this.jumpPower = Math.max(0, Math.min(1, cmd.jumpPower ?? 0));
+    }
     this.input = cmd;
   }
 
@@ -315,7 +323,7 @@ export class Player {
     }
 
     if (this.jumpQueued && s.grounded && !s.dead) {
-      s.vy = T.jumpSpeed;
+      s.vy = T.jumpSpeed + T.superJump * this.jumpPower;
       s.grounded = false;
     } else if (s.grounded && s.vy <= 0) {
       s.vy = -2; // keep pressed against slopes

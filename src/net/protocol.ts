@@ -25,7 +25,7 @@ export type HostMessage =
   | { t: 'full' }
   /** Sent by a host to every peer it meets: two hosts in one public room → the larger id steps down. */
   | { t: 'hosting' }
-  | { t: 'snap'; k: number; P: NetPlayer[]; D: number[][]; V: number[][]; K: number[][]; X: number[][]; H?: number[][]; E: SimEvent[] };
+  | { t: 'snap'; k: number; P: NetPlayer[]; D: number[][]; V: number[][]; K: number[][]; X: number[][]; H?: number[][]; C?: number[]; E: SimEvent[] };
 
 export type GuestMessage = { t: 'join'; name: string; look: number; profile?: Profile } | ({ t: 'st'; a: { k: ActionKind; arg?: string }[] } & PlayerReport);
 

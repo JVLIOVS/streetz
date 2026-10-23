@@ -45,6 +45,7 @@ export class Game {
   readonly menu: MenuPanel;
   private audio: AudioDirector;
   private radioCar = -1;
+  private lastCharge = 0;
   /** Commands from menus (shop, wardrobe, garage), sent with the next tick. */
   private menuActions: { action: ActionCommand['action']; arg: string }[] = [];
 
@@ -108,7 +109,7 @@ export class Game {
       y: s.moveY,
       yaw: this.view.cam.yaw,
       sprint: s.sprint,
-      jump: this.controls.consumeJump(),
+      ...((j) => ({ jump: j.jump, jumpPower: j.power }))(this.controls.consumeJump()),
       throttle: gas ? 1 : brake ? -1 : 0,
       handbrake: h.handbrake || k.handbrake,
     };
@@ -389,6 +390,11 @@ export class Game {
       if (this.slowmo <= 0) this.loop.timeScale = 1;
     }
     this.controls.update(dt);
+    const charge = this.controls.jumpCharge();
+    if (charge !== this.lastCharge) {
+      this.lastCharge = charge;
+      document.getElementById('btn-jump')?.style.setProperty('--charge', String(charge));
+    }
     const d = this.controls.takeCameraDelta();
     if (d.yaw || d.pitch) this.view.cam.rotate(d.yaw, d.pitch);
     this.view.render(this.localId, alpha, dt, this.controls.state.moveY);

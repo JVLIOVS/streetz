@@ -1,5 +1,5 @@
 /** Weapon data. Add a weapon here; the sim, the shop and the HUD pick it up. */
-export type WeaponId = 'fist' | 'knife' | 'baton' | 'bat' | 'pistol' | 'smg' | 'shotgun' | 'rifle';
+export type WeaponId = 'fist' | 'knife' | 'baton' | 'bat' | 'pistol' | 'smg' | 'shotgun' | 'rifle' | 'sniper';
 
 export interface WeaponSpec {
   name: string;
@@ -32,10 +32,12 @@ export const WEAPONS: Record<WeaponId, WeaponSpec> = {
   pistol: { name: 'Pistolet', icon: '🔫', damage: 40, range: 38, cooldown: 0.28, aimCone: 0.55, melee: false, anim: 'shoot', price: 600, ammoPack: 36, ammoPrice: 120 },
   smg: { name: 'Mitraillette', icon: '💥', damage: 18, range: 30, cooldown: 0.085, aimCone: 0.5, melee: false, anim: 'shoot2', price: 2400, ammoPack: 150, ammoPrice: 250 },
   shotgun: { name: 'Fusil à pompe', icon: '🧨', damage: 20, range: 18, cooldown: 0.9, aimCone: 0.6, melee: false, pellets: 6, anim: 'shoot2', price: 1800, ammoPack: 24, ammoPrice: 200 },
+  // not sold: rented at rooftop sniper spots, returned when you leave the roof
+  sniper: { name: 'Fusil de précision', icon: '🔭', damage: 160, range: 150, cooldown: 1.1, aimCone: 0.16, melee: false, anim: 'shoot2', price: 0, ammoPack: 12, ammoPrice: 0 },
   rifle: { name: "Fusil d'assaut", icon: '🎯', damage: 28, range: 55, cooldown: 0.11, aimCone: 0.45, melee: false, anim: 'shoot2', price: 5000, ammoPack: 150, ammoPrice: 400 },
 };
 
-export const WEAPON_ORDER: WeaponId[] = ['fist', 'knife', 'baton', 'bat', 'pistol', 'smg', 'shotgun', 'rifle'];
+export const WEAPON_ORDER: WeaponId[] = ['fist', 'knife', 'baton', 'bat', 'pistol', 'smg', 'shotgun', 'rifle', 'sniper'];
 
 /** Bulletproof vest at the gun shop. */
 export const ARMOR_PRICE = 400;

@@ -199,6 +199,12 @@ export class NetClient implements NetSession {
     }
     for (const id of [...sim.police.helis.keys()]) if (!helis.has(id)) sim.police.helis.delete(id);
 
+    // --- rooftop stashes
+    m.C?.forEach((full, i) => {
+      const c = sim.roofs.chests[i];
+      if (c) c.refill = full ? 0 : Number.MAX_SAFE_INTEGER;
+    });
+
     // --- money on the ground, broken props
     sim.pickups.clear();
     for (const a of m.K) sim.pickups.set(a[0], unpackPickup(a));
