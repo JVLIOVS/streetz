@@ -24,6 +24,7 @@ try {
   // First time online = prologue in solo first. Check it, then use profiles that already did it.
   {
     const fresh = await browser.newContext({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
+    await fresh.addInitScript(() => localStorage.setItem('streetz.adult', '1'));
     const p = await fresh.newPage();
     await p.goto(base);
     await p.locator('#btn-public').waitFor({ state: 'visible', timeout: 60000 });
@@ -35,6 +36,7 @@ try {
   }
   const ctx = await browser.newContext({ viewport: { width: 844, height: 390 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
   await ctx.addInitScript(() => {
+    localStorage.setItem('streetz.adult', '1');
     if (!localStorage.getItem('streetz.save')) localStorage.setItem('streetz.save', JSON.stringify({ version: 2, settings: { quality: 'low', music: true, sfx: true }, profile: { prologue: true, money: 500 } }));
   });
   const alice = await ctx.newPage();

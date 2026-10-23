@@ -19,11 +19,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
+      # shipped dependencies only (three, rapier, trystero): fail on known high/critical flaws
+      - run: npm audit --omit=dev --audit-level=high
       - run: npm test
       - run: npm run build
       - name: Push dist/ to gh-pages

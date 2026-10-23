@@ -55,6 +55,11 @@ try {
   page.on('pageerror', (e) => fail('pageerror: ' + e.message));
   const t0 = Date.now();
   await page.goto(`${base}?debug&quality=${quality}`);
+  // first launch: the 18+ question comes before the menu
+  await page.locator('#btn-adult').waitFor({ state: 'visible', timeout: 60000 });
+  results.ageGate = true;
+  await page.screenshot({ path: OUT + 'age.png' });
+  await page.locator('#btn-adult').tap();
   await page.locator('#btn-play').waitFor({ state: 'visible', timeout: 60000 });
   results.loadSeconds = (Date.now() - t0) / 1000;
   await page.screenshot({ path: OUT + 'start.png' });

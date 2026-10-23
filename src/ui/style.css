@@ -1326,3 +1326,23 @@ body {
   color: #1b1430;
   font-weight: 800;
 }
+
+/* age gate + privacy notice */
+#age {
+  max-width: 420px;
+  text-align: center;
+  color: #fff;
+  pointer-events: auto;
+}
+#age p {
+  margin: 0 0 10px;
+  line-height: 1.4;
+}
+#multi .privacy {
+  max-width: 380px;
+  margin: 6px auto 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #cfc8e8;
+  text-align: center;
+}

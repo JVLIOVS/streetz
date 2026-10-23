@@ -72,3 +72,12 @@
 - 2026-10-23 — Armes fun en données : sécateur (niv. 1), sabre (6), tronçonneuse (9, coups en continu), lance-flammes (12, brûle tout dans un cône de 9 m, munitions = carburant).
 - 2026-10-23 — Mini-hélico (`fly` dans `src/data/vehicles.ts`) : vol arcade (MONTER/DESCENDRE à la place de gaz/frein, joystick pour avancer et tourner, plafond 140 m), tombe sans pilote ; deux en libre-service (aérodrome, parc) et en vente à la concession (niv. 15, 30 000 €). Modèle construit en code. Avion : plus tard (il faut une piste et des commandes plus fines).
 - 2026-10-23 — Jetpack (concession, niv. 10, 9 000 €) : en l'air, maintenir SAUT fait monter ; ~4 s de carburant, recharge au sol ; il fait partie de l'équipement (pas perdu à la mort).
+- Test 12 — La Famille Corvi : 7 grades (Guetteur → Parrain) dérivés des missions terminées (`rankOf`), aucun champ de sauvegarde en plus ; chaque grade a ses missions (`family` dans `missions.ts`) et un niveau minimum.
+- Avantages de grade : bonus sur missions/contrats, part de 250 à 3 000 € toutes les 10 min de jeu, gardes du corps (1 à 4, invulnérables à ton auto-visée, tirent sur qui t'attaque et sur la police seulement quand elle vient te neutraliser), avocat (amendes/cautions -30 à -60 %).
+- Voyous « armés » : tirent à distance (40 % de précision, 25 % si tu cours), gardent 8 m.
+- Sécurité : tout message d'invité passe par `src/net/validate.ts` (bornes, liste blanche d'actions, 45 msg/s) ; profil filtré par listes blanches dans `sanitize`.
+- CSP en balise meta (GitHub Pages n'envoie pas d'en-têtes) ; `wasm-unsafe-eval` requis par Rapier.
+- Contrôle d'âge déclaratif au premier lancement (`streetz.adult`), mention IP visible en P2P dans l'écran multijoueur.
+- `window.__streetz` exposé seulement avec `?debug`, en dev ou sous automate.
+- Rapport de bug copiable (pause) : rien n'est envoyé, le testeur colle le texte.
+- Graphisme : NeutralToneMapping, MSAA en qualité moyenne, PCFSoft en haute, dalles procédurales sur trottoirs/places, ciel avec soleil et nuages.

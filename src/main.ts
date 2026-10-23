@@ -77,6 +77,42 @@ function preventZoom() {
 }
 preventZoom();
 
+declare const __BUILD__: string;
+
+/** Last errors on this device, for the "bug report" button (nothing is sent anywhere). */
+const errorLog: string[] = [];
+const logError = (msg: string) => {
+  errorLog.push(`${new Date().toISOString().slice(11, 19)} ${msg}`.slice(0, 300));
+  if (errorLog.length > 15) errorLog.shift();
+};
+addEventListener('error', (e) => logError(`${e.message} @ ${e.filename?.split('/').pop()}:${e.lineno}`));
+addEventListener('unhandledrejection', (e) => logError(`promise: ${String(e.reason?.message ?? e.reason)}`));
+
+/** 18+ game: asked once on this device (PEGI 18 content: violence, blood). */
+function ageGate(): Promise<void> {
+  try {
+    if (localStorage.getItem('streetz.adult') === '1') return Promise.resolve();
+  } catch {
+    /* storage blocked: ask every time */
+  }
+  const box = $('age');
+  box.classList.remove('hidden');
+  return new Promise((resolve) => {
+    $('btn-adult').addEventListener('click', () => {
+      try {
+        localStorage.setItem('streetz.adult', '1');
+      } catch {
+        /* ignore */
+      }
+      box.classList.add('hidden');
+      resolve();
+    });
+    $('btn-minor').addEventListener('click', () => {
+      box.innerHTML = '<p><b>Désolé, ce jeu est réservé aux adultes.</b><br />Reviens plus tard !</p>';
+    });
+  });
+}
+
 async function boot() {
   const save = loadSave();
   const qParam = params.get('quality') as QualityLevel | null;
@@ -88,6 +124,7 @@ async function boot() {
   const map = await loadMap('paris');
   const assets = await assetsP;
   status.textContent = '';
+  await ageGate();
   $('menu').classList.remove('hidden');
 
   // --- Lobby
@@ -430,6 +467,24 @@ async function launch(map: MapData, assets: GameAssets, quality: QualityLevel, s
     }, 6500);
   };
 
+  $('build-id').textContent = __BUILD__;
+  $('btn-bug').addEventListener('click', () => {
+    const me = sim.players.get(localId)?.state;
+    const report = [
+      `STREETZ test 12 · build ${__BUILD__} · ${new Date().toISOString()}`,
+      `${navigator.userAgent}`,
+      `écran ${innerWidth}×${innerHeight} @${devicePixelRatio} · qualité ${quality} · ${Math.round(game.fps)} FPS · mode ${mode.kind}`,
+      me ? `position ${me.x.toFixed(0)}, ${me.z.toFixed(0)} · intérieur ${me.interior ?? '-'} · mission ${me.mission ?? '-'} étape ${me.missionStep} · ★${me.wanted}` : '',
+      errorLog.length ? `erreurs :\n${errorLog.join('\n')}` : 'aucune erreur',
+    ].join('\n');
+    navigator.clipboard?.writeText(report).then(
+      () => hud.toast('🐞 Rapport copié : colle-le dans ton message', 3),
+      () => hud.toast('Copie impossible sur ce navigateur', 3),
+    );
+  });
+
+  // test/debug hook: never exposed to normal players
+  if (!params.has('debug') && !navigator.webdriver && !import.meta.env.DEV) return;
   (window as unknown as { __streetz: unknown }).__streetz = {
     game,
     sim,
