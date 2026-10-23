@@ -1,5 +1,6 @@
 import { WEAPONS } from '../data/weapons';
 import { CHAOS_WINDOW, levelProgress, nextUnlock } from '../data/progression';
+import { FAMILY_NAME, MAX_RANK, RANKS, jobsOfRank, rankOf, rankProgress } from '../data/family';
 import { STREAK_REWARDS } from '../data/contracts';
 import { VEHICLES } from '../data/vehicles';
 import { MAX_FINES, NOTORIETY, OFFER_WAIT, RESPECT, SKILL_MAX, SKILLS, skillPoints } from '../data/law';
@@ -83,6 +84,11 @@ export class Hud {
       e.stopPropagation();
       const b = (e.target as HTMLElement).closest('[data-skill]') as HTMLElement | null;
       if (b && !(b as HTMLButtonElement).disabled) this.onSkill?.(b.dataset.skill!);
+      if ((e.target as HTMLElement).closest('[data-guards]')) {
+        this.onGuards?.();
+        this.guardsOff = !this.guardsOff;
+        this.panelKey = '';
+      }
     });
     this.panel.querySelector('.pp-close')!.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
@@ -97,6 +103,8 @@ export class Hud {
   updateProgress(s: PlayerState) {
     const lp = levelProgress(s.rep);
     if (this.changed('lvl', lp.level)) this.lvlNum.textContent = String(lp.level);
+    const rank = rankOf(s.missionsDone, s.tutorialDone);
+    if (this.changed('rank', rank)) $('rank-ico').textContent = RANKS[rank].icon;
     const xp = `${Math.round((lp.cur / lp.need) * 100)}%`;
     if (this.changed('xp', xp)) this.xpFill.style.width = xp;
     const next = nextUnlock(lp.level);
@@ -167,12 +175,13 @@ export class Hud {
 
   private renderPanel(s: PlayerState, lp: { level: number; cur: number; need: number }) {
     const board = [s, ...this.others].map((p) => [p.name, p.rep, p.crew?.name ?? '', p.bounty]);
-    const key = JSON.stringify([s.rep, s.contracts.map((c) => c.progress), s.streak, s.fenceOrder, s.contractsDay, s.week, board, s.skills, Math.round(s.notoriety), s.respect, s.fines]);
+    const key = JSON.stringify([this.guardsOff, s.missionsDone.length, s.rep, s.contracts.map((c) => c.progress), s.streak, s.fenceOrder, s.contractsDay, s.week, board, s.skills, Math.round(s.notoriety), s.respect, s.fines]);
     if (key === this.panelKey) return;
     this.panelKey = key;
     const esc = (t: string) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
     const bar = (r: number) => `<div class="pp-bar"><i style="width:${Math.min(100, r * 100).toFixed(0)}%"></i></div>`;
-    let h = `<div class="pp-sec">NIVEAU ${lp.level}</div><div class="pp-row">${lp.cur} / ${lp.need} XP${bar(lp.cur / lp.need)}</div>`;
+    let h = this.familySection(s, lp.level);
+    h += `<div class="pp-sec">NIVEAU ${lp.level}</div><div class="pp-row">${lp.cur} / ${lp.need} XP${bar(lp.cur / lp.need)}</div>`;
     const next = nextUnlock(lp.level);
     if (next) h += `<div class="pp-row">🔓 Niveau ${next.level} : ${esc(next.label)}</div>`;
     // skills
@@ -185,14 +194,14 @@ export class Hud {
     if (pts <= 0) h += `<div class="pp-row">Un point de compétence à chaque niveau.</div>`;
     // respect & criminal record
     const xpBonus = Math.round(Math.min(1, s.respect / RESPECT.xpFull) * 100);
-    h += `<div class="pp-sec">RESPECT 👑</div><div class="pp-row">${s.respect} · bonus d'XP +${xpBonus} %${s.respect >= RESPECT.feared ? ' · les durs n’osent plus te répondre' : ` · à ${RESPECT.feared}, les durs n’osent plus te répondre`}${bar(s.respect / RESPECT.xpFull)}<small style="float:none;color:#cfc8e8">Joueurs mis K.O., primes, braquages, missions…</small></div>`;
+    h += `<div class="pp-sec">RESPECT 👑</div><div class="pp-row">${N(s.respect)} · bonus d'XP +${xpBonus} %${s.respect >= RESPECT.feared ? ' · les durs n’osent plus te répondre' : ` · à ${RESPECT.feared}, les durs n’osent plus te répondre`}${bar(s.respect / RESPECT.xpFull)}<small style="float:none;color:#cfc8e8">Joueurs mis K.O., primes, braquages, missions…</small></div>`;
     const nt = Math.round(s.notoriety);
-    h += `<div class="pp-sec">CASIER 📁</div><div class="pp-row">${nt}/100${nt >= NOTORIETY.feared ? ' · les passants t’évitent' : ''}${nt >= NOTORIETY.checks ? ' · contrôles de police fréquents' : ''}${bar(nt / 100)}<small style="float:none;color:#cfc8e8">Fiché : ${s.fines}/${MAX_FINES}${s.fines >= MAX_FINES ? ' — plus d’arrangement : la police vient te neutraliser (tu peux te rendre)' : ' — à 3, plus d’amende : la police vient te neutraliser'}. Le casier s’efface avec le temps.</small></div>`;
+    h += `<div class="pp-sec">CASIER 📁</div><div class="pp-row">${nt}/100${nt >= NOTORIETY.feared ? ' · les passants t’évitent' : ''}${nt >= NOTORIETY.checks ? ' · contrôles de police fréquents' : ''}${bar(nt / 100)}<small style="float:none;color:#cfc8e8">Fiché : ${N(s.fines)}/${MAX_FINES}${s.fines >= MAX_FINES ? ' — plus d’arrangement : la police vient te neutraliser (tu peux te rendre)' : ' — à 3, plus d’amende : la police vient te neutraliser'}. Le casier s’efface avec le temps.</small></div>`;
     h += `<div class="pp-sec">CONTRATS DU JOUR</div>`;
     if (!s.contracts.length) h += `<div class="pp-row">Chargement…</div>`;
     for (const c of s.contracts) {
       const done = c.progress >= c.goal;
-      h += `<div class="pp-row${done ? ' done' : ''}">${done ? '✔ ' : ''}${esc(c.text)}<small>+${c.cash.toLocaleString('fr-FR')} €</small>${bar(c.progress / c.goal)}<span>${c.progress} / ${c.goal}</span></div>`;
+      h += `<div class="pp-row${done ? ' done' : ''}">${done ? '✔ ' : ''}${esc(c.text)}<small>+${N(c.cash).toLocaleString('fr-FR')} €</small>${bar(c.progress / c.goal)}<span>${N(c.progress)} / ${N(c.goal)}</span></div>`;
     }
     h += `<div class="pp-row">🏆 Les 3 contrats : bonus 1 500 € · nouveaux contrats demain</div>`;
     const k = s.streak > 0 ? ((s.streak - 1) % 7) + 1 : 0;
@@ -202,12 +211,12 @@ export class Hud {
       const all = [s, ...this.others].sort((a, b) => b.rep - a.rep);
       all.forEach((p, i) => {
         const medal = ['🥇', '🥈', '🥉'][i] ?? `${i + 1}.`;
-        h += `<div class="pp-row${p === s ? ' me' : ''}">${medal} ${p.crew ? `[${esc(p.crew.name)}] ` : ''}${esc(p.name)}<small>Niv. ${levelProgress(p.rep).level}${p.bounty > 0 ? ` · 🎯 ${p.bounty.toLocaleString('fr-FR')} €` : ''}</small></div>`;
+        h += `<div class="pp-row${p === s ? ' me' : ''}">${medal} ${p.crew ? `[${esc(p.crew.name)}] ` : ''}${esc(p.name)}<small>Niv. ${levelProgress(p.rep).level}${p.bounty > 0 ? ` · 🎯 ${N(p.bounty).toLocaleString('fr-FR')} €` : ''}</small></div>`;
       });
     }
     const wk = s.week;
-    h += `<div class="pp-sec">TES RECORDS DE LA SEMAINE</div><div class="pp-row">Meilleur combo : <b>${wk.best.toLocaleString('fr-FR')}</b> · K.O. : <b>${wk.kos}</b><br>Joueurs K.O. : <b>${wk.pvp}</b> · primes : <b>${wk.bounties}</b> · braquages coop : <b>${wk.heists}</b></div>`;
-    if (s.fenceOrder) h += `<div class="pp-sec">RECELEUR 💰</div><div class="pp-row">Il veut : <b>${esc(VEHICLES[s.fenceOrder].name)}</b>. Vole-la et amène-la au point 💰 de la carte. Une voiture dorée vaut une fortune.</div>`;
+    h += `<div class="pp-sec">TES RECORDS DE LA SEMAINE</div><div class="pp-row">Meilleur combo : <b>${N(wk.best).toLocaleString('fr-FR')}</b> · K.O. : <b>${N(wk.kos)}</b><br>Joueurs K.O. : <b>${N(wk.pvp)}</b> · primes : <b>${N(wk.bounties)}</b> · braquages coop : <b>${N(wk.heists)}</b></div>`;
+    if (s.fenceOrder) h += `<div class="pp-sec">RECELEUR 💰</div><div class="pp-row">Il veut : <b>${esc(VEHICLES[s.fenceOrder]?.name ?? '?')}</b>. Vole-la et amène-la au point 💰 de la carte. Une voiture dorée vaut une fortune.</div>`;
     this.panelBody.innerHTML = h;
   }
 
@@ -248,6 +257,32 @@ export class Hud {
     }
     const sur = s.canSurrender && !deal;
     if (this.changed('surrender', sur)) $('btn-surrender').classList.toggle('hidden', !sur);
+  }
+
+  /** Bodyguards on/off (Family perk). */
+  onGuards?: () => void;
+  private guardsOff = false;
+
+  /** Your rank in the Family, the ladder and what the next grade needs. */
+  private familySection(s: PlayerState, level: number) {
+    const rank = rankOf(s.missionsDone, s.tutorialDone);
+    const r = RANKS[rank];
+    let h = `<div class="pp-sec">${FAMILY_NAME.toUpperCase()} · ${r.icon} ${r.name.toUpperCase()}</div>`;
+    h += `<div class="pp-row pp-ladder">${RANKS.slice(1)
+      .map((q, i) => `<span class="${i + 1 < rank ? 'past' : i + 1 === rank ? 'cur' : ''}">${q.icon}<small>${q.name}</small></span>`)
+      .join('')}</div>`;
+    if (rank === 0) return h + `<div class="pp-row">Termine le prologue avec Momo pour entrer dans la Famille.</div>`;
+    if (r.perk) h += `<div class="pp-row">✔ ${r.perk}</div>`;
+    if (rank < MAX_RANK) {
+      const pr = rankProgress(s.missionsDone, rank);
+      const todo = jobsOfRank(rank).find((m) => !s.missionsDone.includes(m.id));
+      const lock = todo?.level && level < todo.level ? ` · 🔒 niveau ${todo.level}` : '';
+      h += `<div class="pp-row">Prochain grade : ${RANKS[rank + 1].icon} ${RANKS[rank + 1].name}${ppBar(pr.done / Math.max(1, pr.total))}<span>${pr.done} / ${pr.total} missions de la Famille</span></div>`;
+      if (todo) h += `<div class="pp-row">➜ Mission « ${todo.name} » avec ${todo.giver} (« ! » jaune sur la carte)${lock}</div>`;
+      h += `<div class="pp-row"><small style="float:none;color:#cfc8e8">Au grade suivant : ${RANKS[rank + 1].perk}</small></div>`;
+    }
+    if (r.guards > 0) h += `<div class="pp-row">🕶 ${r.guards} garde${r.guards > 1 ? 's' : ''} du corps<button data-guards>${this.guardsOff ? 'Appeler' : 'Renvoyer'}</button></div>`;
+    return h;
   }
 
   /** "+" on a skill in the progression panel. */
@@ -403,3 +438,7 @@ export class Hud {
     }
   }
 }
+
+const ppBar = (r: number) => `<div class="pp-bar"><i style="width:${Math.min(100, r * 100).toFixed(0)}%"></i></div>`;
+/** Numbers shown through innerHTML: whatever a (possibly modified) host sends, only a number gets in. */
+const N = (v: unknown) => Number(v) || 0;

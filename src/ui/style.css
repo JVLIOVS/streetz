@@ -1279,3 +1279,50 @@ body {
   bottom: calc(150px + var(--safe-b));
   background: rgba(255, 255, 255, 0.18);
 }
+
+/* La Famille: rank badge and ladder */
+#rank-ico {
+  font-size: 15px;
+  line-height: 1;
+  margin-left: 4px;
+}
+.pp-ladder {
+  display: flex;
+  gap: 2px;
+  justify-content: space-between;
+}
+.pp-ladder span {
+  flex: 1;
+  text-align: center;
+  font-size: 16px;
+  opacity: 0.35;
+  filter: grayscale(1);
+}
+.pp-ladder span small {
+  display: block;
+  float: none;
+  font-size: 8px;
+  color: #cfc8e8;
+}
+.pp-ladder span.past {
+  opacity: 0.8;
+  filter: none;
+}
+.pp-ladder span.cur {
+  opacity: 1;
+  filter: none;
+  transform: scale(1.2);
+}
+.pp-ladder span.cur small {
+  color: #ffd23f;
+  font-weight: 800;
+}
+.pp-row [data-guards] {
+  float: right;
+  border: 0;
+  border-radius: 8px;
+  padding: 3px 10px;
+  background: #ffd23f;
+  color: #1b1430;
+  font-weight: 800;
+}

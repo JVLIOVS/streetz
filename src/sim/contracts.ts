@@ -63,9 +63,10 @@ export class ContractSystem {
       c.progress = Math.min(c.goal, max ? Math.max(c.progress, amount) : c.progress + amount);
       if (c.progress < c.goal) continue;
       finished = true;
-      s.money += c.cash;
-      this.w.events.push({ type: 'contract', playerId: s.id, text: c.text, cash: c.cash, all: false });
-      this.w.toast(p, `📋 Contrat réussi : ${c.text} · +${c.cash.toLocaleString('fr-FR')} €`);
+      const cash = Math.round(c.cash * this.w.family.pay(p));
+      s.money += cash;
+      this.w.events.push({ type: 'contract', playerId: s.id, text: c.text, cash, all: false });
+      this.w.toast(p, `📋 Contrat réussi : ${c.text} · +${cash.toLocaleString('fr-FR')} €`);
       this.w.progress.addXp(p, c.xp);
     }
     if (finished && s.contracts.length > 0 && s.contracts.every((c) => c.progress >= c.goal)) {

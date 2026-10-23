@@ -591,6 +591,8 @@ describe('missions', () => {
     const gv = w.missions.givers.find((g) => g.id === id)!;
     w.addPlayer('p1', { x: gv.x, y: 0.5, z: gv.z, yaw: 0 });
     P(w).missionsDone = done;
+    // later jobs need a level: give enough XP
+    if (done.length) P(w).rep = 20000;
     run(w, 3);
     return w;
   }
@@ -685,7 +687,7 @@ describe('missions', () => {
   });
 
   it('chase: a stolen car flees through traffic; wrecking it completes the mission', async () => {
-    const w = await at('rodeo', ['colis', 'dette', 'temoin']);
+    const w = await at('rodeo', ['colis', 'dette', 'temoin', 'racket']);
     run(w, 1, (t) => [act(t, 'use')]);
     const car = w.vehicles.get(P(w).missionTargets[0])!;
     expect(car.state.driver).toBe('npc');
@@ -702,7 +704,7 @@ describe('missions', () => {
   });
 
   it('heist: get armed, rob the bank, lose the police, hide', async () => {
-    const w = await at('casse', ['colis', 'dette', 'temoin', 'rodeo']);
+    const w = await at('casse', ['colis', 'dette', 'temoin', 'racket', 'rodeo', 'convoi', 'guerre']);
     run(w, 1, (t) => [act(t, 'use')]);
     expect(P(w).missionStep).toBe(0);
     arm(w);
@@ -731,6 +733,102 @@ describe('missions', () => {
     expect(P(w).missionsDone).toContain('casse');
     expect(P(w).rep).toBeGreaterThanOrEqual(150);
     void giver;
+  });
+});
+
+describe('la Famille (grades)', () => {
+  it('the rank comes from the finished jobs of each grade', async () => {
+    const { rankOf, RANKS } = await import('../src/data/family');
+    expect(rankOf([], false)).toBe(0);
+    expect(rankOf([], true)).toBe(1);
+    expect(rankOf(['colis'], true)).toBe(1);
+    expect(rankOf(['colis', 'dette'], true)).toBe(2);
+    expect(rankOf(['colis', 'dette', 'temoin', 'racket', 'rodeo', 'convoi'], true)).toBe(4);
+    const all = ['colis', 'dette', 'temoin', 'racket', 'rodeo', 'convoi', 'guerre', 'casse', 'traitre', 'bijoux', 'couronne'];
+    expect(rankOf(all, true)).toBe(RANKS.length - 1);
+    // every grade from Guetteur to Bras droit has jobs, and they form one chain
+    const { MISSIONS } = await import('../src/data/missions');
+    for (let r = 1; r < RANKS.length - 1; r++) expect(MISSIONS.some((m) => m.family === r)).toBe(true);
+    for (const m of MISSIONS) if (m.requires) expect(MISSIONS.some((q) => q.id === m.requires)).toBe(true);
+  });
+
+  it('finishing the last job of a grade promotes you: bonus, Don speech, banner event', async () => {
+    const w = await SimWorld.create(map);
+    w.addPlayer('p1');
+    run(w, 2);
+    const s = P(w);
+    s.tutorialDone = true;
+    s.rep = 20000;
+    s.missionsDone = ['colis'];
+    const gv = w.missions.givers.find((g) => g.id === 'dette')!;
+    w.teleportPlayer(w.players.get('p1')!, gv.x, 0.5, gv.z);
+    run(w, 3);
+    run(w, 1, (t) => [act(t, 'use')]);
+    expect(s.mission).toBe('dette');
+    const money = s.money;
+    // skip to the end: knock the gang out and come back
+    run(w, 1);
+    w.teleportPlayer(w.players.get('p1')!, -300, 0.5, -290);
+    run(w, 5);
+    w.drainEvents();
+    for (const id of s.missionTargets) {
+      const ped = w.peds.get(id)!;
+      ped.state.health = 1;
+      w.damagePed(ped, 10, w.players.get('p1')!, ped.state.x, ped.state.z);
+    }
+    run(w, 3);
+    w.teleportPlayer(w.players.get('p1')!, -150, 0.5, -40);
+    run(w, 5);
+    expect(s.missionsDone).toContain('dette');
+    expect(w.missions.rank(w.players.get('p1')!)).toBe(2);
+    const ev = w.drainEvents();
+    expect(ev.some((e) => e.type === 'promoted' && e.rank === 2)).toBe(true);
+    expect(ev.some((e) => e.type === 'say' && e.name === 'Don Corvi')).toBe(true);
+    // reward ×1 at Guetteur + 1 000 € promotion bonus
+    expect(s.money - money).toBeGreaterThanOrEqual(900 + 1000);
+  });
+
+  it('a Lieutenant gets a bodyguard who shoots whoever attacks them, and can send them home', async () => {
+    const w = await SimWorld.create(map);
+    w.density = { peds: 0, traffic: 0, parkedRadius: 0 };
+    w.addPlayer('p1');
+    const p = w.players.get('p1')!;
+    const s = P(w);
+    s.tutorialDone = true;
+    s.missionsDone = ['colis', 'dette', 'temoin', 'racket', 'rodeo', 'convoi'];
+    run(w, 40);
+    const guards = [...w.peds.values()].filter((q) => q.guardOf === 'p1');
+    expect(guards.length).toBe(1);
+    // the guard can't be hit by your own auto-aim
+    arm(w);
+    // a thug attacks: the guard shoots him
+    const thug = w.spawnPed(s.x + 3, s.z, { ambient: false });
+    thug.state.mode = 'fight';
+    thug.state.target = 'p1';
+    const hp = thug.state.health;
+    run(w, 120);
+    expect(thug.state.health).toBeLessThan(hp);
+    run(w, 1, (t) => [act(t, 'guards')]);
+    run(w, 2);
+    expect([...w.peds.values()].filter((q) => q.guardOf === 'p1').length).toBe(0);
+    void p;
+  });
+
+  it('missions locked by level say so; the Family lawyer cuts fines', async () => {
+    const w = await SimWorld.create(map);
+    const gv = w.missions.givers.find((g) => g.id === 'racket')!;
+    w.addPlayer('p1', { x: gv.x, y: 0.5, z: gv.z, yaw: 0 });
+    run(w, 2);
+    const s = P(w);
+    s.tutorialDone = true;
+    s.missionsDone = ['colis', 'dette', 'temoin'];
+    s.rep = 0;
+    run(w, 1, (t) => [act(t, 'use')]);
+    expect(s.mission).toBeNull();
+    const p = w.players.get('p1')!;
+    expect(w.family.lawyer(p)).toBe(1);
+    s.missionsDone = ['colis', 'dette', 'temoin', 'racket', 'rodeo', 'convoi', 'guerre', 'casse'];
+    expect(w.family.lawyer(p)).toBeLessThan(1);
   });
 });
 

@@ -1,3 +1,4 @@
+import { levelOf } from '../data/progression';
 import type { MapData, PoiKind } from '../maps/types';
 import type { PlayerState } from '../sim/player';
 import type { SimWorld } from '../sim/world';
@@ -115,7 +116,7 @@ export class Minimap {
     if (!me.mission) {
       for (const gv of sim.missions.givers) {
         const def = missionById(gv.id)!;
-        const open = !def.requires || me.missionsDone.includes(def.requires);
+        const open = (!def.requires || me.missionsDone.includes(def.requires)) && levelOf(me.rep) >= (def.level ?? 1);
         const done = me.missionsDone.includes(def.id);
         const [mx, mz] = at(gv.x, gv.z);
         g.fillStyle = !open ? 'rgba(120,120,130,0.8)' : done ? '#b8a24a' : '#ffd23f';

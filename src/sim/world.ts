@@ -20,6 +20,7 @@ import { SocialSystem } from './social';
 import { HeistSystem } from './heist';
 import { LawSystem } from './law';
 import { RoofSystem } from './roofs';
+import { FamilySystem } from './family';
 import { RESPECT } from '../data/law';
 import { REPAINT_PRICE } from '../data/police';
 import { levelOf, requiredLevel } from '../data/progression';
@@ -85,6 +86,8 @@ export type SimEvent =
   | { type: 'jail'; playerId: string; seized: number; lost: string[] }
   /** A mission partner / giver speaks to this player. */
   | { type: 'say'; playerId: string; name: string; text: string; seed: number }
+  /** Climbed a rank in the Family. */
+  | { type: 'promoted'; playerId: string; rank: number; name: string; perk: string; bonus: number }
   /** Prologue done: the open world is yours. */
   | { type: 'freeRoam'; playerId: string }
   | { type: 'crate'; playerId: string; text: string; rare: boolean; pickup?: boolean }
@@ -171,6 +174,7 @@ export class SimWorld {
   readonly heist: HeistSystem;
   readonly law: LawSystem;
   readonly roofs: RoofSystem;
+  readonly family: FamilySystem;
   /** Local calendar day number (set by the game from the clock; 0 = unknown). */
   day = 0;
   /** Wall-clock time in seconds (set by the game; used by hideout businesses). */
@@ -205,6 +209,7 @@ export class SimWorld {
     this.heist = new HeistSystem(this);
     this.law = new LawSystem(this);
     this.roofs = new RoofSystem(this);
+    this.family = new FamilySystem(this);
     this.props = new PropField(map.props);
     this.buildProps();
     if (role === 'authority') {
@@ -241,6 +246,7 @@ export class SimWorld {
     if (!p) return;
     if (p.state.vehicle >= 0) this.leaveVehicle(p);
     this.missions.drop(id);
+    this.family.drop(id);
     this.progress.drop(id);
     this.social.drop(id);
     this.law.drop(id);
@@ -459,6 +465,7 @@ export class SimWorld {
     this.heist.update();
     this.law.update();
     this.roofs.update();
+    this.family.update();
     if (this.tick % 20 === 0) this.managePopulation();
     for (const p of this.players.values()) p.state.context = this.computeContext(p);
     this.physics.step();
@@ -955,6 +962,9 @@ export class SimWorld {
         break;
       case 'skill':
         if (arg) this.law.skill(p, arg);
+        break;
+      case 'guards':
+        this.family.toggleGuards(p);
         break;
       case 'heist':
         this.heist.start(p);
@@ -1524,7 +1534,8 @@ export class SimWorld {
   private targets(p: Player, withVehicles: boolean): Target[] {
     const out: Target[] = [];
     const s = p.state;
-    for (const ped of this.peds.values()) if (ped.alive) out.push({ x: ped.state.x, y: ped.state.y + 1.1, z: ped.state.z, ped });
+    // never your own partner or bodyguards
+    for (const ped of this.peds.values()) if (ped.alive && !ped.invulnerable && ped.guardOf !== s.id) out.push({ x: ped.state.x, y: ped.state.y + 1.1, z: ped.state.z, ped });
     for (const o of this.players.values()) {
       if (o === p || o.state.dead || o.state.vehicle >= 0 || o.state.interior !== s.interior) continue;
       out.push({ x: o.state.x, y: o.state.y + 1.1, z: o.state.z, player: o });
@@ -1670,6 +1681,21 @@ export class SimWorld {
         const armed = s.weapon === 'bat' ? 16 : s.weapon === 'knife' ? 14 : s.weapon === 'baton' ? 12 : 0;
         this.damagePlayer(target!, armed || (s.action === 'kick' ? 11 : 8));
       }
+    }
+    // armed thugs shoot from a distance
+    const gun = s.weapon !== 'none' && !WEAPONS[s.weapon as WeaponId].melee;
+    if (gun && d > 3 && d < 20) {
+      ped.chase.stop = 8;
+      if (ped.attackCooldown <= 0 && this.castStatic(s.x, 1.4, s.z, (ts.x - s.x) / d, 0, (ts.z - s.z) / d, d) >= d - 0.6) {
+        ped.attackCooldown = this.rng.range(1.2, 1.9);
+        s.action = 'shoot';
+        s.actionSeq++;
+        const hit = this.rng.chance(Math.hypot(ts.vx, ts.vz) > 4 ? 0.25 : 0.4);
+        const miss = hit ? 0 : 1.4;
+        this.events.push({ type: 'shot', fx: s.x, fy: s.y + 1.4, fz: s.z, tx: ts.x + this.rng.range(-miss, miss), ty: ts.y + 1.1, tz: ts.z + this.rng.range(-miss, miss), hit, w: 'pistol' });
+        if (hit) this.damagePlayer(target!, 8);
+      }
+      return;
     }
     if (d < 1.6 && ped.attackCooldown <= 0 && ped.pendingHit <= 0) {
       s.actionSeq++;

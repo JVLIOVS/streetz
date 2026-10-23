@@ -1,6 +1,8 @@
 import { DT } from '../core/loop';
 import { MISSIONS, missionById, REPLAY_FACTOR, type MissionDef, type MissionStep, type MissionStepFull } from '../data/missions';
 import { RESPECT } from '../data/law';
+import { DON, RANKS, rankOf } from '../data/family';
+import { levelOf } from '../data/progression';
 import { WEAPONS } from '../data/weapons';
 import type { InteriorDef } from '../maps/types';
 import type { Ped } from './peds';
@@ -55,7 +57,12 @@ export class MissionSystem {
   }
 
   unlocked(p: Player, def: MissionDef) {
-    return !def.requires || p.state.missionsDone.includes(def.requires);
+    return (!def.requires || p.state.missionsDone.includes(def.requires)) && levelOf(p.state.rep) >= (def.level ?? 1);
+  }
+
+  /** Rank in the Family (from the missions you finished). */
+  rank(p: Player) {
+    return rankOf(p.state.missionsDone, p.state.tutorialDone);
   }
 
   /** "Mission" button when standing on a mission start marker. */
@@ -77,7 +84,8 @@ export class MissionSystem {
     const g = this.givers.find((q) => q.id === id);
     if (!def.auto && (!g || Math.hypot(g.x - s.x, g.z - s.z) > GIVER_RADIUS + 3)) return;
     if (!this.unlocked(p, def)) {
-      this.w.toast(p, `🔒 Termine d’abord « ${missionById(def.requires!)!.name} »`);
+      const before = def.requires && !s.missionsDone.includes(def.requires);
+      this.w.toast(p, before ? `🔒 Termine d’abord « ${missionById(def.requires!)!.name} »` : `🔒 Niveau ${def.level} requis`);
       return;
     }
     s.mission = def.id;
@@ -152,7 +160,9 @@ export class MissionSystem {
   onRobbery(p: Player, interior: string) {
     const run = this.runs.get(p.state.id);
     const step = run?.def.steps[run.step];
-    if (step?.kind === 'rob' && this.door(step.interior)?.id === interior) this.next(p);
+    if (step?.kind !== 'rob') return;
+    const d = this.w.map.interiors.find((i) => i.id === interior);
+    if (d && (d.id === step.interior || d.kind === step.interior)) this.next(p);
   }
 
   /** Called by the world when a player parks a car in their garage. */
@@ -293,7 +303,8 @@ export class MissionSystem {
   private complete(p: Player, run: Run) {
     const s = p.state;
     const replay = s.missionsDone.includes(run.def.id);
-    const money = Math.round(run.def.reward * (replay ? REPLAY_FACTOR : 1));
+    const rankBefore = this.rank(p);
+    const money = Math.round(run.def.reward * (replay ? REPLAY_FACTOR : 1) * RANKS[rankBefore].pay);
     const rep = Math.round(run.def.rep * (replay ? REPLAY_FACTOR : 1));
     s.money += money;
     this.w.progress.addXp(p, rep);
@@ -312,7 +323,19 @@ export class MissionSystem {
       return;
     }
     const nextDef = MISSIONS.find((m) => m.requires === run.def.id);
-    this.w.toast(p, `✔ MISSION RÉUSSIE · +${money.toLocaleString('fr-FR')} € · +${rep} rep${nextDef && !replay ? ` — nouvelle mission : ${nextDef.name}` : ''}`);
+    this.w.toast(p, `✔ MISSION RÉUSSIE · +${money.toLocaleString('fr-FR')} € · +${rep} rep${nextDef && !replay ? ` — nouvelle mission : ${nextDef.name}${nextDef.level && levelOf(s.rep) < nextDef.level ? ` (niveau ${nextDef.level})` : ''}` : ''}`);
+    const rankAfter = this.rank(p);
+    if (rankAfter > rankBefore) this.promote(p, rankAfter);
+  }
+
+  /** Climbed a rank in the Family: bonus cash, a word from the Don, new perks. */
+  private promote(p: Player, rank: number) {
+    const s = p.state;
+    const r = RANKS[rank];
+    s.money += r.bonus;
+    this.w.law.respect(p, 20 * rank);
+    this.w.events.push({ type: 'promoted', playerId: s.id, rank, name: r.name, perk: r.perk, bonus: r.bonus });
+    this.w.events.push({ type: 'say', playerId: s.id, name: DON, text: PROMOTION_LINES[rank] ?? `Tu es ${r.name} maintenant.`, seed: 4242 });
   }
 
   private reset(p: Player) {
@@ -352,8 +375,21 @@ export class MissionSystem {
     }
   }
 
-  private door(idOrKind: string): InteriorDef | undefined {
-    return this.w.map.interiors.find((i) => i.id === idOrKind) ?? this.w.map.interiors.find((i) => i.kind === idOrKind);
+  /** A building by id, or the closest one of that kind to (x, z). */
+  private door(idOrKind: string, x = 0, z = 0): InteriorDef | undefined {
+    const byId = this.w.map.interiors.find((i) => i.id === idOrKind);
+    if (byId) return byId;
+    let best: InteriorDef | undefined;
+    let bd = Infinity;
+    for (const i of this.w.map.interiors) {
+      if (i.kind !== idOrKind) continue;
+      const d = Math.hypot(i.door.x - x, i.door.z - z);
+      if (d < bd) {
+        bd = d;
+        best = i;
+      }
+    }
+    return best;
   }
 
   /** Countdown shared by goto / door steps. Returns false when time is up. */
@@ -403,14 +439,17 @@ export class MissionSystem {
       case 'kill': {
         if (!run.ready) {
           run.ready = true;
+          // on the sidewalk closest to the spot, never inside a building
+          const c = this.w.walk[this.w.nearestWalkNode(step.x, step.z)];
           for (let i = 0; i < step.count; i++) {
             const a = (i / step.count) * Math.PI * 2;
-            const ped = this.w.spawnPed(step.x + Math.cos(a) * 3, step.z + Math.sin(a) * 3, { ambient: false, facing: a });
+            const ped = this.w.spawnPed(c.x + Math.cos(a) * 3, c.z + Math.sin(a) * 3, { ambient: false, facing: a });
             const boss = i === 0 && !!step.boss;
             ped.state.temper = 'fighter';
-            ped.state.maxHealth = ped.state.health = boss ? 260 : 150;
-            ped.state.money = boss ? 400 : this.w.rng.int(40, 160);
-            if (boss) ped.state.weapon = 'baton';
+            ped.state.maxHealth = ped.state.health = boss ? 260 + 20 * step.count : 150;
+            ped.state.money = boss ? 400 + 100 * step.count : this.w.rng.int(40, 160);
+            if (boss) ped.state.weapon = step.armed ? 'pistol' : 'baton';
+            else if (step.armed && i % 2 === 1) ped.state.weapon = 'pistol';
             run.peds.push(ped.state.id);
           }
         }
@@ -419,6 +458,7 @@ export class MissionSystem {
         s.missionTargets = alive.map((q) => q.state.id);
         if (alive.length === 0) return this.next(p);
         s.waypoint = [alive[0].state.x, alive[0].state.z];
+        if (step.count > 1) s.objective = `${step.text} (${alive.length} restant${alive.length > 1 ? 's' : ''})`;
         break;
       }
       case 'escort':
@@ -434,7 +474,7 @@ export class MissionSystem {
         break;
       }
       case 'rob': {
-        const d = this.door(step.interior);
+        const d = this.door(step.interior, s.x, s.z);
         s.waypoint = d ? [d.door.x, d.door.z] : null;
         // you need a weapon out to rob: hand it over if it's in the pocket
         if (run.def.auto && s.interior === d?.id && s.weapon === 'fist') {
@@ -451,6 +491,10 @@ export class MissionSystem {
       case 'lose':
         s.waypoint = null;
         if (s.wanted === 0) this.next(p);
+        break;
+      case 'wanted':
+        s.waypoint = null;
+        if (s.wanted >= step.stars) this.next(p);
         break;
       case 'ko': {
         // point at the closest passer-by
@@ -611,3 +655,13 @@ export class MissionSystem {
     s.waypoint = [v.state.x, v.state.z];
   }
 }
+
+/** What the Don says when you climb a rank. */
+const PROMOTION_LINES: Record<number, string> = {
+  2: 'On m’a parlé de toi. Bienvenue dans la Famille, petite main. Ne me déçois pas.',
+  3: 'Tu sais te servir de tes mains et tu ne parles pas. Tu es un Soldat de la Famille, maintenant. Tu toucheras ta part.',
+  4: 'Lieutenant. Un de mes hommes te suivra partout. Il donne sa vie pour toi, toi tu la donnes pour moi.',
+  5: 'Capo ! Tu as ton équipe et notre avocat est à ton service. La rue commence à murmurer ton nom.',
+  6: 'Mon bras droit. Il n’y a plus que moi au-dessus de toi. Une dernière chose à régler…',
+  7: 'Je te passe la couronne. Tu es le Parrain. Embrasse ma main une dernière fois, puis la ville est à toi.',
+};

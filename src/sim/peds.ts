@@ -56,6 +56,8 @@ export class Ped {
   ambient = true;
   /** Mission partner: can't be hurt. */
   invulnerable = false;
+  /** Bodyguard of this player (Family perk). */
+  guardOf: string | null = null;
   walkSpeed: number;
   /** Chase target set by the world each tick while fighting. */
   chase = { x: 0, z: 0, stop: 1.2 };

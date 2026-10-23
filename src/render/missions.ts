@@ -1,3 +1,4 @@
+import { levelOf } from '../data/progression';
 import * as THREE from 'three';
 import { missionById } from '../data/missions';
 import type { PlayerState } from '../sim/player';
@@ -138,7 +139,7 @@ export class MissionMarkers {
     const indoors = !!me?.interior;
     for (const g of this.givers) {
       const def = missionById(g.id)!;
-      const open = !def.requires || !!me?.missionsDone.includes(def.requires);
+      const open = (!def.requires || !!me?.missionsDone.includes(def.requires)) && !!me && levelOf(me.rep) >= (def.level ?? 1);
       g.group.visible = !indoors && !me?.mission;
       g.beam.material = open ? this.openMat : this.lockedMat;
       const bang = g.group.getObjectByName('bang')!;

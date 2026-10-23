@@ -40,7 +40,7 @@ export type ActionKind =
   /** Garage: take out stored vehicle number arg. */
   | 'garage_out'
   /** Missions: start (arg = mission id) or give up (arg = ''). */
-  | 'mission' | 'collect' | 'crew' | 'heist' | 'fine' | 'bank' | 'skill' | 'surrender';
+  | 'mission' | 'collect' | 'crew' | 'heist' | 'fine' | 'bank' | 'skill' | 'surrender' | 'guards';
 
 /** One-shot action (button tap). */
 export interface ActionCommand {

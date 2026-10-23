@@ -64,6 +64,7 @@ export class Game {
     );
     this.audio = new AudioDirector(sim, sound);
     hud.onSkill = (id) => this.sendAction('skill', id);
+    hud.onGuards = () => this.sendAction('guards', '');
     hud.onPolice = (c) => (c === 'surrender' ? this.sendAction('surrender', '') : this.sendAction('fine', c));
     hud.onAbort = () => this.menuActions.push({ action: 'mission', arg: 'abort' });
     this.loop = new FixedLoop(
@@ -237,6 +238,14 @@ export class Game {
           if (e.playerId === this.localId) {
             this.hud.toast(`${e.name} : « ${e.text} »`, Math.max(4, e.text.length / 14));
             this.sound.voices?.say(e.text, e.seed);
+          }
+          break;
+        case 'promoted':
+          if (e.playerId === this.localId) {
+            this.hud.banner(`PROMU · ${e.rank}/7`, `${e.name.toUpperCase()}`, `${e.perk}${e.bonus ? ` · +${e.bonus.toLocaleString('fr-FR')} €` : ''}`, 6);
+            this.sound.fanfare();
+            this.vibrate([60, 80, 120]);
+            this.onSave?.();
           }
           break;
         case 'freeRoam':
