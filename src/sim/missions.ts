@@ -1,5 +1,6 @@
 import { DT } from '../core/loop';
-import { MISSIONS, missionById, REPLAY_FACTOR, type MissionDef, type MissionStep } from '../data/missions';
+import { MISSIONS, missionById, REPLAY_FACTOR, type MissionDef, type MissionStep, type MissionStepFull } from '../data/missions';
+import { RESPECT } from '../data/law';
 import { WEAPONS } from '../data/weapons';
 import type { InteriorDef } from '../maps/types';
 import type { Ped } from './peds';
@@ -31,6 +32,8 @@ interface Run {
   ally: number;
   broken: number;
   allyCooldown: number;
+  /** Where the carried item fell. */
+  dropped: { x: number; z: number } | null;
 }
 
 const GIVER_RADIUS = 2.6;
@@ -78,7 +81,7 @@ export class MissionSystem {
       return;
     }
     s.mission = def.id;
-    const run: Run = { def, step: -1, ready: false, timer: -1, peds: [], vehicle: -1, witness: -1, dist0: 0, ambushed: false, warned: false, ally: -1, broken: 0, allyCooldown: 0 };
+    const run: Run = { def, step: -1, ready: false, timer: -1, peds: [], vehicle: -1, witness: -1, dist0: 0, ambushed: false, warned: false, ally: -1, broken: 0, allyCooldown: 0, dropped: null };
     this.runs.set(s.id, run);
     if (def.partner) {
       this.spawnAlly(p, run);
@@ -125,6 +128,16 @@ export class MissionSystem {
     if (step?.kind === 'ko') this.next(p);
   }
 
+  /** Knocked out: a carried mission item falls on the ground. */
+  onDeath(p: Player) {
+    const s = p.state;
+    const run = this.runs.get(s.id);
+    if (!run || !s.carrying) return;
+    run.dropped = { x: s.x, z: s.z };
+    this.w.toast(p, `📦 Tu as lâché ${s.carrying} ! Retourne le chercher`);
+    s.carrying = null;
+  }
+
   /** Called by the world when a player breaks a street prop. */
   onProp(p: Player) {
     const run = this.runs.get(p.state.id);
@@ -163,7 +176,8 @@ export class MissionSystem {
         continue;
       }
       if (p.state.dead) {
-        if (run.def.auto) continue; // wait for the respawn
+        // the prologue and carry steps go on after the respawn
+        if (run.def.auto || run.def.steps[run.step]?.carry) continue;
         this.abort(p, 'Mission échouée : tu es K.O.');
         continue;
       }
@@ -191,6 +205,8 @@ export class MissionSystem {
     s.missionTargets = [];
     s.waypoint = null;
     run.broken = 0;
+    run.dropped = null;
+    s.carrying = step.carry ?? null;
     if (step.give) {
       const w = step.give.weapon;
       if (!s.weapons.includes(w)) s.weapons.push(w);
@@ -281,6 +297,7 @@ export class MissionSystem {
     const rep = Math.round(run.def.rep * (replay ? REPLAY_FACTOR : 1));
     s.money += money;
     this.w.progress.addXp(p, rep);
+    this.w.law.respect(p, RESPECT.mission);
     this.w.contracts.track(p, 'mission', 1);
     if (!replay) s.missionsDone.push(run.def.id);
     if (run.def.auto) s.tutorialDone = true;
@@ -307,6 +324,7 @@ export class MissionSystem {
     s.waypoint = null;
     s.missionTargets = [];
     s.ally = -1;
+    s.carrying = null;
   }
 
   /** Mission entities go back to the ambient world (despawned later by the population manager). */
@@ -353,7 +371,20 @@ export class MissionSystem {
 
   private updateStep(p: Player, run: Run) {
     const s = p.state;
-    const step: MissionStep = run.def.steps[run.step];
+    const step: MissionStepFull = run.def.steps[run.step];
+    // the item you carry fell: go and pick it up first
+    if (step.carry && run.dropped) {
+      if (!this.tickTimer(p, run, (step as { time?: number }).time)) return;
+      s.waypoint = [run.dropped.x, run.dropped.z];
+      s.objective = `Récupère ${step.carry} là où tu es tombé`;
+      if (!s.interior && Math.hypot(run.dropped.x - s.x, run.dropped.z - s.z) < 2.5) {
+        run.dropped = null;
+        s.carrying = step.carry;
+        s.objective = step.text;
+        this.w.toast(p, `📦 Tu as repris ${step.carry}`);
+      }
+      return;
+    }
     switch (step.kind) {
       case 'goto': {
         s.waypoint = [step.x, step.z];

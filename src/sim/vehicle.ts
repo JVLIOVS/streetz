@@ -72,6 +72,8 @@ export class Vehicle {
   parkedSpot = -1;
   /** AI speed factor (> 1: a fleeing car that does not stop for pedestrians). */
   rush = 1;
+  /** Driving skill of the driver (1 = none). */
+  tune = 1;
   /** Player who last shot it (credited if it explodes). */
   lastHitBy: string | null = null;
   /** Ticks since a player last drove it (persistent while recent). */
@@ -126,7 +128,7 @@ export class Vehicle {
         if (vf < -0.5) {
           vf += sp.brake * DT;
           s.braking = true;
-        } else vf += sp.accel * inp.throttle * DT * Math.max(0, 1 - vf / sp.maxSpeed);
+        } else vf += sp.accel * this.tune * inp.throttle * DT * Math.max(0, 1 - vf / (sp.maxSpeed * this.tune));
       } else if (inp.throttle < 0) {
         if (vf > 0.5) {
           vf -= sp.brake * DT * -inp.throttle;

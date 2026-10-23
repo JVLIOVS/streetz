@@ -1,4 +1,5 @@
 import { DT } from '../core/loop';
+import { WEAPONS } from '../data/weapons';
 import { COOL_TIME, HIDE_TIME, POLICE_LEVELS, REINFORCE_EVERY, RESPONSE_DELAY, searchRadius } from '../data/police';
 import type { Ped, PedRole } from './peds';
 import type { Player } from './player';
@@ -142,7 +143,7 @@ export class PoliceSystem {
   update() {
     const w = this.w;
     for (const p of w.players.values()) this.updateWanted(p);
-    for (const ped of w.peds.values()) if (ped.state.role !== 'civ' && ped.alive && ped.state.mode === 'police') this.copAI(ped);
+    for (const ped of w.peds.values()) if (ped.state.role !== 'civ' && ped.alive && ped.state.mode === 'police' && !w.law.isStopCop(ped)) this.copAI(ped);
     for (const v of w.vehicles.values()) if (v.police && !v.state.wrecked) this.carAI(v);
     for (const h of [...this.helis.values()]) this.heliAI(h);
     if (w.tick % 30 === 0) {
@@ -169,6 +170,15 @@ export class PoliceSystem {
     return false;
   }
 
+  /**
+   * Below 4 stars the police tries to arrest you: officers get out of their cars and
+   * only open fire if you resist (gun out near them, hitting officers). From 4 stars on,
+   * or while resisting, they shoot and ram.
+   */
+  aggressive(s: { wanted: number; resist: number }) {
+    return s.wanted >= 4 || s.resist > 0;
+  }
+
   /** A crime was reported at (x, z): the search restarts from there. */
   reported(p: Player, x: number, z: number) {
     const s = p.state;
@@ -187,6 +197,17 @@ export class PoliceSystem {
       return;
     }
     s.searchR = searchRadius(s.wanted);
+    if (s.resist > 0) s.resist = Math.max(0, s.resist - DT);
+    // a gun out in front of officers counts as resisting
+    if (s.wanted >= 2 && !WEAPONS[s.weapon].melee && s.vehicle < 0) {
+      for (const ped of this.w.peds.values()) {
+        if (ped.state.role !== 'civ' && ped.alive && Math.hypot(ped.state.x - s.x, ped.state.z - s.z) < 15) {
+          if (s.resist <= 0) this.w.toast(p, '⚠ Arme sortie devant la police : ils vont tirer !');
+          s.resist = 6;
+          break;
+        }
+      }
+    }
     if (this.sees(p)) {
       s.wantedSeen = true;
       s.searchX = s.x;
@@ -207,12 +228,15 @@ export class PoliceSystem {
         if (s.wanted === 0) this.w.clearWanted(p, 'La police a abandonné les recherches');
       }
     }
-    // arrest: an officer is holding you, you are on foot and not running
+    // arrest: an officer holds you (on foot and not running, or at the door of a
+    // stopped car: you get pulled out). Up to 3 stars, unless you resist.
     let holding = false;
-    if (s.vehicle < 0 && s.wanted <= 2 && s.speed < 2.6) {
+    const car = s.vehicle >= 0 ? this.w.vehicles.get(s.vehicle) : undefined;
+    const still = car ? Math.abs(car.state.speed) < 1.5 : s.speed < 2.6;
+    if (s.wanted <= 3 && !this.aggressive(s) && still) {
       for (const ped of this.w.peds.values()) {
-        if (ped.state.role === 'civ' || !ped.alive) continue;
-        if (Math.hypot(ped.state.x - s.x, ped.state.z - s.z) < 1.6) {
+        if (ped.state.role === 'civ' || !ped.alive || this.w.law.isStopCop(ped)) continue;
+        if (Math.hypot(ped.state.x - s.x, ped.state.z - s.z) < (car ? 3.2 : 1.6)) {
           holding = true;
           break;
         }
@@ -226,10 +250,11 @@ export class PoliceSystem {
 
   private dispatch() {
     const w = this.w;
-    const wantedPlayers = [...w.players.values()].filter((p) => p.state.wanted > 0 && !p.state.dead && !p.state.interior);
+    // (a player waiting for a fine only gets the one officer)
+    const wantedPlayers = [...w.players.values()].filter((p) => p.state.wanted > 0 && p.state.fine <= 0 && !p.state.dead && !p.state.interior);
     // Units with nobody to chase go home (removed out of sight)
     for (const ped of [...w.peds.values()]) {
-      if (ped.state.role === 'civ' || !ped.police) continue;
+      if (ped.state.role === 'civ' || !ped.police || w.law.isStopCop(ped)) continue;
       const pol = ped.police;
       const t = pol.target ? w.players.get(pol.target) : undefined;
       if (!t || t.state.wanted === 0) pol.leaving = true;
@@ -388,10 +413,11 @@ export class PoliceSystem {
       return;
     }
     s.facing = Math.atan2(-dx, -dz);
-    if (s.weapon === 'baton') s.weapon = lvl.shoot ? (s.role === 'cop' ? 'pistol' : 'rifle') : 'baton';
-    if (!lvl.shoot || ts.vehicle < 0 && d < 6 && ts.wanted <= 2) {
-      // close in to grab the suspect
-      const stop = 1.0;
+    const aggressive = lvl.shoot && this.aggressive(ts);
+    if (s.weapon === 'baton' && aggressive) s.weapon = s.role === 'cop' ? 'pistol' : 'rifle';
+    if (!aggressive) {
+      // close in to grab the suspect (or to the door of their car)
+      const stop = ts.vehicle >= 0 ? 2.2 : 1.0;
       const sp = d > stop ? Math.min(5.4, (d - stop) / DT) : 0;
       this.run(ped, (dx / d) * sp, (dz / d) * sp);
       if (d < 1.7 && pol.cooldown <= 0 && ts.speed > 2.6) {
@@ -481,7 +507,9 @@ export class PoliceSystem {
     const d = Math.hypot(ts.x - s.x, ts.z - s.z);
     const desired = Math.atan2(-(tx - s.x), -(tz - s.z));
     const diff = angleDiff(s.yaw, desired);
-    if (ts.vehicle < 0 && (d < 16 || (d < 40 && Math.abs(s.speed) < 4 && pol.stuck > 0.5))) {
+    const calm = !this.aggressive(ts);
+    const suspectStill = ts.vehicle < 0 || ts.speed < 2;
+    if ((suspectStill && (d < (calm ? 18 : 16) || (d < 40 && Math.abs(s.speed) < 4 && pol.stuck > 0.5))) || (calm && ts.vehicle >= 0 && d < 9)) {
       // stop next to the suspect and let the officers out
       v.input = { throttle: s.speed > 1 ? -1 : 0, steer: 0, handbrake: s.speed < 2 };
       if (!pol.dropped && Math.abs(s.speed) < 3) {
@@ -500,6 +528,12 @@ export class PoliceSystem {
       return;
     }
     v.input = { throttle: Math.abs(diff) > 2.2 ? 0.5 : 1, steer: Math.max(-1, Math.min(1, -diff * 2.2)), handbrake: Math.abs(diff) > 1.2 && s.speed > 12 };
+    // not allowed to ram below 4 stars: slow down when closing in, keep a distance
+    if (calm && d < 40) {
+      const limit = Math.max(ts.vehicle >= 0 ? Math.abs(ts.speed) * 0.9 : 0, (d - 12) * 1.1);
+      if (s.speed > limit + 1) v.input.throttle = -1;
+      else if (s.speed > limit) v.input.throttle = 0;
+    }
     if (Math.abs(s.speed) < 1) {
       pol.stuck += DT;
       if (pol.stuck > 2.2 && !(ts.vehicle < 0 && d < 40)) {

@@ -60,6 +60,7 @@ export class Game {
       () => {},
     );
     this.audio = new AudioDirector(sim, sound);
+    hud.onSkill = (id) => this.sendAction('skill', id);
     hud.onAbort = () => this.menuActions.push({ action: 'mission', arg: 'abort' });
     this.loop = new FixedLoop(
       (tick) => this.step(tick),
@@ -114,7 +115,7 @@ export class Game {
     for (const a of this.controls.takeActions()) {
       // contextual "use" on a counter / wardrobe / garage opens a menu instead
       const ctx = this.player.context;
-      if (a === 'use' && ctx && (ctx.kind === 'shop' || ctx.kind === 'wardrobe' || ctx.kind === 'garage' || ctx.kind === 'business')) {
+      if (a === 'use' && ctx && (ctx.kind === 'shop' || ctx.kind === 'wardrobe' || ctx.kind === 'garage' || ctx.kind === 'business' || ctx.kind === 'bank')) {
         this.menu.open(ctx.kind === 'shop' ? (ctx.target as MenuKind) : ctx.kind);
         continue;
       }
@@ -248,6 +249,13 @@ export class Game {
             if (e.name === HEIST.name) break;
             const who = this.sim.players.get(e.playerId)?.state.name ?? 'Un joueur';
             this.hud.toast(`🎯 ${who} lance la mission « ${e.name} » : aide ou sabote !`);
+          }
+          break;
+        case 'jail':
+          if (e.playerId === this.localId) {
+            this.hud.jail(e.seized, e.lost);
+            this.sound.door();
+            this.onSave?.();
           }
           break;
         case 'busted':
@@ -419,7 +427,7 @@ export class Game {
       this.hudTimer = 1 / 20;
       this.hud.minimap.update(me.x, me.z, me.facing, this.view.cam.yaw, this.sim, me);
       this.hud.updateZone(me.x, me.z, me.interior);
-      this.hud.setMoney(me.money);
+      this.hud.setMoney(me.money, me.bank);
       this.hud.setStars(me.wanted, me.wanted > 0 && !me.wantedSeen);
       this.hud.setBounty(me.bounty, me.bountyTimer);
       if (this.sim.players.size > 1) this.hud.others = [...this.sim.players.values()].filter((p) => p.state.id !== this.localId).map((p) => p.state);

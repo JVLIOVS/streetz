@@ -11,6 +11,7 @@ import {
   cleanCrewName,
   crewColor,
 } from '../data/social';
+import { RESPECT } from '../data/law';
 import type { ContextAction, Player } from './player';
 import type { SimWorld } from './world';
 
@@ -71,12 +72,14 @@ export class SocialSystem {
     const v = victim.state;
     const s = by.state;
     s.week.pvp++;
+    this.w.law.respect(by, RESPECT.pvpKo);
     this.w.progress.chaos(by, 150, 'JOUEUR K.O.');
     this.w.progress.addXp(by, 40);
     if (v.bounty > 0) {
       const prize = v.bounty;
       s.money += prize;
       s.week.bounties++;
+      this.w.law.respect(by, RESPECT.bounty);
       this.w.events.push({ type: 'money', playerId: s.id, amount: prize });
       this.w.progress.addXp(by, 200);
       this.all(`🎯 ${s.name} a encaissé la prime sur ${v.name} : ${prize.toLocaleString('fr-FR')} € !`);

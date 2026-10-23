@@ -1,5 +1,6 @@
 import { DT } from '../core/loop';
 import { HEIST } from '../data/social';
+import { RESPECT } from '../data/law';
 import type { InteriorDef } from '../maps/types';
 import type { ContextAction, Player } from './player';
 import type { SimWorld } from './world';
@@ -162,6 +163,7 @@ export class HeistSystem {
           const share = Math.round(HEIST.total / c.size);
           s.money += share;
           s.week.heists++;
+          w.law.respect(m, RESPECT.heist);
           w.events.push({ type: 'money', playerId: s.id, amount: share });
           w.events.push({ type: 'mission', playerId: s.id, name: HEIST.name, state: 'done' });
           w.toast(m, `✔ BRAQUAGE RÉUSSI · ta part : ${share.toLocaleString('fr-FR')} €`);

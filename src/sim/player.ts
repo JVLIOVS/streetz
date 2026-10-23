@@ -6,6 +6,7 @@ import type { Outfit } from '../data/shop';
 import type { VehicleType } from '../data/vehicles';
 import type { WeaponId } from '../data/weapons';
 import { dailyContracts, type Contract } from '../data/contracts';
+import { noSkills, type Skills } from '../data/law';
 
 export type PlayerAnim = 'idle' | 'walk' | 'run' | 'sprint' | 'jump' | 'fall' | 'drive' | 'ko';
 export type PlayerAction = 'punch' | 'kick' | 'shoot' | 'shoot2' | 'stab' | 'swing' | 'hit' | 'interact';
@@ -31,7 +32,9 @@ export interface ContextAction {
     | 'fence'
     | 'business'
     | 'crew_join'
-    | 'heist';
+    | 'heist'
+    | 'fine'
+    | 'bank';
   label: string;
   target: number | string;
 }
@@ -120,6 +123,19 @@ export interface PlayerState {
   searchX: number;
   searchZ: number;
   searchR: number;
+  /** Money in the bank (safe: not lost when you die or get arrested). */
+  bank: number;
+  /** Fines paid so far (5 max), and the fine currently asked (0 = none). */
+  fines: number;
+  fine: number;
+  /** Criminal record 0–100 and respect. */
+  notoriety: number;
+  respect: number;
+  skills: Skills;
+  /** Mission item you are carrying (dropped if you get knocked out). */
+  carrying: string | null;
+  /** Seconds the police still considers you resisting (weapon out, hitting officers): they shoot. */
+  resist: number;
   /** Arrest progress 0..1 while an officer holds you. */
   arrest: number;
   /** Incremented by the authority on every teleport (doors, respawn…): clients apply it once. */
@@ -233,6 +249,14 @@ export class Player {
       searchZ: 0,
       searchR: 0,
       arrest: 0,
+      resist: 0,
+      bank: 0,
+      fines: 0,
+      fine: 0,
+      notoriety: 0,
+      respect: 0,
+      skills: noSkills(),
+      carrying: null,
       teleportSeq: 0,
       name: id,
       look: -1,
@@ -270,7 +294,9 @@ export class Player {
     const dirZ = -Math.sin(yaw) * sx - Math.cos(yaw) * sy;
     // Three gaits: light push = walk, full push = run, sprint button = sprint
     const sprint = !!inp?.sprint && mag > 0.3;
-    const maxSpeed = s.dead ? 0 : sprint ? T.sprintSpeed : mag < 0.65 ? T.walkSpeed * Math.min(1, mag / 0.4) : T.runSpeed;
+    // Speed skill: +3 % per point
+    const skill = 1 + 0.03 * (s.skills?.speed ?? 0);
+    const maxSpeed = s.dead ? 0 : (sprint ? T.sprintSpeed : mag < 0.65 ? T.walkSpeed * Math.min(1, mag / 0.4) : T.runSpeed) * skill;
     const dl = Math.hypot(dirX, dirZ);
     const tx = dl > 1e-4 ? (dirX / dl) * maxSpeed : 0;
     const tz = dl > 1e-4 ? (dirZ / dl) * maxSpeed : 0;
@@ -387,6 +413,11 @@ export function applyProfile(s: PlayerState, p: Profile) {
   s.biz = p.biz.map((b) => ({ ...b }));
   s.tutorialDone = p.tutorial;
   s.crew = p.crew ? { ...p.crew } : null;
+  s.bank = p.bank;
+  s.fines = p.fines;
+  s.notoriety = p.notoriety;
+  s.respect = p.respect;
+  s.skills = { ...noSkills(), ...p.skills };
   s.week = { ...emptyWeek(0), ...p.week };
 }
 
@@ -409,5 +440,10 @@ export function profileOf(s: PlayerState): Profile {
     tutorial: s.tutorialDone,
     crew: s.crew ? { ...s.crew } : null,
     week: { ...s.week },
+    bank: s.bank,
+    fines: s.fines,
+    notoriety: Math.round(s.notoriety),
+    respect: s.respect,
+    skills: { ...s.skills },
   };
 }

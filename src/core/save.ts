@@ -3,6 +3,7 @@ import type { VehicleType } from '../data/vehicles';
 import type { WeaponId } from '../data/weapons';
 import { START_XP } from '../data/progression';
 import { emptyWeek, type WeekStats } from '../sim/player';
+import { noSkills, type Skills } from '../data/law';
 
 /**
  * Player progression, saved on the device (localStorage). The same JSON shape is sent to
@@ -30,6 +31,11 @@ export interface Profile {
   tutorial: boolean;
   crew: { name: string; color: number } | null;
   week: WeekStats;
+  bank: number;
+  fines: number;
+  notoriety: number;
+  respect: number;
+  skills: Skills;
 }
 
 export interface SaveData {
@@ -41,7 +47,7 @@ export interface SaveData {
 const KEY = 'streetz.save';
 
 export function defaultProfile(): Profile {
-  return { money: 500, weapons: ['fist'], ammo: {}, armor: 0, outfit: {}, clothes: [], garage: [], homes: ['hideout'], rep: START_XP, missions: [], daily: { day: 0, progress: [] }, streak: { day: 0, count: 0 }, biz: [], tutorial: false, crew: null, week: emptyWeek(0) };
+  return { money: 500, weapons: ['fist'], ammo: {}, armor: 0, outfit: {}, clothes: [], garage: [], homes: ['hideout'], rep: START_XP, missions: [], daily: { day: 0, progress: [] }, streak: { day: 0, count: 0 }, biz: [], tutorial: false, crew: null, week: emptyWeek(0), bank: 0, fines: 0, notoriety: 0, respect: 0, skills: noSkills() };
 }
 
 export function defaultSave(): SaveData {
@@ -89,6 +95,11 @@ export function sanitize(p: Partial<Profile> | undefined): Profile {
     // players from before the tutorial existed already know the game
     crew: p.crew && typeof p.crew.name === 'string' ? { name: String(p.crew.name).slice(0, 12), color: Number(p.crew.color) || 0xffffff } : null,
     week: p.week && typeof p.week === 'object' ? { ...emptyWeek(0), ...p.week } : emptyWeek(0),
+    bank: Math.max(0, Math.min(1e8, Number(p.bank) || 0)),
+    fines: Math.max(0, Math.min(5, Number(p.fines) || 0)),
+    notoriety: Math.max(0, Math.min(100, Number(p.notoriety) || 0)),
+    respect: Math.max(0, Number(p.respect) || 0),
+    skills: { ...noSkills(), ...(typeof p.skills === 'object' && p.skills ? p.skills : {}) },
     tutorial: typeof p.tutorial === 'boolean' ? p.tutorial : (p.missions?.length ?? 0) > 0 || (Number(p.money) || 0) !== d.money,
   };
 }

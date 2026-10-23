@@ -33,7 +33,12 @@ export type MissionStep =
   | { kind: 'break'; text: string; count: number };
 
 /** Extras any step can have: a partner line when it starts, a weapon handed over. */
-export type MissionStepFull = MissionStep & { say?: string; give?: { weapon: WeaponId; ammo: number } };
+export type MissionStepFull = MissionStep & {
+  say?: string;
+  give?: { weapon: WeaponId; ammo: number };
+  /** You carry this item during the step: knocked out, it falls where you dropped and you must go back for it. */
+  carry?: string;
+};
 
 export interface MissionDef {
   id: string;
@@ -99,7 +104,7 @@ export const MISSIONS: MissionDef[] = [
     rep: 30,
     steps: [
       { kind: 'goto', text: 'Récupère le colis devant la supérette', x: 27, z: -74 },
-      { kind: 'door', text: 'Livre le colis à la Résidence de la Rive', interior: 'apartment_rive', time: 90 },
+      { kind: 'door', text: 'Livre le colis à la Résidence de la Rive', interior: 'apartment_rive', time: 90, carry: 'le colis' },
     ],
   },
   {

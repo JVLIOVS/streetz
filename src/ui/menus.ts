@@ -6,7 +6,7 @@ import type { PlayerState } from '../sim/player';
 import { levelOf, requiredLevel } from '../data/progression';
 import { BUSINESSES, bizCap, bizStock } from '../data/business';
 
-export type MenuKind = 'gunshop' | 'clothes' | 'dealer' | 'wardrobe' | 'garage' | 'business';
+export type MenuKind = 'gunshop' | 'clothes' | 'dealer' | 'wardrobe' | 'garage' | 'business' | 'bank';
 
 interface Row {
   label: string;
@@ -69,12 +69,12 @@ export class MenuPanel {
   update(s: PlayerState) {
     if (!this.kind) return;
     // walking away from the counter / wardrobe closes the panel
-    const still = s.context && ((this.kind === 'wardrobe' && s.context.kind === 'wardrobe') || (this.kind === 'garage' && s.context.kind === 'garage') || (this.kind === 'business' && s.context.kind === 'business') || (s.context.kind === 'shop' && s.context.target === this.kind));
+    const still = s.context && ((this.kind === 'wardrobe' && s.context.kind === 'wardrobe') || (this.kind === 'garage' && s.context.kind === 'garage') || (this.kind === 'business' && s.context.kind === 'business') || (this.kind === 'bank' && s.context.kind === 'bank') || (s.context.kind === 'shop' && s.context.target === this.kind));
     if (!still) {
       this.close();
       return;
     }
-    const key = JSON.stringify([this.kind === 'business' ? Math.floor(Date.now() / 3000) : 0, s.biz, s.rep, s.money, s.weapons, s.ammo, s.armor, s.clothes, s.outfit, s.garage]);
+    const key = JSON.stringify([this.kind === 'business' ? Math.floor(Date.now() / 3000) : 0, s.bank, s.biz, s.rep, s.money, s.weapons, s.ammo, s.armor, s.clothes, s.outfit, s.garage]);
     if (key === this.lastKey) return;
     this.lastKey = key;
     const { title, rows } = this.rows(this.kind, s);
@@ -118,11 +118,11 @@ export class MenuPanel {
           const w = WEAPONS[id];
           if (w.price <= 0) continue;
           const owned = s.weapons.includes(id);
-          if (!owned) rows.push({ label: `${w.icon} ${w.name}`, sub: w.melee ? 'Corps à corps' : `Arme à feu · ${w.ammoPack} balles`, button: euro(w.price), disabled: s.money < w.price, action: { action: 'buy', arg: `weapon:${id}` } });
-          else if (!w.melee) rows.push({ label: `${w.icon} Munitions ${w.name}`, sub: `+${w.ammoPack} (tu en as ${s.ammo[id]})`, button: euro(w.ammoPrice), disabled: s.money < w.ammoPrice, action: { action: 'buy', arg: `ammo:${id}` } });
+          if (!owned) rows.push({ label: `${w.icon} ${w.name}`, sub: w.melee ? 'Corps à corps' : `Arme à feu · ${w.ammoPack} balles`, button: euro(w.price), disabled: s.money + s.bank < w.price, action: { action: 'buy', arg: `weapon:${id}` } });
+          else if (!w.melee) rows.push({ label: `${w.icon} Munitions ${w.name}`, sub: `+${w.ammoPack} (tu en as ${s.ammo[id]})`, button: euro(w.ammoPrice), disabled: s.money + s.bank < w.ammoPrice, action: { action: 'buy', arg: `ammo:${id}` } });
           else rows.push({ label: `${w.icon} ${w.name}`, sub: 'Déjà à toi', button: '✓', disabled: true, on: true });
         }
-        rows.push({ label: '🦺 Gilet pare-balles', sub: `Armure ${Math.round(s.armor)} / 100`, button: euro(ARMOR_PRICE), disabled: s.armor >= 100 || s.money < ARMOR_PRICE, action: { action: 'buy', arg: 'armor' } });
+        rows.push({ label: '🦺 Gilet pare-balles', sub: `Armure ${Math.round(s.armor)} / 100`, button: euro(ARMOR_PRICE), disabled: s.armor >= 100 || s.money + s.bank < ARMOR_PRICE, action: { action: 'buy', arg: 'armor' } });
         return { title: 'Armurerie', rows };
       }
       case 'clothes':
@@ -130,7 +130,7 @@ export class MenuPanel {
           title: 'Boutique Swagg',
           rows: CLOTHES.filter((c) => c.price > 0).map((c) => {
             const owned = s.clothes.includes(c.id);
-            return { label: c.name, sub: owned ? 'À toi : touche pour porter' : slotName(c.slot), button: owned ? 'Porter' : euro(c.price), disabled: !owned && s.money < c.price, on: owned, action: { action: 'buy', arg: `cloth:${c.id}` } };
+            return { label: c.name, sub: owned ? 'À toi : touche pour porter' : slotName(c.slot), button: owned ? 'Porter' : euro(c.price), disabled: !owned && s.money + s.bank < c.price, on: owned, action: { action: 'buy', arg: `cloth:${c.id}` } };
           }),
         };
       case 'dealer':
@@ -140,7 +140,7 @@ export class MenuPanel {
             label: VEHICLES[o.type].name,
             sub: `Livré à ta planque · garage ${s.garage.length}/${GARAGE_SLOTS}`,
             button: euro(o.price),
-            disabled: s.money < o.price || s.garage.length >= GARAGE_SLOTS,
+            disabled: s.money + s.bank < o.price || s.garage.length >= GARAGE_SLOTS,
             action: { action: 'buy', arg: `car:${o.type}` },
           })),
         };
@@ -151,16 +151,19 @@ export class MenuPanel {
         if (owned.length === 0) rows.unshift({ label: 'Ta garde-robe est vide', sub: 'Achète des sapes à la Boutique Swagg 👕', button: '—', disabled: true });
         return { title: 'Garde-robe', rows };
       }
+      case 'bank':
+        return { title: 'Mon compte', rows: bankRows(s) };
       case 'business': {
         const now = Math.floor(Date.now() / 1000);
-        const rows: Row[] = BUSINESSES.map((b) => {
+        const rows: Row[] = [...bankRows(s)];
+        for (const b of BUSINESSES) rows.push(((): Row => {
           const own = s.biz.find((x) => x.id === b.id);
-          if (!own) return { label: b.name, sub: `Rapporte ${euro(b.rate)}/h, même quand tu n'es pas là`, button: euro(b.price), disabled: s.money < b.price, action: { action: 'buy', arg: `biz:${b.id}` } };
+          if (!own) return { label: b.name, sub: `Rapporte ${euro(b.rate)}/h, même quand tu n'es pas là`, button: euro(b.price), disabled: s.money + s.bank < b.price, action: { action: 'buy', arg: `biz:${b.id}` } };
           const stock = bizStock(own, now);
           const full = stock >= bizCap(b.id);
           return { label: `${b.name}${full ? ' · PLEIN ⚠' : ''}`, sub: `${euro(stock)} / ${euro(bizCap(b.id))} · ${euro(b.rate)}/h`, button: 'Encaisser', disabled: stock <= 0, on: true, action: { action: 'collect', arg: b.id } };
-        });
-        return { title: 'Mes business', rows };
+        })());
+        return { title: 'Banque & business', rows };
       }
       case 'garage': {
         const rows: Row[] = s.garage.map((g, i) => ({ label: VEHICLES[g.type].name, sub: 'Sortir et partir avec', button: 'Sortir', action: { action: 'garage_out', arg: String(i) } }));
@@ -169,6 +172,15 @@ export class MenuPanel {
       }
     }
   }
+}
+
+/** Deposit / withdraw: money in the bank is safe (lost cash only hurts when carried). */
+function bankRows(s: PlayerState): Row[] {
+  return [
+    { label: `🏦 Banque : ${euro(s.bank)}`, sub: `Sur toi : ${euro(s.money)} — à la mort ou en prison, le cash sur toi est perdu`, button: 'Tout déposer', disabled: s.money <= 0, action: { action: 'bank', arg: 'deposit:all' } },
+    { label: 'Retirer 500 €', sub: 'Les boutiques prennent aussi la carte', button: 'Retirer', disabled: s.bank < 500, action: { action: 'bank', arg: 'withdraw:500' } },
+    { label: 'Tout retirer', sub: euro(s.bank), button: 'Retirer', disabled: s.bank <= 0, action: { action: 'bank', arg: 'withdraw:all' } },
+  ];
 }
 
 function slotName(slot: string) {

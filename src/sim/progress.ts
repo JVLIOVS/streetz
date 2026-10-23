@@ -1,5 +1,6 @@
 import { DT } from '../core/loop';
 import { CHAOS_CASH, CHAOS_MAX_MULT, CHAOS_POINTS, CHAOS_STEP, CHAOS_WINDOW, CHAOS_XP, XP_FOR, levelOf, levelReward, unlocksAt } from '../data/progression';
+import { NOTORIETY, RESPECT } from '../data/law';
 import type { Ped } from './peds';
 import type { Player } from './player';
 import type { Vehicle } from './vehicle';
@@ -30,6 +31,8 @@ export class ProgressSystem {
   addXp(p: Player, amount: number) {
     const s = p.state;
     if (amount <= 0) return;
+    // respect makes everything count more
+    amount *= this.w.law.xpFactor(p);
     const before = levelOf(s.rep);
     s.rep += Math.round(amount);
     const after = levelOf(s.rep);
@@ -38,7 +41,7 @@ export class ProgressSystem {
       s.money += cash;
       const unlocks = unlocksAt(l);
       this.w.events.push({ type: 'levelup', playerId: s.id, level: l, unlocks, cash });
-      this.w.toast(p, `⭐ NIVEAU ${l} ! +${cash.toLocaleString('fr-FR')} €${unlocks.length ? ` · Débloqué : ${unlocks.join(', ')}` : ''}`);
+      this.w.toast(p, `⭐ NIVEAU ${l} ! +${cash.toLocaleString('fr-FR')} € · +1 point de compétence (📋)${unlocks.length ? ` · Débloqué : ${unlocks.join(', ')}` : ''}`);
     }
   }
 
@@ -80,6 +83,7 @@ export class ProgressSystem {
       const score = Math.round(s.chaos);
       const cash = Math.round(score * CHAOS_CASH * this.w.social.crewBonus(p));
       s.week.best = Math.max(s.week.best, score);
+      if (score >= 1500) this.w.law.respect(p, RESPECT.bigCombo);
       s.money += cash;
       this.w.events.push({ type: 'chaosEnd', playerId: s.id, score, cash, mult: s.chaosMult });
       this.w.contracts.track(p, 'chaos', score, true);
@@ -130,6 +134,8 @@ export class ProgressSystem {
     this.addXp(p, cop ? XP_FOR.cop : XP_FOR.ko);
     this.w.contracts.track(p, cop ? 'cop' : 'ko', 1);
     p.state.week.kos++;
+    this.w.law.notoriety(p, cop ? NOTORIETY.koCop : NOTORIETY.koCiv);
+    if (cop) this.w.law.respect(p, RESPECT.koCop);
   }
 
   onProp(p: Player) {
@@ -151,6 +157,7 @@ export class ProgressSystem {
 
   onRobbery(p: Player, small: boolean) {
     this.addXp(p, small ? XP_FOR.robbery_shop : XP_FOR.robbery_big);
+    this.w.law.notoriety(p, small ? NOTORIETY.robbery : NOTORIETY.bigRobbery);
     this.w.contracts.track(p, 'rob', 1);
   }
 

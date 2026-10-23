@@ -1119,3 +1119,90 @@ body {
 #pause .panel * {
   touch-action: pan-y;
 }
+
+#bank-line {
+  font-size: 12px;
+  font-weight: 900;
+  color: #cfe8ff;
+  text-shadow: 0 1px 2px #000;
+  margin: -2px 0 4px;
+}
+/* Prison cinematic */
+#jail {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: #0b0812;
+  display: grid;
+  place-items: center;
+  animation: jail 5s ease-in-out forwards;
+  pointer-events: auto;
+}
+#jail .bars {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(90deg, transparent 0 46px, #3a3f4a 46px 58px, #1d2027 58px 62px);
+  animation: bars 5s ease-out forwards;
+}
+#jail .jail-txt {
+  position: relative;
+  text-align: center;
+  font-weight: 900;
+  text-shadow: 0 3px 0 #000;
+  line-height: 1.5;
+}
+#jail .jail-txt b {
+  display: block;
+  font-size: 34px;
+  color: #ff3b4f;
+  letter-spacing: 2px;
+}
+#jail .jail-txt span {
+  display: block;
+  font-size: 15px;
+  white-space: pre-line;
+}
+@keyframes jail {
+  0% {
+    opacity: 0;
+  }
+  10%,
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes bars {
+  0% {
+    transform: translateY(-100%);
+  }
+  18% {
+    transform: translateY(0);
+  }
+}
+#btn-level.points {
+  animation: hunted 0.8s infinite alternate;
+}
+.pp-skill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pp-skill .pp-bar {
+  flex: 1;
+}
+.pp-skill button {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 0;
+  background: #ffd23f;
+  color: #1b1430;
+  font-weight: 900;
+  font-size: 18px;
+}
+.pp-skill button:disabled {
+  opacity: 0.3;
+}
