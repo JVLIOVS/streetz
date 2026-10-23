@@ -34,7 +34,7 @@ export interface Profile {
 
 export interface SaveData {
   version: 2;
-  settings: { quality: 'low' | 'medium' | 'high' };
+  settings: { quality: 'low' | 'medium' | 'high'; music: boolean; sfx: boolean };
   profile: Profile;
 }
 
@@ -45,7 +45,7 @@ export function defaultProfile(): Profile {
 }
 
 export function defaultSave(): SaveData {
-  return { version: 2, settings: { quality: 'medium' }, profile: defaultProfile() };
+  return { version: 2, settings: { quality: 'medium', music: true, sfx: true }, profile: defaultProfile() };
 }
 
 export function loadSave(storage: Pick<Storage, 'getItem'> | null = safeStorage()): SaveData {

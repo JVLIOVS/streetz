@@ -57,7 +57,8 @@ export interface WorldSnapshot {
 
 export type SimEvent =
   | { type: 'respawn'; playerId: string; reason: 'drowned' | 'hospital' }
-  | { type: 'shot'; fx: number; fy: number; fz: number; tx: number; ty: number; tz: number; hit: boolean }
+  /** `w`: weapon fired (sound); 'pellet' = extra shotgun tracers, silent. */
+  | { type: 'shot'; fx: number; fy: number; fz: number; tx: number; ty: number; tz: number; hit: boolean; w?: string }
   | { type: 'punch'; x: number; y: number; z: number }
   | { type: 'explosion'; x: number; y: number; z: number }
   | { type: 'impact'; x: number; y: number; z: number; strength: number }
@@ -1400,9 +1401,9 @@ export class SimWorld {
       const d = Math.hypot(tx - s.x, tz - s.z);
       const dmg = spec.pellets ? spec.damage * spec.pellets * Math.max(0.15, Math.min(1, 1.25 - d / spec.range)) : spec.damage;
       this.hitTarget(p, target, dmg, false);
-      if (spec.pellets) for (let k = 1; k < 4; k++) this.events.push({ type: 'shot', fx, fy, fz, tx: tx + this.rng.range(-1, 1), ty: ty + this.rng.range(-0.5, 0.5), tz: tz + this.rng.range(-1, 1), hit: false });
+      if (spec.pellets) for (let k = 1; k < 4; k++) this.events.push({ type: 'shot', fx, fy, fz, tx: tx + this.rng.range(-1, 1), ty: ty + this.rng.range(-0.5, 0.5), tz: tz + this.rng.range(-1, 1), hit: false, w: 'pellet' });
     }
-    this.events.push({ type: 'shot', fx, fy, fz, tx, ty, tz, hit });
+    this.events.push({ type: 'shot', fx, fy, fz, tx, ty, tz, hit, w: weapon });
     this.crime(p, 'gunshot', s.x, s.z, null, true);
     for (const ped of this.peds.values()) {
       if (ped.state.mode !== 'fight' && Math.hypot(ped.state.x - s.x, ped.state.z - s.z) < 40) ped.scare(s.x, s.z, this.rng.chance(0.35));

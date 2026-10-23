@@ -1,5 +1,6 @@
 import { Vector3 } from 'three';
 import type { Sound } from './audio/sound';
+import { AudioDirector } from './audio/director';
 import { CommandQueue, type ActionCommand, type MoveCommand } from './core/commands';
 import { FixedLoop } from './core/loop';
 import type { Controls } from './input/controls';
@@ -40,6 +41,8 @@ export class Game {
   onSave?: () => void;
   net: NetSession | null = null;
   readonly menu: MenuPanel;
+  private audio: AudioDirector;
+  private radioCar = -1;
   /** Commands from menus (shop, wardrobe, garage), sent with the next tick. */
   private menuActions: { action: ActionCommand['action']; arg: string }[] = [];
 
@@ -56,6 +59,7 @@ export class Game {
       (action, arg) => this.menuActions.push({ action, arg }),
       () => {},
     );
+    this.audio = new AudioDirector(sim, sound);
     hud.onAbort = () => this.menuActions.push({ action: 'mission', arg: 'abort' });
     this.loop = new FixedLoop(
       (tick) => this.step(tick),
@@ -139,26 +143,30 @@ export class Game {
           }
           break;
         case 'shot':
-          this.sound.gunshot(Math.hypot(e.fx - me.x, e.fz - me.z));
+          if (e.w !== 'pellet') this.sound.shot(e.fx, e.fz, e.w);
           break;
         case 'punch':
-          this.sound.punch();
+          this.sound.hit(e.x, e.z);
           break;
         case 'explosion':
-          this.sound.explosion(d);
+          this.sound.explosion(e.x, e.z);
           if (d < 35) {
             this.view.cam.shake(0.75 * (1 - d / 35));
             this.vibrate(60);
           }
           break;
         case 'break':
-          if (d < 40) this.sound.impact(e.kind === 'streetlight' || e.kind === 'trafficlight' || e.kind === 'dumpster' ? 14 : 7);
+          this.sound.breakProp(e.kind, e.x, e.z);
           break;
         case 'impact':
-          if (d < 20) this.sound.impact(e.strength);
+          if (d < 60) this.sound.impact(e.strength, e.x, e.z);
           break;
         case 'horn':
           if (e.vehicle === me.vehicle) this.sound.horn();
+          else {
+            const hv = this.sim.vehicles.get(e.vehicle);
+            if (hv) this.sound.hornAt(hv.state.x, hv.state.z);
+          }
           break;
         case 'money':
           if (e.playerId === this.localId) {
@@ -241,7 +249,11 @@ export class Game {
           break;
         case 'wanted':
           if (e.playerId !== this.localId) break;
-          if (e.level > this.lastWanted) this.sound.alert();
+          if (e.level > this.lastWanted) {
+            this.sound.radioChirp();
+            // a cop on the megaphone
+            if (e.level >= 1) this.sound.voices?.line('cop', 4242 + e.level, 0.9, true);
+          }
           this.lastWanted = e.level;
           break;
       }
@@ -342,7 +354,6 @@ export class Game {
     let d = Infinity;
     if (!me.interior) {
       for (const v of this.sim.vehicles.values()) if (v.state.siren) d = Math.min(d, Math.hypot(v.state.x - me.x, v.state.z - me.z));
-      for (const h of this.sim.police.helis.values()) if (h.state.down < 0) d = Math.min(d, Math.hypot(h.state.x - me.x, h.state.z - me.z) + 20);
     }
     this.sound.setSiren(d < 150 ? 1 - d / 150 : 0);
   }
@@ -358,8 +369,9 @@ export class Game {
     if (d.yaw || d.pitch) this.view.cam.rotate(d.yaw, d.pitch);
     this.view.render(this.localId, alpha, dt, this.controls.state.moveY);
     const me = this.player;
-    const v = me.vehicle >= 0 ? this.sim.vehicles.get(me.vehicle) : undefined;
-    this.sound.setEngine(!!v && !v.state.wrecked, v?.state.speed ?? 0, v && v.input.throttle > 0 ? 1 : 0);
+    this.audio.update(dt, this.localId, this.view.cam.yaw);
+    if (me.vehicle >= 0 && this.radioCar !== me.vehicle && this.sound.musicOn && this.sound.station) this.hud.toast(`📻 ${this.sound.station}`, 1.6);
+    this.radioCar = me.vehicle;
 
     this.fpsAcc += dt;
     this.fpsFrames++;

@@ -16,3 +16,7 @@ Les fichiers sources sont dans `assets-src/` (avec leurs licences) ; `node scrip
 | Physique | Rapier (@dimforge/rapier3d-compat) | Apache-2.0 |
 | Optimisation des modèles (build) | glTF-Transform, meshoptimizer | MIT |
 | Multijoueur pair-à-pair | trystero | MIT |
+
+## Sons et musique
+- Tous les sons et la musique sont générés par code (WebAudio) dans `src/audio/` : aucun fichier audio, aucune licence.
+- Les phrases des passants utilisent la synthèse vocale intégrée au téléphone (Web Speech API).

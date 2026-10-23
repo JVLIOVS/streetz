@@ -1099,3 +1099,9 @@ body {
 .pp-row.me {
   outline: 2px solid #ffd23f;
 }
+
+/* the pause menu grew: keep it scrollable on short landscape screens */
+#pause .panel {
+  max-height: 94vh;
+  overflow-y: auto;
+}

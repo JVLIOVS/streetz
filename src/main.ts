@@ -72,6 +72,14 @@ async function boot() {
   const join = (code: string) => (localNet ? Promise.resolve(joinLocalRoom(code)) : joinOnlineRoom(code));
   let busy = false;
 
+  // Audio must be unlocked by a tap (mobile browsers): any tap on the menus does it
+  const sound = new Sound();
+  sound.setSettings(save.settings.sfx, save.settings.music);
+  const unlock = () => sound.unlock();
+  addEventListener('pointerdown', unlock, true);
+  addEventListener('touchend', unlock, true);
+  addEventListener('click', unlock, true);
+
   const start = async (mode: Mode) => {
     if (busy) return;
     busy = true;
@@ -79,7 +87,7 @@ async function boot() {
     netStatus.textContent = 'Préparation de la ville…';
     await new Promise((r) => setTimeout(r, 30));
     try {
-      await launch(map, assets, quality, save, mode, mode.kind === 'solo' ? 'Toi' : name(), mode.kind === 'guest' ? myLook : -1);
+      await launch(map, assets, quality, save, mode, mode.kind === 'solo' ? 'Toi' : name(), mode.kind === 'guest' ? myLook : -1, sound);
     } catch (err) {
       busy = false;
       netStatus.textContent = `Erreur : ${(err as Error).message}`;
@@ -158,7 +166,7 @@ async function boot() {
   });
 }
 
-async function launch(map: MapData, assets: GameAssets, quality: QualityLevel, save: ReturnType<typeof loadSave>, mode: Mode, playerName: string, look: number) {
+async function launch(map: MapData, assets: GameAssets, quality: QualityLevel, save: ReturnType<typeof loadSave>, mode: Mode, playerName: string, look: number, sound: Sound) {
   const sim = await SimWorld.create(map, mode.kind === 'guest' ? 'replica' : 'authority');
   sim.density = DENSITY[quality];
   // the sim never reads the clock itself: the calendar is an input
@@ -178,7 +186,6 @@ async function launch(map: MapData, assets: GameAssets, quality: QualityLevel, s
   const view = new GameRenderer(canvas, map, sim, quality, assets);
   const controls = new Controls($('touch'), $('joy-base'), $('joy-knob'));
   const hud = new Hud(map);
-  const sound = new Sound();
   const game = new Game(sim, view, controls, hud, sound, debug, localId);
   // your progression is saved on this phone in every mode (solo, host or guest)
   const persist = () => {
@@ -301,6 +308,26 @@ async function launch(map: MapData, assets: GameAssets, quality: QualityLevel, s
       markQuality();
     });
   }
+  // sound settings (saved) and radio station
+  const aButtons = [...$('audio-set').querySelectorAll('button')] as HTMLButtonElement[];
+  const markAudio = () => aButtons.forEach((b) => b.classList.toggle('on', b.dataset.a === 'music' ? save.settings.music : b.dataset.a === 'sfx' ? save.settings.sfx : false));
+  markAudio();
+  for (const b of aButtons) {
+    b.addEventListener('click', () => {
+      if (b.dataset.a === 'radio') {
+        sound.nextStation();
+        return;
+      }
+      if (b.dataset.a === 'music') save.settings.music = !save.settings.music;
+      else save.settings.sfx = !save.settings.sfx;
+      sound.setSettings(save.settings.sfx, save.settings.music);
+      writeSave(save);
+      markAudio();
+    });
+  }
+  sound.onStation = (name) => {
+    if (game.player.vehicle >= 0 && save.settings.music) hud.toast(`📻 ${name}`, 1.6);
+  };
   $('btn-resume').addEventListener('click', () => {
     pause.classList.add('hidden');
     game.setPaused(false);
