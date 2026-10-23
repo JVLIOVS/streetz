@@ -47,12 +47,12 @@ export class LawSystem {
     if (!spot || Math.hypot(s.x - spot.x, s.z - spot.z) > 3.5) return;
     const [op, amt] = arg.split(':');
     if (op === 'deposit') {
-      const n = amt === 'all' ? s.money : Math.min(s.money, Number(amt) || 0);
+      const n = amt === 'all' ? s.money : Math.min(s.money, positive(amt));
       s.money -= n;
       s.bank += n;
       if (n > 0) this.w.toast(p, `🏦 ${n.toLocaleString('fr-FR')} € à l’abri à la banque`);
     } else if (op === 'withdraw') {
-      const n = amt === 'all' ? s.bank : Math.min(s.bank, Number(amt) || 0);
+      const n = amt === 'all' ? s.bank : Math.min(s.bank, positive(amt));
       s.bank -= n;
       s.money += n;
     }
@@ -178,7 +178,7 @@ export class LawSystem {
     if (s.refused || this.fiche(p) || s.wanted > 3 || this.w.police.aggressive(s)) return;
     const still = car ? Math.abs(car.state.speed) < 1.5 : s.speed < 3;
     if (!still || !this.nearestCop(s.x, s.z, car ? 4 : 3)) return;
-    s.fine = fineFor(s.wanted, s.fines);
+    s.fine = Math.round(fineFor(s.wanted, s.fines) * this.w.family.lawyer(p));
     s.fineTimer = OFFER_WAIT;
     this.w.events.push({ type: 'deal', playerId: s.id, fine: s.fine });
   }
@@ -289,7 +289,7 @@ export class LawSystem {
   /** Prison (you surrendered): bail paid if you can, one more fiche, but you keep your stuff. */
   jail(p: Player) {
     const s = p.state;
-    const bail = BAIL_PER_STAR * Math.max(1, s.wanted);
+    const bail = Math.round(BAIL_PER_STAR * Math.max(1, s.wanted) * this.w.family.lawyer(p));
     const paid = this.pay(p, bail) ? bail : 0;
     s.fines++;
     s.fine = 0;
@@ -342,3 +342,6 @@ export class LawSystem {
     this.nextCheck.delete(id);
   }
 }
+
+/** An amount typed or sent by a client: a whole number ≥ 0 (a negative deposit would create money). */
+const positive = (v: unknown) => Math.max(0, Math.floor(Number(v) || 0));

@@ -2,6 +2,13 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
+    <!-- Security policy: only our own scripts run (no injected inline code), the physics engine may compile its WebAssembly,
+         multiplayer signalling goes through secure websockets (nostr relays). -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' data: blob: wss: https:; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'"
+    />
+    <meta name="referrer" content="no-referrer" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#1b1430" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -26,7 +33,7 @@
         <canvas id="minimap"></canvas>
         <div id="bars"><div id="hp"><i></i></div><div id="armor"><i></i></div></div>
         <div id="zone-name"></div>
-        <button id="btn-level" aria-label="Progression et contrats"><b id="lvl-num">1</b><span class="xp"><i id="xp-fill"></i></span><span id="ctr-badge">📋</span></button>
+        <button id="btn-level" aria-label="Progression, Famille et contrats"><span id="rank-ico">·</span><b id="lvl-num">1</b><span class="xp"><i id="xp-fill"></i></span><span id="ctr-badge">📋</span></button>
         <div id="next-goal"></div>
       </div>
       <div id="top-right">

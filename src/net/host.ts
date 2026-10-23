@@ -5,6 +5,7 @@ import { applyProfile } from '../sim/player';
 import type { SimEvent, SimWorld } from '../sim/world';
 import { AOI, MAX_PLAYERS, packHeli, packPed, packPickup, packPlayer, packProp, packVehicle, SNAPSHOT_EVERY, type GuestMessage, type HostMessage } from './protocol';
 import type { Transport } from './transport';
+import { RateLimiter, cleanActions, cleanLook, cleanName, validReport } from './validate';
 
 interface Guest {
   peer: string;
@@ -22,6 +23,7 @@ export class NetHost implements NetSession {
   private guests = new Map<string, Guest>();
   private pending: ActionCommand[] = [];
   private events: SimEvent[] = [];
+  private limiter = new RateLimiter();
   onPlayersChange?: (count: number) => void;
   /** Public rooms: another host was elected at the same time and wins. */
   onYield?: () => void;
@@ -42,6 +44,8 @@ export class NetHost implements NetSession {
   }
 
   private onMessage(m: GuestMessage | { t: 'hosting' }, from: string) {
+    // untrusted input: drop malformed messages and peers that flood
+    if (!m || typeof m !== 'object' || !this.limiter.allow(from, performance.now())) return;
     if (m.t === 'hosting') {
       if (from < this.t.selfId) this.onYield?.();
       return;
@@ -52,7 +56,7 @@ export class NetHost implements NetSession {
         this.t.send({ t: 'full' } satisfies HostMessage, from);
         return;
       }
-      const name = (m.name || 'Joueur').slice(0, 14);
+      const name = cleanName(m.name);
       this.guests.set(from, { peer: from, name, sentProps: new Set() });
       // drop in next to the spawn square
       const sp = this.sim.map.spawn;
@@ -60,7 +64,7 @@ export class NetHost implements NetSession {
       const p = this.sim.addPlayer(from, { x: sp.x + Math.cos(a) * 3, y: sp.y, z: sp.z + Math.sin(a) * 3, yaw: sp.yaw });
       p.remote = true;
       p.state.name = name;
-      p.state.look = m.look;
+      p.state.look = cleanLook(m.look);
       applyProfile(p.state, sanitize(m.profile));
       this.t.send({ t: 'welcome', id: from, host: this.t.selfId, tick: this.sim.tick } satisfies HostMessage, from);
       this.sim.events.push({ type: 'joined', playerId: from, name });
@@ -68,9 +72,9 @@ export class NetHost implements NetSession {
       return;
     }
     if (m.t === 'st') {
-      if (!this.guests.has(from)) return;
+      if (!this.guests.has(from) || !validReport(m)) return;
       this.sim.applyPlayerReport(from, m);
-      for (const a of m.a ?? []) this.pending.push({ type: 'action', playerId: from, tick: 0, action: a.k, arg: a.arg });
+      for (const a of cleanActions(m.a)) this.pending.push({ type: 'action', playerId: from, tick: 0, action: a.k, arg: a.arg });
     }
   }
 
@@ -78,6 +82,7 @@ export class NetHost implements NetSession {
     const g = this.guests.get(peer);
     if (!g) return;
     this.guests.delete(peer);
+    this.limiter.forget(peer);
     this.sim.removePlayer(peer);
     this.sim.events.push({ type: 'left', playerId: peer, name: g.name });
     this.onPlayersChange?.(this.playerCount);
@@ -124,7 +129,7 @@ export class NetHost implements NetSession {
       const H: number[][] = [];
       for (const h of this.sim.police.helis.values()) if (near(h.state.x, h.state.z, AOI + 80)) H.push(packHeli(h.state));
       const E = this.events.filter((e) => {
-        if (e.type === 'toast' || e.type === 'money' || e.type === 'respawn' || e.type === 'levelup' || e.type === 'chaos' || e.type === 'chaosEnd' || e.type === 'contract' || e.type === 'streak' || e.type === 'dmg' || e.type === 'crate' || e.type === 'say' || e.type === 'freeRoam' || e.type === 'deal' || e.type === 'jail') return e.playerId === g.peer;
+        if (e.type === 'toast' || e.type === 'money' || e.type === 'respawn' || e.type === 'levelup' || e.type === 'chaos' || e.type === 'chaosEnd' || e.type === 'contract' || e.type === 'streak' || e.type === 'dmg' || e.type === 'crate' || e.type === 'say' || e.type === 'freeRoam' || e.type === 'deal' || e.type === 'jail' || e.type === 'promoted') return e.playerId === g.peer;
         if ('x' in e) return near((e as { x: number }).x, (e as { z: number }).z, AOI + 30);
         if (e.type === 'shot') return near(e.fx, e.fz, AOI + 30);
         return true;
