@@ -1,17 +1,16 @@
 import { DT } from '../core/loop';
-import { CHECK_EVERY, FINE_PRICES, FINE_REFUSE_DIST, FINE_WAIT, JAIL_CASH_SEIZED, MAX_FINES, MINOR_CRIMES, NOTORIETY, RESPECT, SKILL_MAX, SKILLS, skillPoints, type SkillId } from '../data/law';
+import { BAIL_PER_STAR, CHECK_EVERY, STASH_MINUTES, fineFor, MAX_FICHES, NOTORIETY, OFFER_WAIT, RESPECT, SKILL_MAX, SKILLS, skillPoints, type SkillId } from '../data/law';
 import { levelOf } from '../data/progression';
-import { WEAPON_ORDER, WEAPONS, type WeaponId } from '../data/weapons';
+import { WEAPONS, type WeaponId } from '../data/weapons';
 import type { Ped } from './peds';
-import type { ContextAction, Player } from './player';
+import type { Player } from './player';
 import type { SimWorld } from './world';
 
 /** An officer walking up to a player to fine / check them. */
 interface Stop {
   cop: number;
-  /** 'fine': you owe money; 'check': random ID check (fine if you carry a gun). */
-  kind: 'fine' | 'check';
-  /** Seconds left to pay once the officer is next to you (-1 = still walking). */
+  /** Random ID check (trouble if you carry a gun). */
+  kind: 'check';
   wait: number;
   delay: number;
 }
@@ -96,76 +95,177 @@ export class LawSystem {
     return p.state.skills[id] ?? 0;
   }
 
-  // ------------------------------------------------------------------ fines & checks
+  // ------------------------------------------------------------------ police deal, checks, prison
 
-  /**
-   * Called before a crime raises the stars. Returns true if it becomes a fine instead
-   * (minor offence, first star, fines left).
-   */
-  fineInstead(p: Player, kind: string): boolean {
-    const s = p.state;
-    if (s.wanted > 0 || s.fines >= MAX_FINES || !(MINOR_CRIMES as readonly string[]).includes(kind) || this.stops.has(s.id)) return false;
-    s.wanted = 1;
-    s.fine = FINE_PRICES[s.fines];
-    this.stops.set(s.id, { cop: -1, kind: 'fine', wait: -1, delay: 5 });
-    this.w.events.push({ type: 'wanted', playerId: s.id, level: 1 });
-    this.w.toast(p, `👮 Infraction : un agent arrive pour une amende de ${s.fine.toLocaleString('fr-FR')} €`);
-    return true;
-  }
-
-  /** Is a fine officer handling this player (instead of the normal police response)? */
-  handling(p: Player) {
-    return this.stops.get(p.state.id)?.kind === 'fine' && p.state.wanted <= 1;
-  }
-
-  /** Is this officer busy fining someone? (the normal police AI leaves him alone) */
+  /** Is this officer busy with a random check? (the normal police AI leaves him alone) */
   isStopCop(ped: Ped) {
     for (const st of this.stops.values()) if (st.cop === ped.state.id) return true;
     return false;
   }
 
-  context(p: Player): ContextAction | null {
-    const st = this.stops.get(p.state.id);
-    if (!st || st.wait < 0 || p.state.fine <= 0) return null;
-    return { kind: 'fine', label: `Payer l’amende · ${p.state.fine.toLocaleString('fr-FR')} €`, target: p.state.fine };
+  /** Fiché 3 times: no more deals, the police comes to neutralize you. */
+  fiche(p: Player) {
+    return p.state.fines >= MAX_FICHES;
   }
 
+  /** Pay the fine offered by the officers: stars cleared, one more fiche. */
   payFine(p: Player) {
     const s = p.state;
-    const st = this.stops.get(s.id);
-    if (!st || s.fine <= 0) return;
+    if (s.fine <= 0) return;
     if (!this.pay(p, s.fine)) {
-      this.w.toast(p, 'Pas assez d’argent pour l’amende…');
+      this.w.toast(p, 'Pas assez d’argent pour l’amende… (refuse ou rends-toi)');
       return;
     }
-    this.w.toast(p, `Amende payée : -${s.fine.toLocaleString('fr-FR')} € (${s.fines + 1}/${MAX_FINES})${s.fines + 1 >= MAX_FINES ? ' — la prochaine fois, ce sera la poursuite' : ''}`);
     s.fines++;
+    this.w.toast(p, `Amende payée : -${s.fine.toLocaleString('fr-FR')} € · fiché ${s.fines}/${MAX_FICHES}${this.fiche(p) ? ' — la prochaine fois, ils viennent te neutraliser' : ''}`);
     s.fine = 0;
     this.notoriety(p, NOTORIETY.fine);
-    this.endStop(p, true);
     this.w.clearWanted(p);
   }
 
-  private endStop(p: Player, leave: boolean) {
+  /** Say no to the deal: it becomes a real chase. */
+  refuse(p: Player, why = 'Tu refuses l’amende') {
+    const s = p.state;
+    if (s.fine <= 0) return;
+    s.fine = 0;
+    s.refused = true;
+    s.wanted = Math.min(5, Math.max(2, s.wanted + 1));
+    s.resist = 8;
+    this.w.police.reported(p, s.x, s.z);
+    this.w.events.push({ type: 'wanted', playerId: s.id, level: s.wanted });
+    this.w.toast(p, `🚨 ${why} : la police te poursuit`);
+  }
+
+  /** Hands up: prison, but you keep your stuff. */
+  surrender(p: Player) {
+    if (!p.state.canSurrender || p.state.wanted <= 0) return;
+    this.w.arrest(p);
+  }
+
+  private nearestCop(x: number, z: number, r: number): Ped | null {
+    let best: Ped | null = null;
+    let bd = r;
+    for (const ped of this.w.peds.values()) {
+      if (ped.state.role === 'civ' || !ped.alive) continue;
+      const d = Math.hypot(ped.state.x - x, ped.state.z - z);
+      if (d < bd) {
+        bd = d;
+        best = ped;
+      }
+    }
+    return best;
+  }
+
+  /** The officers offer a fine when they reach you (wanted ≤ 3, not fiché 3 times, not resisting). */
+  private updateDeal(p: Player) {
+    const s = p.state;
+    if (s.wanted === 0) {
+      s.fine = 0;
+      s.refused = false;
+    }
+    const near = s.wanted > 0 && !s.dead && !!this.nearestCop(s.x, s.z, 30);
+    const car = s.vehicle >= 0 ? this.w.vehicles.get(s.vehicle) : undefined;
+    let policeCar = false;
+    if (s.wanted > 0) for (const v of this.w.vehicles.values()) if (v.police && !v.state.wrecked && Math.hypot(v.state.x - s.x, v.state.z - s.z) < 40) policeCar = true;
+    s.canSurrender = s.wanted > 0 && !s.dead && !s.interior && (near || policeCar);
+    if (s.dead || s.interior || s.wanted === 0) return;
+    if (s.fine > 0) {
+      s.fineTimer -= DT;
+      if (!this.nearestCop(s.x, s.z, 12)) this.refuse(p, 'Tu as filé');
+      else if (s.fineTimer <= 0) this.refuse(p, 'Pas de réponse');
+      return;
+    }
+    if (s.refused || this.fiche(p) || s.wanted > 3 || this.w.police.aggressive(s)) return;
+    const still = car ? Math.abs(car.state.speed) < 1.5 : s.speed < 3;
+    if (!still || !this.nearestCop(s.x, s.z, car ? 4 : 3)) return;
+    s.fine = fineFor(s.wanted, s.fines);
+    s.fineTimer = OFFER_WAIT;
+    this.w.events.push({ type: 'deal', playerId: s.id, fine: s.fine });
+  }
+
+  update() {
+    const w = this.w;
+    for (const p of w.players.values()) {
+      const s = p.state;
+      // the record slowly fades
+      s.notoriety = Math.max(0, s.notoriety - (NOTORIETY.decayPerMin / 60) * DT);
+      this.updateDeal(p);
+      // is any of your dropped stuff still on the ground?
+      if (s.stash && w.tick % 30 === 0) {
+        let left = false;
+        for (const pk of w.pickups.values()) if (pk.owner === s.id) left = true;
+        if (!left) s.stash = null;
+      }
+      // random checks for known criminals
+      if (s.notoriety >= NOTORIETY.checks && s.wanted === 0 && !s.interior && !s.dead && s.vehicle < 0 && !this.stops.has(s.id)) {
+        const at = this.nextCheck.get(s.id) ?? w.tick + w.rng.range(...CHECK_EVERY) * 60;
+        this.nextCheck.set(s.id, at);
+        if (w.tick >= at) {
+          this.nextCheck.set(s.id, w.tick + w.rng.range(...CHECK_EVERY) * 60);
+          this.stops.set(s.id, { cop: -1, kind: 'check', wait: -1, delay: 0 });
+        }
+      }
+      const st = this.stops.get(s.id);
+      if (!st) continue;
+      if (s.dead || s.wanted > 0 || s.interior) {
+        this.endStop(p);
+        continue;
+      }
+      let cop = w.peds.get(st.cop);
+      if (!cop || !cop.alive) {
+        if (st.cop >= 0) {
+          this.endStop(p);
+          continue;
+        }
+        const c = this.spawnCop(p);
+        if (!c) continue;
+        cop = c;
+        st.cop = c.state.id;
+      }
+      const cs = cop.state;
+      const d = Math.hypot(s.x - cs.x, s.z - cs.z);
+      cs.facing = Math.atan2(-(s.x - cs.x), -(s.z - cs.z));
+      if (d > 2) {
+        w.moveWalker(cop, ((s.x - cs.x) / d) * 2.6, ((s.z - cs.z) / d) * 2.6);
+        continue;
+      }
+      // the check itself
+      const gun = s.weapons.some((x) => !WEAPONS[x].melee && x !== 'sniper' && s.ammo[x] > 0);
+      if (gun) {
+        w.toast(p, '👮 « Contrôle. Port d’arme illégal ! »');
+        s.wanted = 1;
+        w.police.reported(p, s.x, s.z);
+        w.events.push({ type: 'wanted', playerId: s.id, level: 1 });
+        // the officer becomes a normal unit: the deal is offered right away
+        st.cop = -2;
+      } else {
+        w.toast(p, '👮 « Contrôle de routine… C’est bon, circulez. »');
+        this.notoriety(p, -2);
+      }
+      this.endStop(p);
+    }
+    // known criminals scare passers-by
+    if (w.tick % 30 === 0) {
+      for (const p of w.players.values()) {
+        const s = p.state;
+        if (s.notoriety < NOTORIETY.feared || s.interior) continue;
+        for (const ped of w.peds.values()) {
+          if (ped.state.role !== 'civ' || ped.state.temper === 'fighter' || ped.state.mode !== 'walk') continue;
+          if (Math.hypot(ped.state.x - s.x, ped.state.z - s.z) < 7 && w.rng.chance(0.3)) ped.scare(s.x, s.z, false);
+        }
+      }
+    }
+  }
+
+  private endStop(p: Player) {
     const st = this.stops.get(p.state.id);
     if (!st) return;
     this.stops.delete(p.state.id);
     const cop = this.w.peds.get(st.cop);
     if (cop?.police) {
-      if (leave) cop.police.leaving = true;
       cop.state.weapon = 'baton';
+      if (p.state.wanted === 0) cop.police.leaving = true;
     }
-  }
-
-  /** You refused: it becomes a chase. */
-  private refuse(p: Player, why: string) {
-    const s = p.state;
-    s.fine = 0;
-    this.endStop(p, false);
-    s.wanted = Math.max(2, s.wanted);
-    this.w.police.reported(p, s.x, s.z);
-    this.w.events.push({ type: 'wanted', playerId: s.id, level: s.wanted });
-    this.w.toast(p, `🚨 ${why} : la police te poursuit`);
   }
 
   private spawnCop(p: Player): Ped | null {
@@ -186,112 +286,19 @@ export class LawSystem {
     return ped;
   }
 
-  update() {
-    const w = this.w;
-    for (const p of w.players.values()) {
-      const s = p.state;
-      // the record slowly fades
-      s.notoriety = Math.max(0, s.notoriety - (NOTORIETY.decayPerMin / 60) * DT);
-      // random checks for known criminals
-      if (s.notoriety >= NOTORIETY.checks && s.wanted === 0 && !s.interior && !s.dead && s.vehicle < 0 && !this.stops.has(s.id)) {
-        const at = this.nextCheck.get(s.id) ?? w.tick + w.rng.range(...CHECK_EVERY) * 60;
-        this.nextCheck.set(s.id, at);
-        if (w.tick >= at) {
-          this.nextCheck.set(s.id, w.tick + w.rng.range(...CHECK_EVERY) * 60);
-          this.stops.set(s.id, { cop: -1, kind: 'check', wait: -1, delay: 0 });
-        }
-      }
-      const st = this.stops.get(s.id);
-      if (!st) continue;
-      // the stop is over if things escalated, or you got away / knocked out
-      if (s.dead || (st.kind === 'fine' && (s.wanted === 0 || s.wanted > 1)) || (st.kind === 'check' && s.wanted > 0)) {
-        // escalated, escaped or knocked out: no fine pending any more (or the police would never come)
-        s.fine = 0;
-        this.endStop(p, s.wanted === 0 || s.dead);
-        continue;
-      }
-      if (st.delay > 0) {
-        st.delay -= DT;
-        continue;
-      }
-      let cop = w.peds.get(st.cop);
-      if (!cop || !cop.alive) {
-        if (st.cop >= 0) {
-          // you knocked the officer out
-          if (st.kind === 'fine') this.refuse(p, 'Agent agressé');
-          else this.endStop(p, false);
-          continue;
-        }
-        const c = this.spawnCop(p);
-        if (!c) continue;
-        cop = c;
-        st.cop = c.state.id;
-      }
-      const cs = cop.state;
-      const d = Math.hypot(s.x - cs.x, s.z - cs.z);
-      cs.facing = Math.atan2(-(s.x - cs.x), -(s.z - cs.z));
-      if (st.wait < 0) {
-        // walk up calmly
-        if (d > 2) w.moveWalker(cop, ((s.x - cs.x) / d) * 2.6, ((s.z - cs.z) / d) * 2.6);
-        else if (s.vehicle < 0) {
-          st.wait = FINE_WAIT;
-          if (st.kind === 'check') {
-            const gun = s.weapons.some((x) => !WEAPONS[x].melee && s.ammo[x] > 0);
-            if (!gun) {
-              w.toast(p, '👮 « Contrôle de routine… C’est bon, circulez. »');
-              this.notoriety(p, -2);
-              this.endStop(p, true);
-              continue;
-            }
-            st.kind = 'fine';
-            s.fine = FINE_PRICES[Math.min(s.fines, MAX_FINES - 1)];
-            s.wanted = 1;
-            w.events.push({ type: 'wanted', playerId: s.id, level: 1 });
-            w.toast(p, `👮 « Port d’arme ? Amende : ${s.fine.toLocaleString('fr-FR')} €. Vous payez ou on vous embarque. »`);
-          } else w.toast(p, `👮 « Infraction constatée. Amende : ${s.fine.toLocaleString('fr-FR')} €. »`);
-        }
-        continue;
-      }
-      // waiting for the money
-      st.wait -= DT;
-      if (d > FINE_REFUSE_DIST) this.refuse(p, 'Refus d’obtempérer');
-      else if (st.wait <= 0) this.refuse(p, 'Amende pas payée');
-      else if (d > 2.5) w.moveWalker(cop, ((s.x - cs.x) / d) * 3, ((s.z - cs.z) / d) * 3);
-    }
-    // known criminals scare passers-by
-    if (w.tick % 30 === 0) {
-      for (const p of w.players.values()) {
-        const s = p.state;
-        if (s.notoriety < NOTORIETY.feared || s.interior) continue;
-        for (const ped of w.peds.values()) {
-          if (ped.state.role !== 'civ' || ped.state.temper === 'fighter' || ped.state.mode !== 'walk') continue;
-          if (Math.hypot(ped.state.x - s.x, ped.state.z - s.z) < 7 && w.rng.chance(0.3)) ped.scare(s.x, s.z, false);
-        }
-      }
-    }
-  }
-
-  // ------------------------------------------------------------------ prison & death
-
-  /** Busted: a night in the cell. Firearms confiscated, half the cash you carry seized. */
+  /** Prison (you surrendered): bail paid if you can, one more fiche, but you keep your stuff. */
   jail(p: Player) {
     const s = p.state;
-    const seized = Math.floor(s.money * JAIL_CASH_SEIZED);
-    s.money -= seized;
-    const lost: string[] = [];
-    for (const wpn of WEAPON_ORDER) {
-      if (WEAPONS[wpn].melee || !s.weapons.includes(wpn)) continue;
-      lost.push(WEAPONS[wpn].name);
-      s.ammo[wpn] = 0;
-    }
-    s.weapons = s.weapons.filter((x) => WEAPONS[x].melee);
-    s.weapon = 'fist';
+    const bail = BAIL_PER_STAR * Math.max(1, s.wanted);
+    const paid = this.pay(p, bail) ? bail : 0;
+    s.fines++;
     s.fine = 0;
-    this.endStop(p, true);
+    s.refused = false;
+    this.endStop(p);
     this.notoriety(p, NOTORIETY.arrest);
     this.respect(p, RESPECT.arrested);
-    this.w.events.push({ type: 'jail', playerId: s.id, seized, lost });
-    return seized;
+    this.w.events.push({ type: 'jail', playerId: s.id, seized: paid, lost: [] });
+    return paid;
   }
 
   /**
@@ -301,10 +308,14 @@ export class LawSystem {
   onDeath(p: Player, by?: Player) {
     const s = p.state;
     const w = this.w;
+    const owner = s.id;
+    const until = w.tick + STASH_MINUTES * 3600;
+    let dropped = false;
     if (s.money > 0) {
       const id = w.newId();
-      w.pickups.set(id, { id, x: s.x + 0.5, y: s.y, z: s.z, kind: 'money', amount: s.money });
+      w.pickups.set(id, { id, x: s.x + 0.5, y: s.y, z: s.z, kind: 'money', amount: s.money, owner, until });
       s.money = 0;
+      dropped = true;
     }
     let k = 0;
     for (const wpn of [...s.weapons] as WeaponId[]) {
@@ -312,8 +323,14 @@ export class LawSystem {
       const spec = WEAPONS[wpn];
       const id = w.newId();
       const a = (k++ / 3) * Math.PI;
-      w.pickups.set(id, { id, x: s.x + Math.cos(a) * 1.2, y: s.y, z: s.z + Math.sin(a) * 1.2, kind: 'weapon', amount: spec.melee ? 0 : s.ammo[wpn], weapon: wpn });
+      w.pickups.set(id, { id, x: s.x + Math.cos(a) * 1.2, y: s.y, z: s.z + Math.sin(a) * 1.2, kind: 'weapon', amount: spec.melee ? 0 : s.ammo[wpn], weapon: wpn, owner, until });
       s.ammo[wpn] = 0;
+      dropped = true;
+    }
+    // your stuff stays there a while, marked on your map; anybody close can grab it
+    if (dropped) {
+      s.stash = [s.x, s.z];
+      w.toast(p, `🎒 Ton stuff est resté par terre : il est marqué sur ta carte (${STASH_MINUTES} min). D’autres peuvent le prendre !`);
     }
     s.weapons = ['fist'];
     s.weapon = 'fist';

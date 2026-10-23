@@ -64,6 +64,7 @@ export class Game {
     );
     this.audio = new AudioDirector(sim, sound);
     hud.onSkill = (id) => this.sendAction('skill', id);
+    hud.onPolice = (c) => (c === 'surrender' ? this.sendAction('surrender', '') : this.sendAction('fine', c));
     hud.onAbort = () => this.menuActions.push({ action: 'mission', arg: 'abort' });
     this.loop = new FixedLoop(
       (tick) => this.step(tick),
@@ -256,6 +257,12 @@ export class Game {
             this.hud.toast(`🎯 ${who} lance la mission « ${e.name} » : aide ou sabote !`);
           }
           break;
+        case 'deal':
+          if (e.playerId === this.localId) {
+            this.sound.voices?.say(`Police ! Vous avez le choix : amende de ${e.fine} euros, ou on vous embarque.`, 4243);
+            this.vibrate(80);
+          }
+          break;
         case 'jail':
           if (e.playerId === this.localId) {
             this.hud.jail(e.seized, e.lost);
@@ -424,6 +431,7 @@ export class Game {
     }
     this.hud.updatePlayer(me);
     this.hud.updateProgress(me);
+    this.hud.setPolice(me);
     if (me.health < this.lastHealth - 1) {
       this.view.cam.shake(Math.min(0.5, (this.lastHealth - me.health) / 40));
       this.vibrate(25);

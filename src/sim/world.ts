@@ -39,6 +39,9 @@ export interface PickupState {
   amount: number;
   /** Dropped weapon (kind 'weapon'). */
   weapon?: WeaponId;
+  /** Your stuff dropped when knocked out: kept on the ground until this tick even if nobody is around. */
+  owner?: string;
+  until?: number;
 }
 
 /** @deprecated kept for reference: wanted level now lives on each player. */
@@ -75,6 +78,8 @@ export type SimEvent =
   | { type: 'busted'; playerId: string }
   | { type: 'bounty'; playerId: string; amount: number }
   /** Busted: a night in the cell (cinematic on the client). */
+  /** The officers caught up: pay the fine or refuse. */
+  | { type: 'deal'; playerId: string; fine: number }
   | { type: 'jail'; playerId: string; seized: number; lost: string[] }
   /** A mission partner / giver speaks to this player. */
   | { type: 'say'; playerId: string; name: string; text: string; seed: number }
@@ -904,7 +909,7 @@ export class SimWorld {
     this.progress.breakCombo(p);
     if (this.heist.isMember(p)) this.heist.leave(p, 'Arrêté : ta part du butin est saisie');
     else if (s.mission) this.missions.abort(p, 'Mission échouée : arrêté');
-    this.toast(p, `ARRÊTÉ ! Cash saisi -${fine.toLocaleString('fr-FR')} €, armes à feu confisquées`);
+    this.toast(p, `Tu t’es rendu : une nuit au poste${fine ? `, caution -${fine.toLocaleString('fr-FR')} €` : ''}. Tu gardes ton stuff.`);
   }
 
   // ------------------------------------------------------------------ actions
@@ -940,7 +945,11 @@ export class SimWorld {
         if (arg) this.social.crew(p, arg);
         break;
       case 'fine':
-        this.law.payFine(p);
+        if (arg === 'refuse') this.law.refuse(p);
+        else this.law.payFine(p);
+        break;
+      case 'surrender':
+        this.law.surrender(p);
         break;
       case 'bank':
         if (arg) this.law.bankOp(p, arg);
@@ -1068,9 +1077,6 @@ export class SimWorld {
       case 'crew_join':
         this.social.crew(p, `join:${ctx.target}`);
         break;
-      case 'fine':
-        this.law.payFine(p);
-        break;
     }
   }
 
@@ -1147,8 +1153,6 @@ export class SimWorld {
   private computeContext(p: Player): ContextAction | null {
     const s = p.state;
     if (s.dead) return null;
-    const fine = this.law.context(p);
-    if (fine) return fine;
     if (s.vehicle >= 0) {
       const home = this.homeNear(p, 16);
       const v = this.vehicles.get(s.vehicle);
@@ -1739,7 +1743,6 @@ export class SimWorld {
     if (!witnessed) return;
     const s = p.state;
     const before = s.wanted;
-    if (this.law.fineInstead(p, kind)) return;
     switch (kind) {
       case 'assault':
       case 'carjack':
@@ -1839,7 +1842,10 @@ export class SimWorld {
       if (!ped.ambient || ped.state.role !== 'civ') continue;
       if (!near(ped.state.x, ped.state.z, 140) || (!ped.alive && ped.timer > 45)) this.removePed(ped.state.id);
     }
-    for (const pk of [...this.pickups.values()]) if (!near(pk.x, pk.z, 200)) this.pickups.delete(pk.id);
+    for (const pk of [...this.pickups.values()]) {
+      const kept = pk.owner && this.tick < (pk.until ?? 0);
+      if ((!kept && !near(pk.x, pk.z, 200)) || (pk.owner && this.tick >= (pk.until ?? 0))) this.pickups.delete(pk.id);
+    }
     if (centers.length === 0) return;
     // --- surprise crates: about 2 around each player, 40–120 m away on sidewalks
     for (const c of centers) {

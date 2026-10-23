@@ -3,15 +3,23 @@
  * Every number that balances "crime pays / crime costs" lives here.
  */
 
-/** Fines for minor offences, by how many you already paid. After the 5th: no more fines, they hunt you. */
-export const FINE_PRICES = [150, 300, 600, 1200, 2500];
-export const MAX_FINES = FINE_PRICES.length;
-/** Minor offences that get a fine instead of a chase (while you have fines left). */
-export const MINOR_CRIMES = ['assault', 'carjack', 'hit_and_run'] as const;
-/** Seconds the officer waits for you to pay before it turns into a chase. */
-export const FINE_WAIT = 25;
-/** Walk away this far from the officer = refusal. */
-export const FINE_REFUSE_DIST = 18;
+/**
+ * When the police catches up with you (up to 3 stars), they offer a deal: pay a fine
+ * (stars cleared, but you get "fiché") or refuse (chase). Once fiché 3 times, no more
+ * deals: they come to neutralize you. You can always surrender (prison, you keep your stuff).
+ */
+export const MAX_FICHES = 3;
+/** Fine per star, by how many times you were already fiché. */
+export const FINE_PER_STAR = [300, 800, 2000];
+export const fineFor = (wanted: number, fiches: number) => FINE_PER_STAR[Math.min(fiches, FINE_PER_STAR.length - 1)] * Math.max(1, wanted);
+/** Seconds to decide before it counts as a refusal. */
+export const OFFER_WAIT = 20;
+/** Bail paid when you surrender (per star), from cash or bank if possible. */
+export const BAIL_PER_STAR = 250;
+/** Knocked out: your stuff waits on the ground this long (anyone can take it). */
+export const STASH_MINUTES = 10;
+/** Old name kept for the save format (fines = times fiché). */
+export const MAX_FINES = MAX_FICHES;
 
 /** Criminal record (0–100): grows with crimes, slowly fades (points per minute). */
 export const NOTORIETY = {

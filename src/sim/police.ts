@@ -1,4 +1,5 @@
 import { DT } from '../core/loop';
+import { MAX_FICHES } from '../data/law';
 import { WEAPONS } from '../data/weapons';
 import { COOL_TIME, HIDE_TIME, POLICE_LEVELS, REINFORCE_EVERY, RESPONSE_DELAY, searchRadius } from '../data/police';
 import type { Ped, PedRole } from './peds';
@@ -175,8 +176,8 @@ export class PoliceSystem {
    * only open fire if you resist (gun out near them, hitting officers). From 4 stars on,
    * or while resisting, they shoot and ram.
    */
-  aggressive(s: { wanted: number; resist: number }) {
-    return s.wanted >= 4 || s.resist > 0;
+  aggressive(s: { wanted: number; resist: number; fines: number }) {
+    return s.wanted >= 4 || s.resist > 0 || s.fines >= MAX_FICHES;
   }
 
   /** A crime was reported at (x, z): the search restarts from there. */
@@ -228,22 +229,8 @@ export class PoliceSystem {
         if (s.wanted === 0) this.w.clearWanted(p, 'La police a abandonné les recherches');
       }
     }
-    // arrest: an officer holds you (on foot and not running, or at the door of a
-    // stopped car: you get pulled out). Up to 3 stars, unless you resist.
-    let holding = false;
-    const car = s.vehicle >= 0 ? this.w.vehicles.get(s.vehicle) : undefined;
-    const still = car ? Math.abs(car.state.speed) < 1.5 : s.speed < 2.6;
-    if (s.wanted <= 3 && !this.aggressive(s) && still) {
-      for (const ped of this.w.peds.values()) {
-        if (ped.state.role === 'civ' || !ped.alive || this.w.law.isStopCop(ped)) continue;
-        if (Math.hypot(ped.state.x - s.x, ped.state.z - s.z) < (car ? 3.2 : 1.6)) {
-          holding = true;
-          break;
-        }
-      }
-    }
-    s.arrest = holding ? s.arrest + DT / 1.6 : Math.max(0, s.arrest - DT);
-    if (s.arrest >= 1) this.w.arrest(p);
+    // no automatic arrest any more: the officers offer a deal (LawSystem) or you surrender
+    s.arrest = 0;
   }
 
   // ------------------------------------------------------------------ dispatch
@@ -251,7 +238,7 @@ export class PoliceSystem {
   private dispatch() {
     const w = this.w;
     // (a player waiting for a fine only gets the one officer)
-    const wantedPlayers = [...w.players.values()].filter((p) => p.state.wanted > 0 && !w.law.handling(p) && !p.state.dead && !p.state.interior);
+    const wantedPlayers = [...w.players.values()].filter((p) => p.state.wanted > 0 && !p.state.dead && !p.state.interior);
     // Units with nobody to chase go home (removed out of sight)
     for (const ped of [...w.peds.values()]) {
       if (ped.state.role === 'civ' || !ped.police || w.law.isStopCop(ped)) continue;

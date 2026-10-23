@@ -129,6 +129,19 @@ export class Minimap {
         g.fillText(open ? '!' : '🔒', mx, mz + 1 / k);
       }
     }
+    // your stuff on the ground (knocked out)
+    if (me.stash) {
+      const [bx, bz] = at(me.stash[0], me.stash[1]);
+      g.fillStyle = blink ? '#b56cff' : '#fff';
+      g.strokeStyle = '#1b1430';
+      g.lineWidth = 2 / k;
+      g.beginPath();
+      g.arc(bx, bz, 9 / k, 0, Math.PI * 2);
+      g.fill();
+      g.stroke();
+      g.fillStyle = '#1b1430';
+      g.fillText('🎒', bx, bz + 1 / k);
+    }
     // rooftop sniper spots
     for (const q of sim.roofs.spots) {
       const [sx, sz] = at(q.x, q.z);

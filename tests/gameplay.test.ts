@@ -209,11 +209,17 @@ describe('combat', () => {
   });
 
   it('wanted stars fade when lying low', async () => {
-    const w = await world();
+    // hiding inside a building, out of sight
+    const def = map.interiors.find((i) => i.kind === 'shop')!;
+    const fx = -Math.sin(def.door.yaw);
+    const fz = -Math.cos(def.door.yaw);
+    const w = await world({ x: def.door.x + fx * 1.2, y: 0.3, z: def.door.z + fz * 1.2, yaw: 0 });
+    run(w, 3);
+    run(w, 1, (t) => [act(t, 'use')]);
+    expect(P(w).interior).toBe(def.id);
     P(w).wanted = 2;
     P(w).wantedCooldown = 25;
-    // standing still: the police ends up arresting you or giving up — either way the stars go
-    run(w, 60 * 90);
+    run(w, 60 * 70);
     expect(P(w).wanted).toBe(0);
   });
 });
@@ -359,38 +365,58 @@ describe('police', () => {
   }
   const units = (w: SimWorld) => [...w.peds.values()].filter((x) => x.state.role !== 'civ');
 
-  it('one star: officers come on foot and arrest you if you stand still', async () => {
+  /** Runs until the officers offer a deal (or the time runs out). */
+  const untilDeal = (w: SimWorld, seconds: number) => {
+    for (let i = 0; i < 60 * seconds && P(w).fine <= 0; i++) w.step([]);
+    return P(w).fine > 0;
+  };
+
+  it('one star: officers come (after a while) and offer a deal; paying clears the stars and gets you fiché', async () => {
     const { w } = await wanted(1);
-    // they take a while to get there
     run(w, 60 * 5);
     expect(units(w).length).toBe(0);
-    run(w, 60 * 11);
-    expect(units(w).length).toBeGreaterThanOrEqual(1);
-    expect(units(w)[0].state.weapon).toBe('baton');
-    const money = P(w).money;
-    let busted = false;
-    for (let i = 0; i < 60 * 40 && !busted; i++) {
-      w.step([]);
-      busted = w.events.some((e) => e.type === 'busted');
-      w.events = [];
-    }
-    expect(busted).toBe(true);
+    expect(untilDeal(w, 45)).toBe(true);
+    expect(P(w).fine).toBe(300);
+    P(w).money = 1000;
+    run(w, 1, (t) => [act(t, 'fine', 'pay')]);
     expect(P(w).wanted).toBe(0);
-    expect(P(w).money).toBeLessThan(money);
+    expect(P(w).fines).toBe(1);
+    expect(P(w).money).toBe(700);
   });
 
-  it('two stars, unarmed: patrol cars come but stop, officers get out and arrest you without shooting', async () => {
+  it('refusing the deal turns it into a chase; you can still surrender and keep your stuff', async () => {
+    const { w } = await wanted(1);
+    expect(untilDeal(w, 45)).toBe(true);
+    run(w, 1, (t) => [act(t, 'fine', 'refuse')]);
+    expect(P(w).wanted).toBeGreaterThanOrEqual(2);
+    expect(P(w).fine).toBe(0);
+    arm(w);
+    P(w).money = 1000;
+    run(w, 30);
+    expect(P(w).canSurrender).toBe(true);
+    run(w, 1, (t) => [act(t, 'surrender')]);
+    expect(P(w).wanted).toBe(0);
+    expect(P(w).weapons).toContain('pistol');
+    expect(P(w).fines).toBe(1);
+  });
+
+  it('fiché 3 times: no more deals, they come to neutralize you', async () => {
+    const { w } = await wanted(1);
+    P(w).fines = 3;
+    expect(w.police.aggressive(P(w))).toBe(true);
+    expect(untilDeal(w, 30)).toBe(false);
+  });
+
+  it('two stars, unarmed: patrol cars come but stop, officers get out and talk', async () => {
     const { w } = await wanted(2);
     let cars = false;
-    let busted = false;
-    for (let i = 0; i < 60 * 40 && !busted; i++) {
+    for (let i = 0; i < 60 * 40 && P(w).fine <= 0; i++) {
       w.step([]);
       cars ||= [...w.vehicles.values()].some((v) => v.police && v.state.siren);
-      busted = w.events.some((e) => e.type === 'busted');
-      w.events = w.events.filter((e) => e.type !== 'shot');
     }
     expect(cars).toBe(true);
-    expect(busted).toBe(true);
+    expect(P(w).fine).toBe(600);
+    expect(P(w).health).toBeGreaterThan(50);
   });
 
   it('two stars with a gun out: that is resisting, they shoot', async () => {
@@ -1060,57 +1086,25 @@ describe('weapon drops', () => {
 });
 
 describe('consequences', () => {
-  it('a minor offence brings a fine: pay it and the star goes away; fines get pricier', async () => {
-    const w = await world();
-    w.density = { peds: 0, traffic: 0, parkedRadius: 0 };
-    run(w, 2);
-    const p = w.players.get('p1')!;
-    const s = P(w);
-    s.money = 5000;
-    expect(w.law.fineInstead(p, 'assault')).toBe(true);
-    expect(s.wanted).toBe(1);
-    expect(s.fine).toBe(150);
-    run(w, 60 * 20);
-    expect(s.context?.kind).toBe('fine');
-    run(w, 1, (t) => [act(t, 'use')]);
-    expect(s.wanted).toBe(0);
-    expect(s.fines).toBe(1);
-    expect(s.money).toBe(4850);
-    s.fines = 4;
-    w.law.fineInstead(p, 'assault');
-    expect(s.fine).toBe(2500);
-    // after 5 fines, no more fines: straight to the chase
-    s.wanted = 0;
-    s.fine = 0;
-    s.fines = 5;
-    expect(w.law.fineInstead(p, 'assault')).toBe(false);
+  it('fines get pricier with every fiche', async () => {
+    const { fineFor } = await import('../src/data/law');
+    expect(fineFor(1, 0)).toBe(300);
+    expect(fineFor(2, 1)).toBe(1600);
+    expect(fineFor(3, 2)).toBe(6000);
   });
 
-  it('walking away from the officer = refusal, it becomes a chase', async () => {
-    const w = await world();
-    w.density = { peds: 0, traffic: 0, parkedRadius: 0 };
-    run(w, 2);
-    const p = w.players.get('p1')!;
-    w.law.fineInstead(p, 'carjack');
-    run(w, 60 * 20);
-    expect(P(w).context?.kind).toBe('fine');
-    w.teleportPlayer(p, P(w).x + 40, 0.5, P(w).z);
-    run(w, 3);
-    expect(P(w).wanted).toBe(2);
-    expect(P(w).fine).toBe(0);
-  });
-
-  it('prison: firearms confiscated, half the cash seized; the bank is safe', async () => {
+  it('surrendering: a night in the cell, bail paid, but you keep your weapons and your cash', async () => {
     const w = await world();
     run(w, 2);
     const p = w.players.get('p1')!;
     arm(w);
     P(w).money = 1000;
     P(w).bank = 5000;
+    P(w).wanted = 2;
     w.arrest(p);
     expect(P(w).money).toBe(500);
-    expect(P(w).bank).toBe(5000);
-    expect(P(w).weapons).not.toContain('pistol');
+    expect(P(w).weapons).toContain('pistol');
+    expect(P(w).fines).toBe(1);
     expect(w.drainEvents().some((e) => e.type === 'jail')).toBe(true);
   });
 
@@ -1194,7 +1188,7 @@ describe('consequences', () => {
 });
 
 describe('police and cars', () => {
-  it('stopped in a car at low stars: officers come to the door and pull you out', async () => {
+  it('stopped in a car at low stars: officers come to the door and offer the deal, nobody rams you', async () => {
     const w = await world();
     run(w, 3);
     const p = w.players.get('p1')!;
@@ -1204,33 +1198,25 @@ describe('police and cars', () => {
     expect(P(w).vehicle).toBe(v.state.id);
     P(w).wanted = 2;
     w.police.reported(p, P(w).x, P(w).z);
-    let busted = false;
     let worst = 100;
-    for (let i = 0; i < 60 * 45 && !busted; i++) {
+    for (let i = 0; i < 60 * 45 && P(w).fine <= 0; i++) {
       w.step([]);
       worst = Math.min(worst, P(w).health);
-      busted = w.events.some((e) => e.type === 'busted');
-      w.events = [];
     }
-    expect(busted).toBe(true);
-    expect(P(w).vehicle).toBe(-1);
-    // nobody rammed or shot the calm suspect to death
+    expect(P(w).fine).toBeGreaterThan(0);
     expect(worst).toBeGreaterThan(40);
   });
 });
 
-describe('fines then escalation', () => {
-  it('a fine, then more crimes: the full police response still comes', async () => {
+describe('big trouble', () => {
+  it('five stars: the full police response comes', async () => {
     const w = await world();
     run(w, 2);
     const p = w.players.get('p1')!;
-    w.law.fineInstead(p, 'assault');
-    expect(P(w).fine).toBeGreaterThan(0);
     P(w).wanted = 5;
     w.police.reported(p, P(w).x, P(w).z);
     run(w, 60 * 12);
-    expect(P(w).fine).toBe(0);
-    expect([...w.peds.values()].some((x) => x.state.role !== 'civ' && !w.law.isStopCop(x)) || w.police.helis.size > 0).toBe(true);
+    expect([...w.peds.values()].some((x) => x.state.role !== 'civ') || w.police.helis.size > 0).toBe(true);
   });
 });
 
@@ -1289,5 +1275,27 @@ describe('rooftops', () => {
     w.teleportPlayer(p, q.x + 60, 1, q.z);
     run(w, 30);
     expect(P(w).weapons).not.toContain('sniper');
+  });
+});
+
+describe('stuff dropped on the ground', () => {
+  it('is marked on your map, stays even far from everybody, and anyone can take it', async () => {
+    const w = await world();
+    w.density = { peds: 0, traffic: 0, parkedRadius: 0 };
+    run(w, 2);
+    const p = w.players.get('p1')!;
+    arm(w);
+    P(w).money = 900;
+    const x = P(w).x;
+    const z = P(w).z;
+    w.damagePlayer(p, 999);
+    expect(P(w).stash).toEqual([x, z]);
+    run(w, 60 * 5); // respawn at the hospital, far away
+    expect([...w.pickups.values()].filter((pk) => pk.owner === 'p1').length).toBeGreaterThanOrEqual(2);
+    // another player walks by and takes everything
+    w.addPlayer('p2', { x, y: 0.5, z, yaw: 0 });
+    run(w, 40);
+    expect(w.players.get('p2')!.state.money).toBeGreaterThanOrEqual(900);
+    expect(P(w).stash).toBeNull();
   });
 });

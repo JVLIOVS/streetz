@@ -261,10 +261,14 @@ export class NetClient implements NetSession {
     s.bank = np.bank;
     s.fines = np.fines;
     s.fine = np.fine;
+    s.fineTimer = np.fineTimer;
+    s.refused = np.refused;
+    s.canSurrender = np.canSurrender;
     s.notoriety = np.notoriety;
     s.respect = np.respect;
     s.skills = np.skills;
     s.carrying = np.carrying;
+    s.stash = np.stash;
     s.resist = np.resist;
     if (np.teleportSeq > s.teleportSeq) {
       // doors, respawn, getting out of a car: the host moved us

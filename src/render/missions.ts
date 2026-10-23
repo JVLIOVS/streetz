@@ -23,6 +23,7 @@ export class MissionMarkers {
   private hunted: THREE.Mesh[] = [];
   private allyMark: THREE.Mesh;
   private chests: THREE.Group[] = [];
+  private stash: THREE.Mesh;
 
   constructor(private sim: SimWorld) {
     const beamGeo = new THREE.CylinderGeometry(1.1, 1.1, 3.2, 20, 1, true);
@@ -93,6 +94,9 @@ export class MissionMarkers {
       g.position.set(q.x, q.y, q.z);
       this.root.add(g);
     }
+    this.stash = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 40, 16, 1, true).translate(0, 20, 0), beamMat(0xb56cff, 0.35));
+    this.stash.visible = false;
+    this.root.add(this.stash);
     const wpGeo = new THREE.CylinderGeometry(1.4, 1.4, 70, 16, 1, true);
     wpGeo.translate(0, 35, 0);
     this.waypoint = new THREE.Mesh(wpGeo, beamMat(0xffd23f, 0.3));
@@ -143,6 +147,8 @@ export class MissionMarkers {
       bang.rotation.y = this.time * 2;
     }
     this.fence.visible = !indoors;
+    this.stash.visible = !!me?.stash && !indoors;
+    if (me?.stash) this.stash.position.set(me.stash[0], this.sim.groundY(me.stash[0], me.stash[1]), me.stash[1]);
     this.sim.roofs.chests.forEach((c, i) => {
       const full = c.refill === 0 || this.sim.tick >= c.refill;
       this.chests[i].visible = full && !indoors && !!me && Math.abs(c.x - me.x) < 120 && Math.abs(c.z - me.z) < 120;

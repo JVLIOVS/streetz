@@ -1221,3 +1221,61 @@ body {
   -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
   mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
 }
+
+/* Police deal: pay the fine or refuse; surrender */
+#deal {
+  position: absolute;
+  left: 50%;
+  bottom: calc(18px + var(--safe-b));
+  transform: translateX(-50%);
+  padding: 8px 12px 10px;
+  border-radius: 16px;
+  background: rgba(20, 30, 70, 0.92);
+  border: 3px solid #3f7bff;
+  text-align: center;
+  font-weight: 900;
+  pointer-events: auto;
+  min-width: 300px;
+}
+#deal .deal-txt {
+  font-size: 14px;
+}
+#deal .deal-bar {
+  height: 5px;
+  margin: 6px 0 8px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.2);
+  overflow: hidden;
+}
+#deal .deal-bar i {
+  display: block;
+  height: 100%;
+  background: #ffd23f;
+}
+#deal .deal-btns {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+#deal button,
+#btn-surrender {
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: 3px solid #fff;
+  font-weight: 900;
+  font-size: 15px;
+  color: #fff;
+  pointer-events: auto;
+}
+#btn-pay {
+  background: #27ae60;
+}
+#btn-refuse {
+  background: #d63031;
+}
+#btn-surrender {
+  position: absolute;
+  left: calc(14px + var(--safe-l));
+  bottom: calc(150px + var(--safe-b));
+  background: rgba(255, 255, 255, 0.18);
+}

@@ -101,10 +101,14 @@ export type NetPlayer = Pick<
   | 'bank'
   | 'fines'
   | 'fine'
+  | 'fineTimer'
+  | 'refused'
+  | 'canSurrender'
   | 'notoriety'
   | 'respect'
   | 'skills'
   | 'carrying'
+  | 'stash'
   | 'resist'
   | 'wantedSeen'
   | 'searchX'
@@ -184,10 +188,14 @@ function packFull(s: PlayerState): NetPlayer {
     bank: s.bank,
     fines: s.fines,
     fine: s.fine,
+    fineTimer: q(s.fineTimer),
+    refused: s.refused,
+    canSurrender: s.canSurrender,
     notoriety: Math.round(s.notoriety),
     respect: s.respect,
     skills: s.skills,
     carrying: s.carrying,
+    stash: s.stash,
     resist: q(s.resist),
     wantedSeen: s.wantedSeen,
     searchX: q(s.searchX),

@@ -2,7 +2,7 @@ import { WEAPONS } from '../data/weapons';
 import { CHAOS_WINDOW, levelProgress, nextUnlock } from '../data/progression';
 import { STREAK_REWARDS } from '../data/contracts';
 import { VEHICLES } from '../data/vehicles';
-import { MAX_FINES, NOTORIETY, RESPECT, SKILL_MAX, SKILLS, skillPoints } from '../data/law';
+import { MAX_FINES, NOTORIETY, OFFER_WAIT, RESPECT, SKILL_MAX, SKILLS, skillPoints } from '../data/law';
 import type { MapData } from '../maps/types';
 import type { PlayerState } from '../sim/player';
 import { Minimap } from './minimap';
@@ -69,6 +69,16 @@ export class Hud {
       this.panel.classList.toggle('hidden');
       this.panelKey = '';
     });
+    const police = (id: string, choice: 'pay' | 'refuse' | 'surrender') =>
+      $(id).addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.onPolice?.(choice);
+      });
+    police('btn-pay', 'pay');
+    police('btn-refuse', 'refuse');
+    police('btn-surrender', 'surrender');
+    $('deal').addEventListener('pointerdown', (e) => e.stopPropagation());
     this.panel.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
       const b = (e.target as HTMLElement).closest('[data-skill]') as HTMLElement | null;
@@ -177,7 +187,7 @@ export class Hud {
     const xpBonus = Math.round(Math.min(1, s.respect / RESPECT.xpFull) * 100);
     h += `<div class="pp-sec">RESPECT 👑</div><div class="pp-row">${s.respect} · bonus d'XP +${xpBonus} %${s.respect >= RESPECT.feared ? ' · les durs n’osent plus te répondre' : ` · à ${RESPECT.feared}, les durs n’osent plus te répondre`}${bar(s.respect / RESPECT.xpFull)}<small style="float:none;color:#cfc8e8">Joueurs mis K.O., primes, braquages, missions…</small></div>`;
     const nt = Math.round(s.notoriety);
-    h += `<div class="pp-sec">CASIER 📁</div><div class="pp-row">${nt}/100${nt >= NOTORIETY.feared ? ' · les passants t’évitent' : ''}${nt >= NOTORIETY.checks ? ' · contrôles de police fréquents' : ''}${bar(nt / 100)}<small style="float:none;color:#cfc8e8">Amendes payées : ${s.fines}/${MAX_FINES}${s.fines >= MAX_FINES ? ' — plus d’amende possible : la police te poursuit directement' : ''}. Le casier s’efface avec le temps.</small></div>`;
+    h += `<div class="pp-sec">CASIER 📁</div><div class="pp-row">${nt}/100${nt >= NOTORIETY.feared ? ' · les passants t’évitent' : ''}${nt >= NOTORIETY.checks ? ' · contrôles de police fréquents' : ''}${bar(nt / 100)}<small style="float:none;color:#cfc8e8">Fiché : ${s.fines}/${MAX_FINES}${s.fines >= MAX_FINES ? ' — plus d’arrangement : la police vient te neutraliser (tu peux te rendre)' : ' — à 3, plus d’amende : la police vient te neutraliser'}. Le casier s’efface avec le temps.</small></div>`;
     h += `<div class="pp-sec">CONTRATS DU JOUR</div>`;
     if (!s.contracts.length) h += `<div class="pp-row">Chargement…</div>`;
     for (const c of s.contracts) {
@@ -222,6 +232,22 @@ export class Hud {
     void el.offsetWidth;
     el.style.animation = '';
     setTimeout(() => el.classList.add('hidden'), 5000);
+  }
+
+  /** Police deal / surrender buttons. */
+  onPolice?: (choice: 'pay' | 'refuse' | 'surrender') => void;
+
+  /** The officers' offer (fine, time left) and the surrender button. */
+  setPolice(s: PlayerState) {
+    const deal = s.fine > 0 && !s.dead;
+    if (this.changed('deal', deal)) $('deal').classList.toggle('hidden', !deal);
+    if (deal) {
+      const t = `Amende ${s.fine.toLocaleString('fr-FR')} € · fiché ${s.fines}/${MAX_FINES} · sinon poursuite`;
+      if (this.changed('dealTxt', t)) $('deal').querySelector('span')!.textContent = t;
+      ($('deal').querySelector('.deal-bar i') as HTMLElement).style.width = `${Math.max(0, (s.fineTimer / OFFER_WAIT) * 100)}%`;
+    }
+    const sur = s.canSurrender && !deal;
+    if (this.changed('surrender', sur)) $('btn-surrender').classList.toggle('hidden', !sur);
   }
 
   /** "+" on a skill in the progression panel. */

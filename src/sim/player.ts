@@ -127,13 +127,20 @@ export interface PlayerState {
   searchR: number;
   /** Money in the bank (safe: not lost when you die or get arrested). */
   bank: number;
-  /** Fines paid so far (5 max), and the fine currently asked (0 = none). */
+  /** Times fiché (fine paid or surrendered, 3 max), the fine offered right now (0 = none) and the seconds left to decide. */
   fines: number;
   fine: number;
+  fineTimer: number;
+  /** Refused the deal this chase (no more offers until the stars are gone). */
+  refused: boolean;
+  /** Police close enough to surrender to. */
+  canSurrender: boolean;
   /** Criminal record 0–100 and respect. */
   notoriety: number;
   respect: number;
   skills: Skills;
+  /** Where your stuff fell when you got knocked out (null = nothing left there). */
+  stash: [number, number] | null;
   /** Mission item you are carrying (dropped if you get knocked out). */
   carrying: string | null;
   /** Seconds the police still considers you resisting (weapon out, hitting officers): they shoot. */
@@ -258,10 +265,14 @@ export class Player {
       bank: 0,
       fines: 0,
       fine: 0,
+      fineTimer: 0,
+      refused: false,
+      canSurrender: false,
       notoriety: 0,
       respect: 0,
       skills: noSkills(),
       carrying: null,
+      stash: null,
       teleportSeq: 0,
       name: id,
       look: -1,
