@@ -212,8 +212,8 @@ export class Game {
           break;
         case 'crate':
           if (e.playerId === this.localId) {
-            this.session.crates++;
-            this.hud.toast(`📦 Colis surprise : ${e.text}`, e.rare ? 3.5 : 2);
+            if (!e.pickup) this.session.crates++;
+            this.hud.toast(e.pickup ? e.text : `📦 Colis surprise : ${e.text}`, e.rare ? 3.5 : 2);
             if (e.rare) {
               this.sound.fanfare();
               this.vibrate([30, 40, 60]);

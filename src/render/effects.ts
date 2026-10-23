@@ -51,6 +51,8 @@ export class Effects {
   private money: THREE.InstancedMesh;
   private crates: THREE.InstancedMesh;
   private crateGlow: THREE.InstancedMesh;
+  private guns: THREE.InstancedMesh;
+  private gunGlow: THREE.InstancedMesh;
   private time = 0;
 
   constructor() {
@@ -85,6 +87,18 @@ export class Effects {
     this.crateGlow.frustumCulled = false;
     this.crateGlow.count = 0;
     this.root.add(this.crates, this.crateGlow);
+    // dropped weapons: a dark gun shape in a cyan glow
+    this.guns = new THREE.InstancedMesh(new THREE.BoxGeometry(0.7, 0.18, 0.16), new THREE.MeshBasicMaterial({ color: 0x2a2a30 }), 16);
+    this.guns.frustumCulled = false;
+    this.guns.count = 0;
+    this.gunGlow = new THREE.InstancedMesh(
+      new THREE.CylinderGeometry(0.6, 0.6, 3, 12, 1, true).translate(0, 1.5, 0),
+      new THREE.MeshBasicMaterial({ color: 0x5ee8ff, transparent: true, opacity: 0.28, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }),
+      16,
+    );
+    this.gunGlow.frustumCulled = false;
+    this.gunGlow.count = 0;
+    this.root.add(this.guns, this.gunGlow);
 
     this.root.add(this.puffMesh, tracers, this.money);
   }
@@ -197,7 +211,17 @@ export class Effects {
 
     let m = 0;
     let c = 0;
+    let gn = 0;
     for (const pk of pickups.values()) {
+      if (pk.kind === 'weapon') {
+        if (gn >= 16) continue;
+        _q.setFromAxisAngle(_p.set(0, 1, 0), this.time * 2 + pk.id);
+        _m.compose(_p.set(pk.x, pk.y + 0.5 + Math.sin(this.time * 3 + pk.id) * 0.1, pk.z), _q, _s.setScalar(1));
+        this.guns.setMatrixAt(gn, _m);
+        _m.compose(_p.set(pk.x, pk.y, pk.z), _q.identity(), _s.setScalar(1));
+        this.gunGlow.setMatrixAt(gn++, _m);
+        continue;
+      }
       if (pk.kind === 'crate') {
         if (c >= 16) continue;
         _q.setFromAxisAngle(_p.set(0, 1, 0), this.time * 1.5 + pk.id);
@@ -213,6 +237,10 @@ export class Effects {
       this.money.setMatrixAt(m++, _m);
     }
     this.money.count = m;
+    this.guns.count = gn;
+    this.gunGlow.count = gn;
+    this.guns.instanceMatrix.needsUpdate = true;
+    this.gunGlow.instanceMatrix.needsUpdate = true;
     this.crates.count = c;
     this.crateGlow.count = c;
     this.crates.instanceMatrix.needsUpdate = true;

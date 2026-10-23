@@ -1,5 +1,5 @@
 import { DT } from '../core/loop';
-import { COOL_TIME, HIDE_TIME, POLICE_LEVELS, searchRadius } from '../data/police';
+import { COOL_TIME, HIDE_TIME, POLICE_LEVELS, REINFORCE_EVERY, RESPONSE_DELAY, searchRadius } from '../data/police';
 import type { Ped, PedRole } from './peds';
 import type { Player } from './player';
 import { angleDiff } from './player';
@@ -49,6 +49,8 @@ const UNIT_HEALTH: Record<Exclude<PedRole, 'civ'>, number> = { cop: 110, swat: 1
  */
 export class PoliceSystem {
   readonly helis = new Map<number, Heli>();
+  /** Tick when the next unit may arrive, per wanted player. */
+  private arrival = new Map<string, number>();
   /** Route per unit (walk-graph or lane-graph node ids) and when to recompute it. */
   private routes = new Map<number, { path: number[]; repath: number; los: number; seen: boolean; stuck: number; side: number }>();
 
@@ -248,9 +250,18 @@ export class PoliceSystem {
       if (far || h.state.down > 20) this.helis.delete(h.state.id);
     }
 
+    for (const id of [...this.arrival.keys()]) if (!w.players.get(id)?.state.wanted) this.arrival.delete(id);
     for (const p of wantedPlayers) {
       const lvl = POLICE_LEVELS[Math.min(5, p.state.wanted)];
       const id = p.state.id;
+      // the first units need time to get there, then reinforcements come one by one
+      const at = this.arrival.get(id);
+      if (at === undefined) {
+        this.arrival.set(id, w.tick + RESPONSE_DELAY[Math.min(5, p.state.wanted)] * 60);
+        continue;
+      }
+      if (w.tick < at) continue;
+      this.arrival.set(id, w.tick + REINFORCE_EVERY * 60);
       const cops = [...w.peds.values()].filter((c) => c.police?.target === id && c.alive && !c.police.leaving).length;
       const cars = [...w.vehicles.values()].filter((v) => v.police?.target === id && !v.police.block && !v.state.wrecked).length;
       const helis = [...this.helis.values()].filter((h) => h.target === id && h.state.down < 0).length;
@@ -276,10 +287,10 @@ export class PoliceSystem {
   private spawnCop(p: Player, role: Exclude<PedRole, 'civ'>) {
     const w = this.w;
     const s = p.state;
-    // a sidewalk node 35–70 m away
+    // a sidewalk node 50–90 m away (they come running from around the corner)
     const nodes = w.walk.filter((n) => {
       const d = Math.hypot(n.x - s.x, n.z - s.z);
-      return d > 35 && d < 70;
+      return d > 50 && d < 90;
     });
     if (nodes.length === 0) return;
     const n = nodes[w.rng.int(0, nodes.length - 1)];

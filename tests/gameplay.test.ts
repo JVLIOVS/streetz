@@ -212,7 +212,8 @@ describe('combat', () => {
     const w = await world();
     P(w).wanted = 2;
     P(w).wantedCooldown = 25;
-    run(w, 60 * 52);
+    // standing still: the police ends up arresting you or giving up — either way the stars go
+    run(w, 60 * 90);
     expect(P(w).wanted).toBe(0);
   });
 });
@@ -360,7 +361,10 @@ describe('police', () => {
 
   it('one star: officers come on foot and arrest you if you stand still', async () => {
     const { w } = await wanted(1);
-    run(w, 60 * 2);
+    // they take a while to get there
+    run(w, 60 * 5);
+    expect(units(w).length).toBe(0);
+    run(w, 60 * 11);
     expect(units(w).length).toBeGreaterThanOrEqual(1);
     expect(units(w)[0].state.weapon).toBe('baton');
     const money = P(w).money;
@@ -393,10 +397,10 @@ describe('police', () => {
 
   it('three stars bring a helicopter, five stars the army', async () => {
     const a = await wanted(3);
-    run(a.w, 60 * 2);
+    run(a.w, 60 * 9);
     expect(a.w.police.helis.size).toBeGreaterThanOrEqual(1);
     const b = await wanted(5);
-    run(b.w, 60 * 4);
+    run(b.w, 60 * 9);
     expect(units(b.w).some((u) => u.state.role === 'soldier') || [...b.w.vehicles.values()].some((v) => v.state.type === 'army')).toBe(true);
   });
 
@@ -962,5 +966,25 @@ describe('multiplayer social', () => {
     expect(a.state.mission).toBeNull();
     expect(a.state.money).toBeGreaterThanOrEqual(money + 12000);
     expect(a.state.week.heists).toBe(1);
+  });
+});
+
+describe('weapon drops', () => {
+  it('an armed person knocked out drops their weapon (and ammo), you pick it up by walking over it', async () => {
+    const w = await world();
+    w.density = { peds: 0, traffic: 0, parkedRadius: 0 };
+    run(w, 2);
+    const s = P(w);
+    const cop = w.spawnPed(s.x + 3, s.z, { mode: 'idle' });
+    cop.state.weapon = 'pistol';
+    w.damagePed(cop, 999, w.players.get('p1')!, s.x, s.z);
+    const drop = [...w.pickups.values()].find((pk) => pk.kind === 'weapon')!;
+    expect(drop.weapon).toBe('pistol');
+    expect(cop.state.weapon).toBe('none');
+    w.teleportPlayer(w.players.get('p1')!, drop.x, 0.5, drop.z);
+    run(w, 3);
+    expect(s.weapons).toContain('pistol');
+    expect(s.ammo.pistol).toBeGreaterThan(0);
+    expect(s.weapon).toBe('pistol');
   });
 });

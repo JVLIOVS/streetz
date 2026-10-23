@@ -227,8 +227,8 @@ export class Minimap {
         // money on the ground, surprise crates
         for (const pk of sim.pickups.values()) {
           const [mx, mz] = at(pk.x, pk.z);
-          const r = (pk.kind === 'crate' ? 7 : 5) / k;
-          g.fillStyle = pk.kind === 'crate' ? '#ffc93c' : '#5ee86a';
+          const r = (pk.kind === 'money' ? 5 : 7) / k;
+          g.fillStyle = pk.kind === 'crate' ? '#ffc93c' : pk.kind === 'weapon' ? '#5ee8ff' : '#5ee86a';
           g.fillRect(mx - r, mz - r, r * 2, r * 2);
           if (pk.kind === 'crate') {
             g.strokeStyle = '#1b1430';

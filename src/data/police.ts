@@ -26,6 +26,13 @@ export const POLICE_LEVELS: PoliceLevel[] = [
   { cops: 6, cars: 3, helis: 2, roadblocks: true, unit: 'soldier', shoot: true, damage: 10, accuracy: 0.6 },
 ];
 
+/**
+ * Seconds before the first unit shows up after you get stars (per level), then
+ * seconds between two reinforcements: the police doesn't teleport in.
+ */
+export const RESPONSE_DELAY = [0, 14, 9, 6, 5, 4];
+export const REINFORCE_EVERY = 3;
+
 /** Search zone radius around the last place the police saw you. */
 export const searchRadius = (level: number) => 60 + level * 25;
 /** Seconds to stay unseen outside the zone to lose the police. */

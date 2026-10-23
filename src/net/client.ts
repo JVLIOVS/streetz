@@ -4,7 +4,7 @@ import type { NetSession } from '../game';
 import type { Player } from '../sim/player';
 import { Heli } from '../sim/police';
 import type { SimWorld } from '../sim/world';
-import { REPORT_EVERY, unpackPed, vehicleTypeOf, type GuestMessage, type HostMessage, type NetPlayer } from './protocol';
+import { REPORT_EVERY, unpackPed, unpackPickup, vehicleTypeOf, type GuestMessage, type HostMessage, type NetPlayer } from './protocol';
 import type { Transport } from './transport';
 
 /**
@@ -201,7 +201,7 @@ export class NetClient implements NetSession {
 
     // --- money on the ground, broken props
     sim.pickups.clear();
-    for (const [id, x, y, z, amount, kind] of m.K) sim.pickups.set(id, { id, x, y, z, kind: kind === 1 ? 'crate' : 'money', amount });
+    for (const a of m.K) sim.pickups.set(a[0], unpackPickup(a));
     for (const [id, x, y, z, tilt, ax, az, spin, spray] of m.X) sim.applyBrokenProp({ id, x, y, z, tilt, ax, az, spin, spray });
 
     // --- events (effects, sounds, toasts) from the host

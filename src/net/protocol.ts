@@ -1,6 +1,7 @@
 import type { ActionKind } from '../core/commands';
 import { VEHICLES, type VehicleType } from '../data/vehicles';
-import type { PedMode, PedState, Temper } from '../sim/peds';
+import type { PedMode, PedRole, PedState, PedWeapon, Temper } from '../sim/peds';
+import { WEAPONS, type WeaponId } from '../data/weapons';
 import type { PlayerState } from '../sim/player';
 import type { BrokenProp } from '../sim/props';
 import type { VehicleState } from '../sim/vehicle';
@@ -32,6 +33,9 @@ const q = (n: number) => Math.round(n * 100) / 100;
 
 const PED_MODES: PedMode[] = ['walk', 'idle', 'flee', 'cower', 'ko', 'shopkeeper', 'wave', 'stun', 'fight', 'police', 'follow'];
 const TEMPERS: Temper[] = ['coward', 'scared', 'fighter'];
+const ROLES: PedRole[] = ['civ', 'cop', 'swat', 'soldier'];
+const PED_WEAPONS: PedWeapon[] = ['none', 'knife', 'bat', 'baton', 'pistol', 'rifle'];
+const WEAPON_IDS = Object.keys(WEAPONS) as WeaponId[];
 const VEHICLE_TYPES = Object.keys(VEHICLES) as VehicleType[];
 
 /** Player fields a guest needs (position + everything the host decides). */
@@ -192,6 +196,8 @@ export function packPed(s: PedState): number[] {
     s.actionSeq,
     TEMPERS.indexOf(s.temper),
     s.vip ? 1 : 0,
+    ROLES.indexOf(s.role),
+    PED_WEAPONS.indexOf(s.weapon),
   ];
 }
 
@@ -206,6 +212,8 @@ export function unpackPed(a: number[], s: PedState) {
   s.actionSeq = a[12];
   s.temper = TEMPERS[a[13]] ?? 'coward';
   s.vip = a[14] === 1;
+  s.role = ROLES[a[15]] ?? 'civ';
+  s.weapon = PED_WEAPONS[a[16]] ?? 'none';
 }
 
 export function packVehicle(s: VehicleState, driverIndex: (d: string) => number): number[] {
@@ -235,7 +243,12 @@ export function packVehicle(s: VehicleState, driverIndex: (d: string) => number)
 export const vehicleTypeOf = (a: number[]) => VEHICLE_TYPES[a[1]] ?? 'compact';
 
 export function packPickup(p: PickupState): number[] {
-  return [p.id, q(p.x), q(p.y), q(p.z), p.amount, p.kind === 'crate' ? 1 : 0];
+  return [p.id, q(p.x), q(p.y), q(p.z), p.amount, p.kind === 'crate' ? 1 : p.kind === 'weapon' ? 2 : 0, p.weapon ? WEAPON_IDS.indexOf(p.weapon) : -1];
+}
+
+export function unpackPickup(a: number[]): PickupState {
+  const [id, x, y, z, amount, kind, w] = a;
+  return { id, x, y, z, amount, kind: kind === 1 ? 'crate' : kind === 2 ? 'weapon' : 'money', weapon: WEAPON_IDS[w] };
 }
 
 export function packProp(p: BrokenProp): number[] {

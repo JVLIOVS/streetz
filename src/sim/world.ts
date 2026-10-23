@@ -31,8 +31,11 @@ export interface PickupState {
   x: number;
   y: number;
   z: number;
-  kind: 'money' | 'crate';
+  kind: 'money' | 'crate' | 'weapon';
+  /** Cash, or bullets for a dropped firearm. */
   amount: number;
+  /** Dropped weapon (kind 'weapon'). */
+  weapon?: WeaponId;
 }
 
 /** @deprecated kept for reference: wanted level now lives on each player. */
@@ -68,7 +71,7 @@ export type SimEvent =
   | { type: 'wanted'; playerId: string; level: number }
   | { type: 'busted'; playerId: string }
   | { type: 'bounty'; playerId: string; amount: number }
-  | { type: 'crate'; playerId: string; text: string; rare: boolean }
+  | { type: 'crate'; playerId: string; text: string; rare: boolean; pickup?: boolean }
   | { type: 'levelup'; playerId: string; level: number; unlocks: string[]; cash: number }
   | { type: 'chaos'; playerId: string; label: string; points: number }
   | { type: 'chaosEnd'; playerId: string; score: number; cash: number; mult: number }
@@ -1574,7 +1577,8 @@ export class SimWorld {
     if (ped.pendingHit > 0 && --ped.pendingHit === 0) {
       if (d < 1.9) {
         this.events.push({ type: 'punch', x: ts.x, y: ts.y + 1.3, z: ts.z });
-        this.damagePlayer(target!, s.action === 'kick' ? 11 : 8);
+        const armed = s.weapon === 'bat' ? 16 : s.weapon === 'knife' ? 14 : s.weapon === 'baton' ? 12 : 0;
+        this.damagePlayer(target!, armed || (s.action === 'kick' ? 11 : 8));
       }
     }
     if (d < 1.6 && ped.attackCooldown <= 0 && ped.pendingHit <= 0) {
@@ -1607,6 +1611,15 @@ export class SimWorld {
         const id = this.nextId++;
         this.pickups.set(id, { id, x: ped.state.x + 0.6, y: ped.state.y, z: ped.state.z, kind: 'money', amount: ped.state.money });
         ped.state.money = 0;
+      }
+      // armed people drop their weapon: knocking out a cop is how you get a gun early
+      if (ped.state.weapon !== 'none') {
+        const weapon = ped.state.weapon as WeaponId;
+        const spec = WEAPONS[weapon];
+        const id = this.nextId++;
+        const ammo = spec.melee ? 0 : Math.max(6, Math.round(spec.ammoPack * this.rng.range(0.3, 0.6)));
+        this.pickups.set(id, { id, x: ped.state.x - 0.6, y: ped.state.y, z: ped.state.z + 0.3, kind: 'weapon', amount: ammo, weapon });
+        ped.state.weapon = 'none';
       }
     } else if (ped.state.mode === 'shopkeeper') {
       ped.state.mode = 'cower';
@@ -1716,6 +1729,15 @@ export class SimWorld {
             this.openCrate(p);
             continue;
           }
+          if (pk.kind === 'weapon' && pk.weapon) {
+            const spec = WEAPONS[pk.weapon];
+            const fresh = !s.weapons.includes(pk.weapon);
+            if (fresh) s.weapons.push(pk.weapon);
+            s.ammo[pk.weapon] += pk.amount;
+            if (fresh || s.weapon === 'fist') s.weapon = pk.weapon;
+            this.events.push({ type: 'crate', playerId: s.id, text: fresh ? `${spec.icon} ${spec.name} ramassé${spec.melee ? '' : ` (+${pk.amount} balles)`}` : `+${pk.amount} balles de ${spec.name}`, rare: fresh, pickup: true });
+            continue;
+          }
           s.money += pk.amount;
           this.events.push({ type: 'money', playerId: s.id, amount: pk.amount });
         }
@@ -1789,6 +1811,10 @@ export class SimWorld {
       const t = this.rng.next();
       const m = this.walk[to];
       const ped = this.spawnPed(n.x + (m.x - n.x) * t, n.z + (m.z - n.z) * t, { from: n.id, to });
+      if (ped.state.temper === 'fighter') {
+        const r = this.rng.next();
+        ped.state.weapon = r < 0.15 ? 'knife' : r < 0.27 ? 'bat' : r < 0.32 ? 'pistol' : 'none';
+      }
       if (this.rng.chance(0.04)) {
         // VIP: dressed rich, loaded with cash
         ped.state.vip = true;

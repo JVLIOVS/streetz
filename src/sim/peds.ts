@@ -7,7 +7,7 @@ export type PedMode = 'walk' | 'idle' | 'flee' | 'cower' | 'ko' | 'shopkeeper' |
 
 /** Civilians, or law enforcement (driven by the police system). */
 export type PedRole = 'civ' | 'cop' | 'swat' | 'soldier';
-export type PedWeapon = 'none' | 'baton' | 'pistol' | 'rifle';
+export type PedWeapon = 'none' | 'knife' | 'bat' | 'baton' | 'pistol' | 'rifle';
 
 /** How a pedestrian reacts when attacked. */
 export type Temper = 'coward' | 'scared' | 'fighter';
