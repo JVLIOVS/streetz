@@ -40,6 +40,9 @@ export interface DriveInput {
   throttle: number; // -1..1 (negative = brake / reverse)
   steer: number; // -1..1 (positive = right)
   handbrake: boolean;
+  /** Flying vehicles: up/down (gas/brake buttons) and forward/back (stick). */
+  lift?: number;
+  fwd?: number;
 }
 
 /** Networked vehicle pose (what a driver reports / a host broadcasts). */
@@ -80,6 +83,67 @@ export class Vehicle {
   touchedTick = -1;
   /** Police AI scratch (target player, unstuck timers, crew dropped off). */
   police: { target: string | null; stuck: number; reverse: number; dropped: boolean; block: boolean } | null = null;
+  /** Rotor speed (rendering): 0 when parked, 1 when flying. */
+  rotor = 0;
+
+  /**
+   * Mini-helicopter: hovers while someone is at the controls; gas climbs, brake goes
+   * down, the stick flies forward/back and turns. Without a pilot it falls.
+   */
+  private fly(controller: RAPIER_T.KinematicCharacterController, filterGroups?: number): number {
+    const s = this.state;
+    const sp = this.spec;
+    const inp = this.input;
+    const piloted = !s.wrecked && s.driver !== 'none' && s.driver !== 'npc' && s.health > 0;
+    this.rotor += ((piloted ? 1 : 0) - this.rotor) * (1 - Math.exp(-1.5 * DT));
+    const fx = -Math.sin(s.yaw);
+    const fz = -Math.cos(s.yaw);
+    const rx = Math.cos(s.yaw);
+    const rz = -Math.sin(s.yaw);
+    let vf = s.vx * fx + s.vz * fz;
+    let vr = s.vx * rx + s.vz * rz;
+    if (piloted && this.rotor > 0.5) {
+      const lift = inp.lift ?? 0;
+      const fwd = inp.fwd ?? 0;
+      s.vy += (lift * 8 - s.vy) * (1 - Math.exp(-2.5 * DT));
+      if (s.y > 140) s.vy = Math.min(s.vy, 0);
+      vf += (fwd * sp.maxSpeed * this.tune - vf) * (1 - Math.exp(-1.2 * DT));
+      vr *= Math.exp(-2 * DT);
+      s.yaw -= inp.steer * 1.7 * DT;
+      // nose down when going forward, lean into turns (visual)
+      s.pitch += (-fwd * 0.22 - s.pitch) * (1 - Math.exp(-4 * DT));
+      s.roll += (inp.steer * 0.25 - s.roll) * (1 - Math.exp(-4 * DT));
+    } else {
+      s.vy = this.grounded ? -2 : s.vy - 20 * DT;
+      vf *= Math.exp(-(this.grounded ? 4 : 0.5) * DT);
+      vr *= Math.exp(-(this.grounded ? 4 : 0.5) * DT);
+      s.pitch *= 0.95;
+      s.roll *= 0.95;
+    }
+    const nfx = -Math.sin(s.yaw);
+    const nfz = -Math.cos(s.yaw);
+    const nrx = Math.cos(s.yaw);
+    const nrz = -Math.sin(s.yaw);
+    s.vx = nfx * vf + nrx * vr;
+    s.vz = nfz * vf + nrz * vr;
+    const before = Math.hypot(s.vx, s.vy, s.vz);
+    controller.computeColliderMovement(this.collider, { x: s.vx * DT, y: s.vy * DT, z: s.vz * DT }, undefined, filterGroups);
+    const m = controller.computedMovement();
+    this.grounded = controller.computedGrounded();
+    s.vx = m.x / DT;
+    s.vz = m.z / DT;
+    if (this.grounded && s.vy < 0) s.vy = 0;
+    s.x += m.x;
+    s.y += m.y;
+    s.z += m.z;
+    s.speed = s.vx * nfx + s.vz * nfz;
+    s.wheel += this.rotor * 0.9;
+    this.body.setNextKinematicTranslation({ x: s.x, y: s.y, z: s.z });
+    this.body.setNextKinematicRotation({ w: Math.cos(s.yaw / 2), x: 0, y: Math.sin(s.yaw / 2), z: 0 });
+    const lost = before - Math.hypot(s.vx, m.y / DT, s.vz);
+    return lost > 9 ? lost * 0.6 : 0;
+  }
+
   /** Multiplayer: last networked pose to glide towards, and damage to report to the host. */
   net: VehicleNet | null = null;
   pendingDamage = 0;
@@ -112,6 +176,7 @@ export class Vehicle {
    * slides along walls and climbs slopes. Returns the impact strength (m/s lost).
    */
   update(controller: RAPIER_T.KinematicCharacterController, groundProbe: (x: number, z: number, y: number) => number | null, filterGroups?: number): number {
+    if (this.spec.fly) return this.fly(controller, filterGroups);
     const s = this.state;
     const sp = this.spec;
     const inp = s.wrecked ? { throttle: 0, steer: 0, handbrake: true } : this.input;

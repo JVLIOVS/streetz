@@ -33,7 +33,8 @@ export class AudioDirector {
     s.setListener(me.x, me.z, camYaw);
     const v = me.vehicle >= 0 ? this.sim.vehicles.get(me.vehicle) : undefined;
     const vs = v?.state;
-    s.setEngine(!!v && !vs!.wrecked, vs?.speed ?? 0, v && v.input.throttle > 0 ? 1 : 0, vs?.type === 'moto');
+    const flying = !!v && !!v.spec.fly;
+    s.setEngine(!!v && !vs!.wrecked && !flying, vs?.speed ?? 0, v && v.input.throttle > 0 ? 1 : 0, vs?.type === 'moto');
     // tyres screech when sliding sideways or braking hard
     if (vs && v!.grounded) {
       const fx = -Math.sin(vs.yaw);
@@ -47,6 +48,8 @@ export class AudioDirector {
       if (this.lastVehicle !== -2) s.door();
       this.lastVehicle = me.vehicle;
     }
+    // jetpack roar
+    if (me.jetting && Math.random() < dt * 12) s.flame(me.x, me.z);
     // footsteps
     if (!v && me.grounded && me.speed > 1 && !me.dead) {
       this.stride += dt * me.speed;
@@ -78,6 +81,7 @@ export class AudioDirector {
       const d = Math.hypot(h.state.x - me.x, h.state.z - me.z);
       heli = Math.max(heli, Math.max(0, 1 - d / 160));
     }
+    if (v?.spec.fly) heli = Math.max(heli, 0.8 * v.rotor);
     s.setHeli(me.interior ? heli * 0.2 : heli);
     // ambience: traffic around, park birds
     let traffic = 0;

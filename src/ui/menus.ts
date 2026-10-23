@@ -1,5 +1,5 @@
 import type { ActionKind } from '../core/commands';
-import { CLOTHES, GARAGE_SLOTS, VEHICLE_OFFERS } from '../data/shop';
+import { CLOTHES, GARAGE_SLOTS, JETPACK_PRICE, VEHICLE_OFFERS } from '../data/shop';
 import { VEHICLES } from '../data/vehicles';
 import { ARMOR_PRICE, WEAPON_ORDER, WEAPONS } from '../data/weapons';
 import type { PlayerState } from '../sim/player';
@@ -74,7 +74,7 @@ export class MenuPanel {
       this.close();
       return;
     }
-    const key = JSON.stringify([this.kind === 'business' ? Math.floor(Date.now() / 3000) : 0, s.bank, s.biz, s.rep, s.money, s.weapons, s.ammo, s.armor, s.clothes, s.outfit, s.garage]);
+    const key = JSON.stringify([this.kind === 'business' ? Math.floor(Date.now() / 3000) : 0, s.jetpack, s.bank, s.biz, s.rep, s.money, s.weapons, s.ammo, s.armor, s.clothes, s.outfit, s.garage]);
     if (key === this.lastKey) return;
     this.lastKey = key;
     const { title, rows } = this.rows(this.kind, s);
@@ -136,13 +136,23 @@ export class MenuPanel {
       case 'dealer':
         return {
           title: 'Concession Bolide',
-          rows: VEHICLE_OFFERS.map((o) => ({
+          rows: [
+            {
+              label: '🎒 Jetpack',
+              sub: s.jetpack ? 'À toi : en l’air, maintiens SAUT' : 'Vole quelques secondes, se recharge au sol',
+              button: s.jetpack ? '✓' : euro(JETPACK_PRICE),
+              disabled: s.jetpack || s.money + s.bank < JETPACK_PRICE,
+              on: s.jetpack,
+              action: { action: 'buy' as const, arg: 'item:jetpack' },
+            },
+            ...VEHICLE_OFFERS.map((o) => ({
             label: VEHICLES[o.type].name,
             sub: `Livré à ta planque · garage ${s.garage.length}/${GARAGE_SLOTS}`,
             button: euro(o.price),
             disabled: s.money + s.bank < o.price || s.garage.length >= GARAGE_SLOTS,
-            action: { action: 'buy', arg: `car:${o.type}` },
+            action: { action: 'buy' as const, arg: `car:${o.type}` },
           })),
+          ],
         };
       case 'wardrobe': {
         const free = CLOTHES.filter((c) => c.price === 0);

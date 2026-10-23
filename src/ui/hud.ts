@@ -352,6 +352,16 @@ export class Hud {
     if (this.changed('tfill', w)) this.targetFill.style.width = w;
   }
 
+  /** In a mini-helicopter, the gas/brake buttons go up/down. */
+  setFlying(on: boolean) {
+    if (!this.changed('flying', on)) return;
+    const gas = $('btn-gas').querySelector('.lbl');
+    const brake = $('btn-brake').querySelector('.lbl');
+    if (gas) gas.textContent = on ? 'MONTER' : 'GAZ';
+    if (brake) brake.textContent = on ? 'DESCENDRE' : 'FREIN';
+    $('btn-handbrake').classList.toggle('hidden', on);
+  }
+
   /** Your own bounty: amount and time left to survive. */
   setBounty(amount: number, timer: number) {
     const el = $('bounty');

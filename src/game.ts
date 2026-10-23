@@ -111,6 +111,7 @@ export class Game {
       yaw: this.view.cam.yaw,
       sprint: s.sprint,
       ...((j) => ({ jump: j.jump, jumpPower: j.power }))(this.controls.consumeJump()),
+      jumpHeld: this.controls.jumpHeld(),
       throttle: gas ? 1 : brake ? -1 : 0,
       handbrake: h.handbrake || k.handbrake,
     };
@@ -435,6 +436,7 @@ export class Game {
     this.hud.updatePlayer(me);
     this.hud.updateProgress(me);
     this.hud.setPolice(me);
+    this.hud.setFlying(me.vehicle >= 0 && !!this.sim.vehicles.get(me.vehicle)?.spec.fly);
     if (me.health < this.lastHealth - 1) {
       this.view.cam.shake(Math.min(0.5, (this.lastHealth - me.health) / 40));
       this.vibrate(25);

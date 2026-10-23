@@ -3,7 +3,7 @@ import type { Command, MoveCommand } from '../core/commands';
 import { DT } from '../core/loop';
 import { Rng } from '../core/rng';
 import { TRAFFIC_MIX, VEHICLES, type VehicleType } from '../data/vehicles';
-import { APARTMENT_PRICES, CLOTHES, GARAGE_SLOTS, VEHICLE_OFFERS } from '../data/shop';
+import { APARTMENT_PRICES, CLOTHES, GARAGE_SLOTS, JETPACK_PRICE, VEHICLE_OFFERS } from '../data/shop';
 import { ARMOR_PRICE, WEAPON_ORDER, WEAPONS, type WeaponId } from '../data/weapons';
 import { terrainHeight } from '../maps/terrain';
 import type { InteriorDef, MapData } from '../maps/types';
@@ -207,7 +207,12 @@ export class SimWorld {
     this.roofs = new RoofSystem(this);
     this.props = new PropField(map.props);
     this.buildProps();
-    if (role === 'authority') for (const f of map.featured) this.spawnVehicle(f.type as VehicleType, f.x, 0.3, f.z, f.yaw, 'none', false);
+    if (role === 'authority') {
+      for (const f of map.featured) this.spawnVehicle(f.type as VehicleType, f.x, 0.3, f.z, f.yaw, 'none', false);
+      // two mini-helicopters waiting for a pilot: at the airfield and in the park
+      const air = map.pois.find((q) => q.kind === 'airport');
+      for (const [x, z] of [air ? [air.x + 18, air.z - 18] : [-400, 360], [300, 330]]) this.spawnVehicle('minicopter', x, this.groundY(x, z) + 0.6, z, 0, 'none', false);
+    }
     physics.step(); // build the query structures once
   }
 
@@ -478,9 +483,7 @@ export class SimWorld {
       if (s.dead) continue;
       const v = s.vehicle >= 0 ? this.vehicles.get(s.vehicle) : undefined;
       if (v) {
-        const inp = p.input;
-        const stickThrottle = inp && Math.abs(inp.y) > 0.4 ? Math.sign(inp.y) : 0;
-        v.input = { throttle: inp ? inp.throttle || stickThrottle : 0, steer: inp ? inp.x : 0, handbrake: !!inp?.handbrake };
+        v.input = driveInput(p.input, v.spec.fly);
         v.savePrev();
         const ctrl = v.state.type === 'offroad' ? this.offroadController : this.carController;
         const impact = v.update(ctrl, (x, z, y) => this.groundAt(x, z, y), groups(GROUP.VEHICLE, GROUP.STATIC | GROUP.VEHICLE | GROUP.PROP));
@@ -612,13 +615,7 @@ export class SimWorld {
         this.leaveVehicle(p);
         return;
       }
-      const inp = p.input;
-      const stickThrottle = inp && Math.abs(inp.y) > 0.4 ? Math.sign(inp.y) : 0;
-      v.input = {
-        throttle: inp ? inp.throttle || stickThrottle : 0,
-        steer: inp ? inp.x : 0,
-        handbrake: !!inp?.handbrake,
-      };
+      v.input = driveInput(p.input, v.spec.fly);
       // the player rides along (position used by the camera and population code)
       s.x = v.state.x;
       s.y = v.state.y;
@@ -1119,6 +1116,7 @@ export class SimWorld {
     v.touchedTick = this.tick;
     s.vehicle = id;
     s.weapon = s.weapon === 'rifle' ? 'pistol' : s.weapon;
+    if (v.spec.fly) this.toast(p, '🚁 MONTER / DESCENDRE à droite · joystick pour avancer et tourner');
     p.collider.setEnabled(false);
     s.action = 'interact';
     s.actionSeq++;
@@ -1277,6 +1275,11 @@ export class SimWorld {
       if (!pay(o.price, VEHICLES[o.type].name)) return;
       s.garage.push({ type: o.type, paint: this.rng.int(0, 7) });
       this.toast(p, `${VEHICLES[o.type].name} livrée à ta planque`);
+    } else if (kind === 'item' && id === 'jetpack' && inside === 'dealer') {
+      if (s.jetpack || !pay(JETPACK_PRICE, 'Jetpack')) return;
+      s.jetpack = true;
+      s.fuel = 1;
+      this.toast(p, '🎒 Jetpack ! En l’air, maintiens SAUT pour voler (le carburant se recharge au sol)');
     } else if (kind === 'biz' && inside === 'hideout') {
       const b = businessById(id);
       if (!b || s.biz.some((x) => x.id === id) || !pay(b.price, b.name)) return;
@@ -2031,6 +2034,14 @@ export class SimWorld {
     this.events = [];
     return e;
   }
+}
+
+/** Player controls → vehicle controls (cars: gas/brake or stick; helicopter: gas/brake = up/down, stick = fly). */
+function driveInput(inp: MoveCommand | null, fly?: boolean): import('./vehicle').DriveInput {
+  if (!inp) return { throttle: 0, steer: 0, handbrake: false };
+  if (fly) return { throttle: 0, steer: inp.x, handbrake: false, lift: inp.throttle, fwd: inp.y };
+  const stickThrottle = Math.abs(inp.y) > 0.4 ? Math.sign(inp.y) : 0;
+  return { throttle: inp.throttle || stickThrottle, steer: inp.x, handbrake: !!inp.handbrake };
 }
 
 function structuredCloneState(s: PlayerState): PlayerState {

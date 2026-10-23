@@ -126,6 +126,12 @@ export class Effects {
     this.root.add(this.pools);
   }
 
+  /** Jetpack exhaust (call every frame while firing). */
+  jet(x: number, y: number, z: number, dt: number) {
+    const n = Math.random() < dt * 40 ? 2 : 1;
+    for (let k = 0; k < n; k++) this.spawn(x + rnd(0.15), y, z + rnd(0.15), rnd(0.6), -6 - Math.random() * 3, rnd(0.6), 0.18, 1.2, 0.3, Math.random() < 0.6 ? C.fire : C.yellow);
+  }
+
   /** Blood spurting from a hit (red droplets falling). */
   bleed(x: number, y: number, z: number, amount = 6) {
     for (let k = 0; k < amount; k++) this.spawn(x + rnd(0.15), y + rnd(0.2), z + rnd(0.15), rnd(2.2), 1 + Math.random() * 2.2, rnd(2.2), 0.07 + Math.random() * 0.06, 0.1, 0.45 + Math.random() * 0.3, C.blood, 12);

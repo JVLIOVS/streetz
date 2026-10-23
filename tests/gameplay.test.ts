@@ -1327,3 +1327,48 @@ describe('fun weapons', () => {
     expect(WEAPONS.sabre.damage).toBeGreaterThan(WEAPONS.bat.damage);
   });
 });
+
+describe('flying', () => {
+  it('the mini-helicopter takes off, flies forward and lands when you get out', async () => {
+    const w = await world();
+    w.density = { peds: 0, traffic: 0, parkedRadius: 0 };
+    run(w, 2);
+    const heli = [...w.vehicles.values()].find((v) => v.state.type === 'minicopter')!;
+    expect(heli).toBeTruthy();
+    const p = w.players.get('p1')!;
+    w.teleportPlayer(p, heli.state.x + 2.6, heli.state.y + 0.5, heli.state.z);
+    run(w, 5);
+    run(w, 1, (t) => [act(t, 'use')]);
+    expect(P(w).vehicle).toBe(heli.state.id);
+    const y0 = heli.state.y;
+    run(w, 60 * 4, (t) => [move(t, { throttle: 1 })]);
+    expect(heli.state.y).toBeGreaterThan(y0 + 12);
+    const x0 = heli.state.x;
+    const z0 = heli.state.z;
+    run(w, 60 * 3, (t) => [move(t, { y: 1 })]);
+    expect(Math.hypot(heli.state.x - x0, heli.state.z - z0)).toBeGreaterThan(20);
+    run(w, 1, (t) => [act(t, 'use')]);
+    expect(P(w).vehicle).toBe(-1);
+    run(w, 60 * 6);
+    expect(heli.state.y).toBeLessThan(y0 + 3);
+  });
+
+  it('the jetpack: hold jump in the air to climb, fuel runs out, refills on the ground', async () => {
+    const w = await world();
+    w.density = { peds: 0, traffic: 0, parkedRadius: 0 };
+    run(w, 30);
+    const s = P(w);
+    s.jetpack = true;
+    const y0 = s.y;
+    run(w, 1, (t) => [move(t, { jump: true, jumpHeld: true })]);
+    let top = y0;
+    for (let i = 0; i < 60 * 3; i++) {
+      run(w, 1, (t) => [move(t, { jumpHeld: true })]);
+      top = Math.max(top, s.y);
+    }
+    expect(top - y0).toBeGreaterThan(10);
+    expect(s.fuel).toBeLessThan(0.4);
+    run(w, 60 * 8);
+    expect(s.fuel).toBeGreaterThan(0.9);
+  });
+});

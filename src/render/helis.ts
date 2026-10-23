@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import type { Heli } from '../sim/police';
+import type { Vehicle } from '../sim/vehicle';
 import { toon } from './materials';
 
-/** Police / army helicopters, built from primitives (no CC0 model available). */
-function buildHeli(army: boolean): { root: THREE.Group; rotor: THREE.Object3D; tailRotor: THREE.Object3D; light: THREE.Mesh } {
+/** Police / army / civilian helicopters, built from primitives (no CC0 model available). */
+export function buildHeli(army: boolean, civil = false): { root: THREE.Group; rotor: THREE.Object3D; tailRotor: THREE.Object3D; light: THREE.Mesh } {
   const root = new THREE.Group();
-  const body = toon(army ? 0x55663f : 0x1f3a7a);
-  const stripe = toon(army ? 0x3d4a2c : 0xf2f2f2);
+  const body = toon(civil ? 0xff7a1a : army ? 0x55663f : 0x1f3a7a);
+  const stripe = toon(civil ? 0xffffff : army ? 0x3d4a2c : 0xf2f2f2);
   const glass = toon(0x8fd3ff);
   const dark = toon(0x222428);
   const cabin = new THREE.Mesh(new THREE.SphereGeometry(1.6, 16, 12), body);
@@ -74,5 +75,36 @@ export class HeliRenderer {
       v.tailRotor.rotation.x = s.rotor * 2;
       v.light.visible = s.down < 0 && Math.floor(performance.now() / 300) % 2 === 0;
     }
+  }
+}
+
+/** The flyable mini-helicopter (a small orange civilian heli). Same API as VehicleView. */
+export class MiniCopterView {
+  readonly root = new THREE.Group();
+  private tilt = new THREE.Group();
+  private parts = buildHeli(false, true);
+
+  constructor() {
+    this.parts.root.scale.setScalar(0.55);
+    this.parts.root.position.y = 0.95;
+    this.parts.light.visible = false;
+    this.tilt.add(this.parts.root);
+    this.root.add(this.tilt);
+  }
+
+  setDetailed(_on: boolean) {}
+
+  update(v: Vehicle, alpha: number) {
+    const s = v.state;
+    const p = v.prev;
+    this.root.position.set(p.x + (s.x - p.x) * alpha, p.y + (s.y - p.y) * alpha, p.z + (s.z - p.z) * alpha);
+    let dy = s.yaw - p.yaw;
+    if (dy > Math.PI) dy -= Math.PI * 2;
+    if (dy < -Math.PI) dy += Math.PI * 2;
+    this.root.rotation.y = p.yaw + dy * alpha;
+    this.tilt.rotation.set(s.pitch, 0, -s.roll, 'YXZ');
+    // the rotor spins up when someone is at the controls
+    this.parts.rotor.rotation.y = s.wheel * 0.6;
+    this.parts.tailRotor.rotation.x = s.wheel * 1.2;
   }
 }

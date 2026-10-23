@@ -38,6 +38,7 @@ export interface Profile {
   notoriety: number;
   respect: number;
   skills: Skills;
+  jetpack: boolean;
 }
 
 export interface SaveData {
@@ -49,7 +50,7 @@ export interface SaveData {
 const KEY = 'streetz.save';
 
 export function defaultProfile(): Profile {
-  return { money: 500, weapons: ['fist'], ammo: {}, armor: 0, outfit: {}, clothes: [], garage: [], homes: ['hideout'], rep: START_XP, missions: [], daily: { day: 0, progress: [] }, streak: { day: 0, count: 0 }, biz: [], tutorial: false, prologue: false, crew: null, week: emptyWeek(0), bank: 0, fines: 0, notoriety: 0, respect: 0, skills: noSkills() };
+  return { money: 500, weapons: ['fist'], ammo: {}, armor: 0, outfit: {}, clothes: [], garage: [], homes: ['hideout'], rep: START_XP, missions: [], daily: { day: 0, progress: [] }, streak: { day: 0, count: 0 }, biz: [], tutorial: false, prologue: false, crew: null, week: emptyWeek(0), bank: 0, fines: 0, notoriety: 0, respect: 0, skills: noSkills(), jetpack: false };
 }
 
 export function defaultSave(): SaveData {
@@ -102,6 +103,7 @@ export function sanitize(p: Partial<Profile> | undefined): Profile {
     notoriety: Math.max(0, Math.min(100, Number(p.notoriety) || 0)),
     respect: Math.max(0, Number(p.respect) || 0),
     skills: { ...noSkills(), ...(typeof p.skills === 'object' && p.skills ? p.skills : {}) },
+    jetpack: p.jetpack === true,
     prologue: p.prologue === true,
     tutorial: typeof p.tutorial === 'boolean' ? p.tutorial : (p.missions?.length ?? 0) > 0 || (Number(p.money) || 0) !== d.money,
   };

@@ -179,6 +179,11 @@ export class Controls {
     this.pressJump(power);
   }
 
+  /** Jump button (or Space) currently held. */
+  jumpHeld() {
+    return this.jumpStart >= 0;
+  }
+
   /** Current charge of a held jump, 0..1 (taps under 0.18 s stay normal jumps). */
   jumpCharge() {
     if (this.jumpStart < 0) return 0;

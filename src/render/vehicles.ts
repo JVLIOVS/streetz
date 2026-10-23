@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GOLD_PAINT } from '../data/contracts';
+import { MiniCopterView } from './helis';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { VEHICLES, type VehicleType } from '../data/vehicles';
 import type { Vehicle } from '../sim/vehicle';
@@ -195,7 +196,7 @@ export class VehicleView {
 
 export class VehicleRenderer {
   readonly root = new THREE.Group();
-  readonly views = new Map<number, VehicleView>();
+  readonly views = new Map<number, VehicleView | MiniCopterView>();
 
   constructor(private assets: GameAssets) {
     this.root.name = 'vehicles';
@@ -211,7 +212,7 @@ export class VehicleRenderer {
     for (const v of vehicles.values()) {
       let view = this.views.get(v.state.id);
       if (!view) {
-        view = new VehicleView(v.state.id, v.state.type, modelFor(v.state.type, v.state.paint, this.assets), v.state.paint === GOLD_PAINT);
+        view = VEHICLES[v.state.type].fly ? new MiniCopterView() : new VehicleView(v.state.id, v.state.type, modelFor(v.state.type, v.state.paint, this.assets), v.state.paint === GOLD_PAINT);
         this.views.set(v.state.id, view);
         this.root.add(view.root);
       }

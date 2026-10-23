@@ -269,6 +269,7 @@ export class NetClient implements NetSession {
     s.skills = np.skills;
     s.carrying = np.carrying;
     s.stash = np.stash;
+    s.jetpack = np.jetpack;
     s.resist = np.resist;
     if (np.teleportSeq > s.teleportSeq) {
       // doors, respawn, getting out of a car: the host moved us
@@ -308,4 +309,6 @@ function copyShared(p: Player, np: NetPlayer) {
   s.crew = np.crew;
   s.rep = np.rep;
   s.mission = np.mission;
+  s.jetting = np.jetting;
+  s.jetpack = np.jetpack;
 }

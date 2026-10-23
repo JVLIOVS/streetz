@@ -139,6 +139,10 @@ export interface PlayerState {
   notoriety: number;
   respect: number;
   skills: Skills;
+  /** Jetpack owned, its fuel (0..1) and whether it is firing right now. */
+  jetpack: boolean;
+  fuel: number;
+  jetting: boolean;
   /** Where your stuff fell when you got knocked out (null = nothing left there). */
   stash: [number, number] | null;
   /** Mission item you are carrying (dropped if you get knocked out). */
@@ -273,6 +277,9 @@ export class Player {
       skills: noSkills(),
       carrying: null,
       stash: null,
+      jetpack: false,
+      fuel: 1,
+      jetting: false,
       teleportSeq: 0,
       name: id,
       look: -1,
@@ -342,6 +349,15 @@ export class Player {
       s.vy -= T.gravity * DT;
     }
     this.jumpQueued = false;
+    // jetpack: hold jump in the air to fly up (fuel refills on the ground)
+    s.jetting = false;
+    if (s.jetpack && !s.dead) {
+      if (!s.grounded && inp?.jumpHeld && s.fuel > 0.01) {
+        s.vy = Math.min(9, s.vy + 48 * DT);
+        s.fuel = Math.max(0, s.fuel - DT / 4);
+        s.jetting = true;
+      } else if (s.grounded) s.fuel = Math.min(1, s.fuel + DT / 3);
+    }
 
     const desired = { x: s.vx * DT, y: s.vy * DT, z: s.vz * DT };
     controller.computeColliderMovement(this.collider, desired);
@@ -437,6 +453,7 @@ export function applyProfile(s: PlayerState, p: Profile) {
   s.notoriety = p.notoriety;
   s.respect = p.respect;
   s.skills = { ...noSkills(), ...p.skills };
+  s.jetpack = p.jetpack;
   s.week = { ...emptyWeek(0), ...p.week };
 }
 
@@ -465,5 +482,6 @@ export function profileOf(s: PlayerState): Profile {
     notoriety: Math.round(s.notoriety),
     respect: s.respect,
     skills: { ...s.skills },
+    jetpack: s.jetpack,
   };
 }

@@ -20,6 +20,24 @@ interface PlayerSlot {
   weapon: string;
   /** Look + outfit the view was built with. */
   key: string;
+  /** Jetpack mesh on the back (when owned). */
+  jet?: THREE.Object3D;
+}
+
+/** A small jetpack: two tanks and a nozzle, worn on the back. */
+function jetpackMesh(): THREE.Object3D {
+  const g = new THREE.Group();
+  const grey = new THREE.MeshToonMaterial({ color: 0x9aa3ad });
+  const red = new THREE.MeshToonMaterial({ color: 0xd63031 });
+  for (const k of [-1, 1]) {
+    const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.5, 10), grey);
+    tank.position.set(k * 0.13, 0, 0);
+    const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 0.12, 8), red);
+    nozzle.position.set(k * 0.13, -0.3, 0);
+    g.add(tank, nozzle);
+  }
+  g.position.set(0, 1.15, 0.25);
+  return g;
 }
 
 const SUN_DIR = new THREE.Vector3(-0.45, 0.8, 0.35).normalize();
@@ -286,6 +304,17 @@ export class GameRenderer {
   private updatePlayerView(slot: PlayerSlot, p: NonNullable<ReturnType<SimWorld['players']['get']>>, x: number, y: number, z: number, facing: number, dt: number) {
     const s = p.state;
     const view = slot.view;
+    if (s.jetpack && !slot.jet) {
+      slot.jet = jetpackMesh();
+      view.root.add(slot.jet);
+    }
+    if (slot.jet) slot.jet.visible = s.jetpack && s.vehicle < 0;
+    if (s.jetting) {
+      // flames under the nozzles
+      const bx = x + Math.sin(facing) * 0.3;
+      const bz = z + Math.cos(facing) * 0.3;
+      this.effects.jet(bx, y + 0.8, bz, dt);
+    }
     const driving = s.vehicle >= 0 ? this.vehicles.views.get(s.vehicle) : undefined;
     if (driving) {
       // Sit in the car (visible through the windows), on the left seat

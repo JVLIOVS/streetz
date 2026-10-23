@@ -66,7 +66,11 @@ export const VEHICLE_OFFERS: VehicleOffer[] = [
   { type: 'wagon', price: 6000 },
   { type: 'offroad', price: 12000 },
   { type: 'sports', price: 25000 },
+  { type: 'minicopter', price: 30000 },
 ];
+
+/** Jetpack, sold at the dealer: hold Jump in the air to fly. */
+export const JETPACK_PRICE = 9000;
 
 /** Max vehicles stored in a garage. */
 export const GARAGE_SLOTS = 4;

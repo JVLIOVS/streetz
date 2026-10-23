@@ -109,6 +109,9 @@ export type NetPlayer = Pick<
   | 'skills'
   | 'carrying'
   | 'stash'
+  | 'jetpack'
+  | 'fuel'
+  | 'jetting'
   | 'resist'
   | 'wantedSeen'
   | 'searchX'
@@ -196,6 +199,9 @@ function packFull(s: PlayerState): NetPlayer {
     skills: s.skills,
     carrying: s.carrying,
     stash: s.stash,
+    jetpack: s.jetpack,
+    fuel: q(s.fuel),
+    jetting: s.jetting,
     resist: q(s.resist),
     wantedSeen: s.wantedSeen,
     searchX: q(s.searchX),
