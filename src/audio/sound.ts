@@ -261,6 +261,18 @@ export class Sound {
     if (vol < 0.9) this.burst(0.35, 900, 0.25 * vol, 0.4, -pan, 'lowpass', 0.12);
   }
 
+  /** Flamethrower roar (called for each puff). */
+  flame(x: number, z: number) {
+    const { vol, pan } = this.spatial(x, z, 60);
+    this.burst(0.12, 900, 0.35 * vol, 0.5, pan);
+  }
+
+  /** Chainsaw buzz while cutting. */
+  chainsaw() {
+    this.tone('sawtooth', 115, 140, 0.13, 0.12);
+    this.burst(0.1, 2500, 0.1, 2, 0, 'bandpass');
+  }
+
   /** Kept for old call sites: a gunshot at distance d, centered. */
   gunshot(d = 0) {
     this.shot(this.listener.x + d, this.listener.z);

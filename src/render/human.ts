@@ -536,7 +536,7 @@ export class HumanView {
   }
 }
 
-export type WeaponModel = 'none' | 'pistol' | 'rifle' | 'baton' | 'smg' | 'shotgun' | 'knife' | 'bat';
+export type WeaponModel = 'none' | 'pistol' | 'rifle' | 'baton' | 'smg' | 'shotgun' | 'knife' | 'bat' | 'sabre' | 'chainsaw' | 'shears' | 'flamer';
 
 function weaponModel(kind: Exclude<WeaponModel, 'none'>): THREE.Object3D {
   const g = new THREE.Group();
@@ -555,6 +555,50 @@ function weaponModel(kind: Exclude<WeaponModel, 'none'>): THREE.Object3D {
       g.add(handle);
     }
     g.add(stick);
+  } else if (kind === 'sabre') {
+    // long curved-looking blade with a gold guard
+    const steel = new THREE.MeshToonMaterial({ color: 0xe8edf2, gradientMap: toonGradient() });
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.06, 0.95), steel);
+    blade.position.set(0, 0.01, 0.55);
+    blade.rotation.x = -0.08;
+    const guard = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.03, 0.04), new THREE.MeshToonMaterial({ color: 0xffc93c, gradientMap: toonGradient() }));
+    guard.position.set(0, 0, 0.06);
+    const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.2, 8), dark);
+    grip.rotation.x = Math.PI / 2;
+    grip.position.set(0, 0, -0.05);
+    g.add(blade, guard, grip);
+  } else if (kind === 'chainsaw') {
+    const orange = new THREE.MeshToonMaterial({ color: 0xff7a1a, gradientMap: toonGradient() });
+    const motor = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.18, 0.3), orange);
+    motor.position.set(0, 0.03, 0.02);
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.09, 0.6), new THREE.MeshToonMaterial({ color: 0x9aa3ad, gradientMap: toonGradient() }));
+    bar.position.set(0, 0.02, 0.45);
+    const handle = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.015, 6, 12), dark);
+    handle.position.set(0, 0.14, 0.05);
+    g.add(motor, bar, handle);
+  } else if (kind === 'shears') {
+    const steel = new THREE.MeshToonMaterial({ color: 0xd8dde3, gradientMap: toonGradient() });
+    const red = new THREE.MeshToonMaterial({ color: 0xd63031, gradientMap: toonGradient() });
+    for (const k of [-1, 1]) {
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.04, 0.16), steel);
+      blade.position.set(k * 0.015, 0, 0.15);
+      blade.rotation.y = k * 0.18;
+      const handle = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.03, 0.14), red);
+      handle.position.set(k * 0.03, 0, -0.02);
+      handle.rotation.y = -k * 0.25;
+      g.add(blade, handle);
+    }
+  } else if (kind === 'flamer') {
+    const red = new THREE.MeshToonMaterial({ color: 0xd63031, gradientMap: toonGradient() });
+    const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.3, 10), red);
+    tank.position.set(0, -0.08, 0.05);
+    tank.rotation.x = Math.PI / 2;
+    const tube = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.6), dark);
+    tube.position.set(0, 0.04, 0.3);
+    const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.025, 0.1, 8), new THREE.MeshToonMaterial({ color: 0xffc93c, gradientMap: toonGradient() }));
+    nozzle.rotation.x = Math.PI / 2;
+    nozzle.position.set(0, 0.04, 0.63);
+    g.add(tank, tube, nozzle);
   } else if (kind === 'pistol') {
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.08, 0.26), dark);
     body.position.set(0, 0.02, 0.1);

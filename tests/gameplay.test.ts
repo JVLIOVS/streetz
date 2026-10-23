@@ -1299,3 +1299,31 @@ describe('stuff dropped on the ground', () => {
     expect(P(w).stash).toBeNull();
   });
 });
+
+describe('fun weapons', () => {
+  it('the flamethrower burns everybody in front of you', async () => {
+    const w = await world();
+    w.density = { peds: 0, traffic: 0, parkedRadius: 0 };
+    run(w, 2);
+    const s = P(w);
+    s.weapons.push('flamer');
+    s.ammo.flamer = 200;
+    s.weapon = 'flamer';
+    const yaw = 0;
+    const a = w.spawnPed(s.x, s.z - 4, { mode: 'idle' });
+    const b = w.spawnPed(s.x + 1, s.z - 6, { mode: 'idle' });
+    a.timer = b.timer = 999;
+    for (let i = 0; i < 60; i++) run(w, 1, (t) => [move(t, { yaw }), ...(t % 4 === 0 ? [act(t, 'attack')] : [])]);
+    expect(a.state.health).toBeLessThan(a.state.maxHealth);
+    expect(b.state.health).toBeLessThan(b.state.maxHealth);
+    expect(s.ammo.flamer).toBeLessThan(200);
+  });
+
+  it('sabre, chainsaw and shears are sold at the gun shop (with levels)', async () => {
+    const { WEAPONS } = await import('../src/data/weapons');
+    const { requiredLevel } = await import('../src/data/progression');
+    for (const id of ['sabre', 'chainsaw', 'shears', 'flamer'] as const) expect(WEAPONS[id].price).toBeGreaterThan(0);
+    expect(requiredLevel('weapon:chainsaw')).toBeGreaterThan(1);
+    expect(WEAPONS.sabre.damage).toBeGreaterThan(WEAPONS.bat.damage);
+  });
+});

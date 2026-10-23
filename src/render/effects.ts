@@ -146,6 +146,15 @@ export class Effects {
   }
 
   handle(e: SimEvent) {
+    if (e.type === 'flame') {
+      // a jet of fire: fast hot puffs going forward, rising a bit
+      for (let k = 0; k < 4; k++) {
+        const sp = 9 + Math.random() * 5;
+        this.spawn(e.x, e.y, e.z, e.dx * sp + rnd(1.5), 0.6 + Math.random() * 1.2, e.dz * sp + rnd(1.5), 0.25, 2.2, 0.45 + Math.random() * 0.25, Math.random() < 0.7 ? C.fire : C.yellow);
+      }
+      if (Math.random() < 0.3) this.spawn(e.x + e.dx * 6, e.y + 0.5, e.z + e.dz * 6, rnd(0.5), 1.5, rnd(0.5), 0.6, 1.5, 1.2, C.smoke);
+      return;
+    }
     switch (e.type) {
       case 'shot': {
         const pos = this.tracerGeo.getAttribute('position') as THREE.BufferAttribute;

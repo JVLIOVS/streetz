@@ -58,7 +58,10 @@ export class AudioDirector {
     }
     // own melee swing / getting hurt
     if (me.actionSeq !== this.lastSeq) {
-      if (this.lastSeq >= 0 && WEAPONS[me.weapon].melee && me.action !== 'hit' && me.action !== 'interact') s.whoosh();
+      if (this.lastSeq >= 0 && WEAPONS[me.weapon].melee && me.action !== 'hit' && me.action !== 'interact') {
+        if (me.weapon === 'chainsaw') s.chainsaw();
+        else s.whoosh();
+      }
       this.lastSeq = me.actionSeq;
     }
     if (me.health < this.lastHealth - 4 && !me.dead) s.voices?.cry('effort', me.look > 0 ? me.look : 7, 0.6, 0);

@@ -80,6 +80,8 @@ export type SimEvent =
   /** Busted: a night in the cell (cinematic on the client). */
   /** The officers caught up: pay the fine or refuse. */
   | { type: 'deal'; playerId: string; fine: number }
+  /** Flamethrower puff (particles + sound). */
+  | { type: 'flame'; playerId: string; x: number; y: number; z: number; dx: number; dz: number }
   | { type: 'jail'; playerId: string; seized: number; lost: string[] }
   /** A mission partner / giver speaks to this player. */
   | { type: 'say'; playerId: string; name: string; text: string; seed: number }
@@ -1414,6 +1416,10 @@ export class SimWorld {
     }
     // auto-aim in the camera's field of view (where the player is looking)
     const aimYaw = p.input?.yaw ?? s.facing;
+    if (spec.flame) {
+      this.flame(p, aimYaw, spec.range, spec.damage);
+      return;
+    }
     const target = this.autoAim(p, aimYaw, spec.range, spec.aimCone * (1 + 0.06 * this.law.level(p, 'precision')));
     if (target) s.facing = Math.atan2(-(target.x - s.x), -(target.z - s.z));
     else if (s.speed < 0.5) s.facing = aimYaw;
@@ -1462,6 +1468,36 @@ export class SimWorld {
   }
 
   /** Closest fragile prop crossing the 2D segment a→b. */
+  /** Flamethrower: everything in a short cone in front burns. */
+  private flame(p: Player, aimYaw: number, range: number, damage: number) {
+    const s = p.state;
+    const target = this.autoAim(p, aimYaw, range, 0.6);
+    s.facing = target ? Math.atan2(-(target.x - s.x), -(target.z - s.z)) : s.speed < 0.5 ? aimYaw : s.facing;
+    s.action = 'shoot2';
+    s.ammo.flamer--;
+    const fx = -Math.sin(s.facing);
+    const fz = -Math.cos(s.facing);
+    this.events.push({ type: 'flame', x: s.x + fx * 0.8, y: s.y + 1.25, z: s.z + fz * 0.8, dx: fx, dz: fz, playerId: s.id });
+    const inCone = (x: number, z: number, pad = 0) => {
+      const dx = x - s.x;
+      const dz = z - s.z;
+      const d = Math.hypot(dx, dz);
+      if (d > range + pad || d < 0.2) return false;
+      return (dx * fx + dz * fz) / d > Math.cos(0.45);
+    };
+    let burned = false;
+    for (const t of this.targets(p, true)) {
+      if (!inCone(t.x, t.z, t.vehicle ? 2 : 0)) continue;
+      this.hitTarget(p, t, t.vehicle ? damage * 2 : damage, false);
+      burned = true;
+    }
+    for (const i of this.props.near(s.x + fx * range * 0.5, s.z + fz * range * 0.5, range * 0.6, this.scratch)) {
+      const d = this.map.props[i];
+      if (PROP_SPECS[d.kind].fragile && inCone(d.x, d.z) && this.rng.chance(0.08)) this.breakProp(i, fx * 4, fz * 4, 2, p);
+    }
+    if (burned || this.tick % 30 === 0) this.crime(p, 'gunshot', s.x, s.z, null);
+  }
+
   private propOnSegment(ax: number, az: number, bx: number, bz: number) {
     const len = Math.hypot(bx - ax, bz - az);
     if (len < 0.1) return null;

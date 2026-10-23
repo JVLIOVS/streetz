@@ -217,7 +217,7 @@ export class Player {
       money: 500,
       weapon: 'fist',
       weapons: ['fist'],
-      ammo: { fist: 0, knife: 0, baton: 0, bat: 0, pistol: 0, smg: 0, shotgun: 0, rifle: 0, sniper: 0 },
+      ammo: { fist: 0, shears: 0, knife: 0, baton: 0, bat: 0, sabre: 0, chainsaw: 0, pistol: 0, smg: 0, shotgun: 0, flamer: 0, rifle: 0, sniper: 0 },
       outfit: {},
       clothes: [],
       garage: [],

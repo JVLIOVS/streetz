@@ -150,6 +150,9 @@ export class Game {
         case 'shot':
           if (e.w !== 'pellet') this.sound.shot(e.fx, e.fz, e.w);
           break;
+        case 'flame':
+          this.sound.flame(e.x, e.z);
+          break;
         case 'punch':
           this.sound.hit(e.x, e.z);
           break;
