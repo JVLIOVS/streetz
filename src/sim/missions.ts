@@ -655,7 +655,21 @@ export class MissionSystem {
         const d = Math.hypot((l.ax + l.bx) / 2 - s.x, (l.az + l.bz) / 2 - s.z);
         return d > 50 && d < 110 && l.speed < 20 && l.length > 20;
       });
-      const lane = lanes.length ? lanes[this.w.rng.int(0, lanes.length - 1)] : this.w.lanes.lanes[0];
+      // a lane with a clear stretch ahead (never right behind a parked or stopped car)
+      const clear = (l: (typeof lanes)[number]) => {
+        for (const v of this.w.vehicles.values())
+          for (let k = 0.4; k <= 0.9; k += 0.1) if (Math.hypot(l.ax + l.dx * l.length * k - v.state.x, l.az + l.dz * l.length * k - v.state.z) < 4) return false;
+        return true;
+      };
+      const start = this.w.rng.int(0, Math.max(0, lanes.length - 1));
+      let lane = lanes.length ? lanes[start] : this.w.lanes.lanes[0];
+      for (let k = 0; k < lanes.length; k++) {
+        const l = lanes[(start + k) % lanes.length];
+        if (clear(l)) {
+          lane = l;
+          break;
+        }
+      }
       const t = lane.length * 0.4;
       const v = this.w.spawnVehicle(step.vehicle, lane.ax + lane.dx * t, 0.3, lane.az + lane.dz * t, Math.atan2(-lane.dx, -lane.dz), 'npc', false);
       v.lane = lane.id;
