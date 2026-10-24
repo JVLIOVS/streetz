@@ -1,4 +1,5 @@
-import { speedBonus, type Gear } from '../data/gear';
+import { speedBonus, type Gear, type GearItem } from '../data/gear';
+import { STARTER_BASE, type Placed } from '../data/base';
 import type RAPIER_T from '@dimforge/rapier3d-compat';
 import type { MoveCommand } from '../core/commands';
 import { DT } from '../core/loop';
@@ -37,7 +38,11 @@ export interface ContextAction {
     | 'fine'
     | 'bank'
     | 'chest'
-    | 'sniper';
+    | 'sniper'
+    /** Hideout modules you built: use (bed, board, bag) / locker / workbench menus. */
+    | 'module'
+    | 'locker'
+    | 'bench';
   label: string;
   target: number | string;
 }
@@ -145,6 +150,9 @@ export interface PlayerState {
   jetpack: boolean;
   /** Clothes / gear worn (rarity per slot): src/data/gear.ts. Empty = underwear. */
   gear: Gear;
+  /** Your hideout as you built it (src/data/base.ts) and the stuff in your locker. */
+  base: Placed[];
+  locker: GearItem[];
   fuel: number;
   jetting: boolean;
   /** Where your stuff fell when you got knocked out (null = nothing left there). */
@@ -283,6 +291,8 @@ export class Player {
       stash: null,
       jetpack: false,
       gear: {},
+      base: STARTER_BASE.map((q) => ({ ...q })),
+      locker: [],
       fuel: 1,
       jetting: false,
       teleportSeq: 0,
@@ -460,6 +470,8 @@ export function applyProfile(s: PlayerState, p: Profile) {
   s.skills = { ...noSkills(), ...p.skills };
   s.jetpack = p.jetpack;
   s.gear = { ...p.gear };
+  s.base = p.base.map((q) => ({ ...q }));
+  s.locker = p.locker.map((q) => ({ ...q }));
   s.week = { ...emptyWeek(0), ...p.week };
 }
 
@@ -490,5 +502,7 @@ export function profileOf(s: PlayerState): Profile {
     skills: { ...s.skills },
     jetpack: s.jetpack,
     gear: { ...s.gear },
+    base: s.base.map((q) => ({ ...q })),
+    locker: s.locker.map((q) => ({ ...q })),
   };
 }

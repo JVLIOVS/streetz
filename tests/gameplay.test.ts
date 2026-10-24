@@ -1541,3 +1541,83 @@ describe('stuff (gear)', () => {
     expect(s.money).toBe(1000 - 160);
   });
 });
+
+describe('hideout building', () => {
+  async function home() {
+    const w = await world();
+    w.density = { peds: 0, traffic: 0, parkedRadius: 0 };
+    run(w, 2);
+    const p = w.players.get('p1')!;
+    const def = map.interiors.find((i) => i.kind === 'hideout')!;
+    const room = w.rooms.get(def.id)!;
+    const s = P(w);
+    s.interior = def.id;
+    w.teleportPlayer(p, room.spawn.x, 0.3, room.spawn.z);
+    run(w, 2);
+    s.interior = def.id;
+    return { w, p, s, def, room };
+  }
+
+  it('the starter hideout fits; pieces are placed on free cells only, paid, and refunded when taken back', async () => {
+    const { canPlace } = await import('../src/sim/base');
+    const { STARTER_BASE } = await import('../src/data/base');
+    const { w, s, def, room } = await home();
+    STARTER_BASE.forEach((q, i) => expect(canPlace(def, room, STARTER_BASE.filter((_, k) => k !== i), q)).toBe(true));
+    s.money = 5000;
+    // on top of the bed: refused
+    run(w, 1, (t) => [act(t, 'build', 'place:sofa:1:1:0')]);
+    expect(s.base.length).toBe(2);
+    run(w, 1, (t) => [act(t, 'build', 'place:sofa:12:2:0')]);
+    expect(s.base.length).toBe(3);
+    expect(s.money).toBe(5000 - 700);
+    // in the doorway: refused
+    run(w, 1, (t) => [act(t, 'build', `place:plant:${def.w / 2}:${def.d - 1}:0`)]);
+    expect(s.base.length).toBe(3);
+    run(w, 1, (t) => [act(t, 'build', 'remove:2')]);
+    expect(s.base.length).toBe(2);
+    expect(s.money).toBe(5000);
+  });
+
+  it('bed heals, board points at the next Family job, locker keeps stuff through a knock-out, workbench upgrades', async () => {
+    const { moduleCenter } = await import('../src/sim/base');
+    const { moduleById } = await import('../src/data/base');
+    const { w, p, s, def } = await home();
+    s.money = 20000;
+    s.tutorialDone = true;
+    s.base = [...s.base, { m: 'locker', x: 12, z: 2, r: 0 }, { m: 'bench', x: 14, z: 6, r: 0 }, { m: 'board', x: 5, z: 1, r: 0 }];
+    const goTo = (i: number) => {
+      const q = s.base[i];
+      const c = moduleCenter(def, moduleById(q.m)!, q);
+      w.teleportPlayer(p, c.x, 0.3, c.z + 1.2);
+      run(w, 3);
+      s.interior = def.id;
+      run(w, 2);
+    };
+    // bed
+    s.health = 30;
+    goTo(0);
+    expect(s.context?.kind).toBe('module');
+    run(w, 1, (t) => [act(t, 'use')]);
+    expect(s.health).toBe(100);
+    // board
+    goTo(4);
+    run(w, 1, (t) => [act(t, 'use')]);
+    expect(s.waypoint).not.toBeNull();
+    // locker: store the trousers
+    s.gear = { legs: 2, feet: 1 };
+    goTo(2);
+    expect(s.context?.kind).toBe('locker');
+    run(w, 1, (t) => [act(t, 'locker', 'store:legs')]);
+    expect(s.locker).toEqual([{ slot: 'legs', r: 2 }]);
+    expect(s.gear.legs).toBeUndefined();
+    // workbench: shoes rare → epic
+    goTo(3);
+    expect(s.context?.kind).toBe('bench');
+    run(w, 1, (t) => [act(t, 'upgrade', 'feet')]);
+    expect(s.gear.feet).toBe(2);
+    // knocked out: what is worn is lost, the locker keeps its content
+    w.damagePlayer(p, 999);
+    expect(s.gear).toEqual({});
+    expect(s.locker.length).toBe(1);
+  });
+});

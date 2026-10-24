@@ -122,7 +122,8 @@ export function roomLayout(def: InteriorDef): RoomLayout {
   } else if (def.kind === 'dealer') {
     // showroom: a glossy plinth
     boxes.push({ x: ox, y: 0.1, z: oz + 1, sx: 7, sy: 0.2, sz: 5, color: 0xffffff });
-  } else if (def.kind === 'hideout' || def.kind === 'apartment') {
+  } else if (def.kind === 'apartment') {
+    // (the hideout is furnished by the player: src/data/base.ts)
     boxes.push({ x: ox - w / 2 + 1.5, y: 0.3, z: oz - d / 2 + 2, sx: 2.2, sy: 0.6, sz: 3.2, color: 0x3d5a80 }); // bed
     boxes.push({ x: ox + 2, y: 0.45, z: oz - 1, sx: 3.5, sy: 0.9, sz: 1.5, color: 0x8a4fff }); // sofa
     boxes.push({ x: ox + 2, y: 1.6, z: oz - d / 2 + 0.3, sx: 3, sy: 1.7, sz: 0.2, color: 0x111111, deco: true }); // TV

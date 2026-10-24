@@ -7,6 +7,7 @@ import type { Controls } from './input/controls';
 import type { GameRenderer } from './render/renderer';
 import type { SimWorld } from './sim/world';
 import type { Hud } from './ui/hud';
+import { BuildBar } from './ui/build';
 import { MenuPanel, type MenuKind } from './ui/menus';
 import { missionById } from './data/missions';
 import { HEIST } from './data/social';
@@ -43,6 +44,7 @@ export class Game {
   onPrologueDone?: () => void;
   net: NetSession | null = null;
   readonly menu: MenuPanel;
+  readonly build: BuildBar;
   private audio: AudioDirector;
   private radioCar = -1;
   private lastCharge = 0;
@@ -63,6 +65,7 @@ export class Game {
       () => {},
     );
     this.audio = new AudioDirector(sim, sound);
+    this.build = new BuildBar(sim.map, view.base, (action, arg) => this.menuActions.push({ action, arg }));
     hud.onSkill = (id) => this.sendAction('skill', id);
     hud.onGuards = () => this.sendAction('guards', '');
     hud.onPolice = (c) => (c === 'surrender' ? this.sendAction('surrender', '') : this.sendAction('fine', c));
@@ -121,7 +124,7 @@ export class Game {
     for (const a of this.controls.takeActions()) {
       // contextual "use" on a counter / wardrobe / garage opens a menu instead
       const ctx = this.player.context;
-      if (a === 'use' && ctx && (ctx.kind === 'shop' || ctx.kind === 'wardrobe' || ctx.kind === 'garage' || ctx.kind === 'business' || ctx.kind === 'bank')) {
+      if (a === 'use' && ctx && (ctx.kind === 'shop' || ctx.kind === 'wardrobe' || ctx.kind === 'garage' || ctx.kind === 'business' || ctx.kind === 'bank' || ctx.kind === 'locker' || ctx.kind === 'bench')) {
         this.menu.open(ctx.kind === 'shop' ? (ctx.target as MenuKind) : ctx.kind);
         continue;
       }
@@ -452,6 +455,7 @@ export class Game {
     }
     this.lastHealth = me.health;
     this.menu.update(me);
+    this.build.update(me);
     this.updateTargetBar(me.lastHit, me.lastHitTick);
     if (this.sim.players.size > 1) this.updateNameTags(me);
     this.hudTimer -= dt;

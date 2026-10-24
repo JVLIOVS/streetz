@@ -120,10 +120,12 @@ export type NetPlayer = Pick<
   | 'searchR'
   | 'arrest'
   | 'gear'
+  | 'base'
+  | 'locker'
 >;
 
 /** Private fields only sent to their owner (inventory, contracts…). */
-const PRIVATE: (keyof NetPlayer)[] = ['ammo', 'weapons', 'clothes', 'garage', 'homes', 'missionsDone', 'contracts', 'biz', 'week', 'bank', 'skills', 'fines', 'context', 'searchX', 'searchZ', 'searchR', 'waypoint', 'missionTargets', 'objective'];
+const PRIVATE: (keyof NetPlayer)[] = ['base', 'locker', 'ammo', 'weapons', 'clothes', 'garage', 'homes', 'missionsDone', 'contracts', 'biz', 'week', 'bank', 'skills', 'fines', 'context', 'searchX', 'searchZ', 'searchR', 'waypoint', 'missionTargets', 'objective'];
 
 export function packPlayer(s: PlayerState, owner = true): NetPlayer {
   const n = packFull(s);
@@ -135,6 +137,8 @@ function packFull(s: PlayerState): NetPlayer {
   return {
     id: s.id,
     gear: s.gear,
+    base: s.base,
+    locker: s.locker,
     x: q(s.x),
     y: q(s.y),
     z: q(s.z),

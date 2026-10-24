@@ -3,7 +3,8 @@ import { VEHICLES, type VehicleType } from '../data/vehicles';
 import { WEAPONS, type WeaponId } from '../data/weapons';
 import { MISSIONS } from '../data/missions';
 import { BUSINESSES } from '../data/business';
-import { GEAR_SLOTS, type Gear } from '../data/gear';
+import { GEAR_SLOTS, type Gear, type GearItem } from '../data/gear';
+import { LOCKER_SIZE, MAX_MODULES, STARTER_BASE, moduleById, type Placed } from '../data/base';
 import { START_XP } from '../data/progression';
 import { emptyWeek, type WeekStats } from '../sim/player';
 import { noSkills, SKILL_MAX, type Skills } from '../data/law';
@@ -44,6 +45,9 @@ export interface Profile {
   jetpack: boolean;
   /** Clothes / gear worn (lost when knocked out). */
   gear: Gear;
+  /** Hideout layout and locker. */
+  base: Placed[];
+  locker: GearItem[];
 }
 
 export interface SaveData {
@@ -55,7 +59,7 @@ export interface SaveData {
 const KEY = 'streetz.save';
 
 export function defaultProfile(): Profile {
-  return { money: 500, weapons: ['fist'], ammo: {}, armor: 0, outfit: {}, clothes: [], garage: [], homes: ['hideout'], rep: START_XP, missions: [], daily: { day: 0, progress: [] }, streak: { day: 0, count: 0 }, biz: [], tutorial: false, prologue: false, crew: null, week: emptyWeek(0), bank: 0, fines: 0, notoriety: 0, respect: 0, skills: noSkills(), jetpack: false, gear: {} };
+  return { money: 500, weapons: ['fist'], ammo: {}, armor: 0, outfit: {}, clothes: [], garage: [], homes: ['hideout'], rep: START_XP, missions: [], daily: { day: 0, progress: [] }, streak: { day: 0, count: 0 }, biz: [], tutorial: false, prologue: false, crew: null, week: emptyWeek(0), bank: 0, fines: 0, notoriety: 0, respect: 0, skills: noSkills(), jetpack: false, gear: {}, base: STARTER_BASE.map((q) => ({ ...q })), locker: [] };
 }
 
 export function defaultSave(): SaveData {
@@ -145,6 +149,16 @@ export function sanitize(p: Partial<Profile> | undefined): Profile {
     skills,
     jetpack: p.jetpack === true,
     gear: cleanGear(p.gear),
+    base: Array.isArray(p.base)
+      ? p.base
+          .filter((q): q is Placed => !!q && typeof q === 'object' && !!moduleById((q as Placed).m))
+          .map((q) => ({ m: q.m, x: Math.floor(num(q.x, 0, 40)), z: Math.floor(num(q.z, 0, 40)), r: Math.floor(num(q.r, 0, 3)) }))
+          .slice(0, MAX_MODULES)
+      : STARTER_BASE.map((q) => ({ ...q })),
+    locker: (Array.isArray(p.locker) ? p.locker : [])
+      .filter((g): g is GearItem => !!g && typeof g === 'object' && GEAR_SLOTS.includes((g as GearItem).slot) && [0, 1, 2, 3].includes((g as GearItem).r))
+      .map((g) => ({ slot: g.slot, r: g.r }))
+      .slice(0, LOCKER_SIZE),
     prologue: p.prologue === true,
     // players from before the tutorial existed already know the game
     tutorial: typeof p.tutorial === 'boolean' ? p.tutorial : (Array.isArray(p.missions) && p.missions.length > 0) || (Number(p.money) || 0) !== d.money,

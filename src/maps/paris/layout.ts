@@ -126,7 +126,7 @@ export function buildParisMap(seed = 1789): MapData {
     jewelry: [14, 12],
     police: [18, 14],
     hospital: [18, 14],
-    hideout: [14, 12],
+    hideout: [20, 16],
     gunshop: [14, 12],
     clothes: [16, 12],
     dealer: [24, 18],

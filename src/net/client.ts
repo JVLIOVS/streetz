@@ -240,6 +240,8 @@ export class NetClient implements NetSession {
     s.homes = np.homes;
     s.rep = np.rep;
     s.missionsDone = np.missionsDone;
+    s.base = np.base ?? s.base;
+    s.locker = np.locker ?? s.locker;
     s.mission = np.mission;
     s.missionStep = np.missionStep;
     s.objective = np.objective;

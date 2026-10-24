@@ -212,6 +212,30 @@ try {
   if (!(await page.locator('#objective').isVisible())) fail('mission did not start');
   await page.screenshot({ path: OUT + 'mission.png' });
 
+  // Hideout: build mode, place a piece of furniture
+  await page.evaluate(() => {
+    const { sim, localId } = window.__streetz;
+    const p = sim.players.get(localId);
+    const def = sim.map.interiors.find((i) => i.kind === 'hideout');
+    const room = sim.rooms.get(def.id);
+    p.state.mission = null;
+    p.state.money += 5000;
+    sim.teleportPlayer(p, room.spawn.x, 0.3, room.spawn.z - 3);
+    p.state.interior = def.id;
+  });
+  await page.waitForTimeout(800);
+  await page.locator('#btn-build').waitFor({ state: 'visible', timeout: 5000 });
+  await page.locator('#btn-build').tap();
+  await page.locator('#build-bar .chip[data-m="sofa"]').tap();
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: OUT + 'build.png' });
+  const pieces = await page.evaluate(() => window.__streetz.sim.players.get(window.__streetz.localId).state.base.length);
+  if (await page.locator('#build-bar .go').isEnabled()) await page.locator('#build-bar .go').tap();
+  await page.waitForTimeout(400);
+  results.basePieces = [pieces, await page.evaluate(() => window.__streetz.sim.players.get(window.__streetz.localId).state.base.length)];
+  if (results.basePieces[1] !== pieces + 1) fail(`build: piece not placed ${results.basePieces}`);
+  await page.locator('#build-bar [data-b="close"]').tap();
+
   // Pause menu opens
   await page.locator('#btn-pause').tap();
   if (!(await page.locator('#pause').isVisible())) fail('pause menu did not open');

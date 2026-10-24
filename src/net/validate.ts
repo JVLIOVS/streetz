@@ -7,7 +7,7 @@ import type { PlayerReport } from '../sim/world';
  * message is dropped instead of crashing (NaN in physics) or corrupting the game.
  */
 
-export const ACTIONS: readonly ActionKind[] = ['attack', 'use', 'weapon', 'horn', 'buy', 'wear', 'garage_out', 'mission', 'collect', 'crew', 'heist', 'fine', 'bank', 'skill', 'surrender', 'guards'];
+export const ACTIONS: readonly ActionKind[] = ['attack', 'use', 'weapon', 'horn', 'buy', 'wear', 'garage_out', 'mission', 'collect', 'crew', 'heist', 'fine', 'bank', 'skill', 'surrender', 'guards', 'build', 'locker', 'upgrade'];
 const ACTION_SET = new Set<string>(ACTIONS);
 const ANIMS = new Set(['idle', 'walk', 'run', 'sprint', 'jump', 'fall', 'drive', 'ko']);
 /** Actions accepted per report (a report is sent every 3 ticks: a few taps at most). */

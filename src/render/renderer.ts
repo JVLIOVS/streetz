@@ -8,6 +8,7 @@ import { Effects } from './effects';
 import { DEFAULT_LOOK, HumanView, initHumans, playerLook, type BaseAnim, type WeaponModel } from './human';
 import { HeliRenderer } from './helis';
 import { MissionMarkers } from './missions';
+import { BaseView } from './base';
 import { InteriorsView } from './interiors';
 import { sharedUniforms, skyMaterial, toonGradient } from './materials';
 import { PedRenderer } from './peds';
@@ -67,6 +68,8 @@ export class GameRenderer {
   private interiors: InteriorsView;
   private helis = new HeliRenderer();
   private missions: MissionMarkers;
+  /** Your hideout furniture + the build preview. */
+  readonly base: BaseView;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -113,9 +116,10 @@ export class GameRenderer {
     this.vehicles = new VehicleRenderer(assets);
     this.interiors = new InteriorsView(map);
     this.missions = new MissionMarkers(sim);
+    this.base = new BaseView(sim);
     // pools sit on the real ground (sidewalks and squares are raised above y = 0)
     this.peds.onBlood = (kind, x, y, z) => (kind === 'pool' ? this.effects.bloodPool(x, sim.groundAt(x, z, y + 0.8) ?? y, z) : this.effects.bleed(x, y, z));
-    this.scene.add(this.vehicles.root, this.peds.root, this.effects.root, this.interiors.root, this.helis.root, this.missions.root);
+    this.scene.add(this.vehicles.root, this.peds.root, this.effects.root, this.interiors.root, this.helis.root, this.missions.root, this.base.root);
 
     this.player = { view: new HumanView(DEFAULT_LOOK), seq: 0, weapon: '', key: '-1|{}' };
     this.player.view.setOutline(true);
@@ -264,6 +268,7 @@ export class GameRenderer {
     for (const v of this.sim.vehicles.values()) if (Math.hypot(v.state.x - cx, v.state.z - cz) < 120) this.effects.vehicleSmoke(v, dt);
     this.helis.sync(this.sim.police.helis, alpha);
     this.missions.sync(p?.state, dt);
+    this.base.sync(p?.state);
     for (const h of this.sim.police.helis.values()) if (h.state.down >= 50) this.effects.burning(h.state.x, h.state.y, h.state.z, dt);
     this.city.props.sync(this.sim.props, cx, cz);
     for (const d of this.sim.props.broken.values()) if (d.spray > 0) this.effects.waterJet(d.x, d.z, d.spray, dt);

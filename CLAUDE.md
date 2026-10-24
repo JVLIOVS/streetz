@@ -48,5 +48,6 @@ TypeScript + Vite + Three.js (0.169) + Rapier (`@dimforge/rapier3d-compat`). Tes
 - Version test 10 : super saut (maintenir Saut), caches et postes de tir sur les toits (`src/sim/roofs.ts`), correctif police après amende.
 - Version test 11 : police v3 (payer/refuser l'amende, fichage 3 max, se rendre), stuff perdu marqué 10 min, armes fun (sabre, tronçonneuse, sécateur, lance-flammes), mini-hélico pilotable, jetpack.
 - Version test 12 : La Famille (7 grades mafieux, 11 missions, gardes du corps, part, avocat — `src/data/family.ts`, `src/sim/family.ts`), graphisme (dalles, ciel, tonemapping, MSAA), audit complet (`docs/AUDIT.md`) + correctifs sécurité (`src/net/validate.ts`, CSP, sanitize), contrôle d'âge, rapport de bug.
+- Version test 13 : stuff (départ en caleçon, 7 emplacements, 4 raretés — `src/data/gear.ts`), planque constructible (`src/data/base.ts`, `src/sim/base.ts`, `src/render/base.ts`, `src/ui/build.ts`), correctifs de l'audit externe (compétences, crews, mémoire GPU, CI sur PR).
 - Reste : serveur dédié pour un vrai monde persistant (à décider avec l'utilisateur : hébergement payant), jour/nuit + néons, gangs/territoires + échanges + caches (serveur), éditeur de perso, bouclier, petit avion.
 - Assets : sources CC0 dans `assets-src/`, `node scripts/build-assets.mjs` → `public/assets/`.

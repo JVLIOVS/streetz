@@ -1,13 +1,14 @@
 import type { ActionKind } from '../core/commands';
 import { CLOTHES, GARAGE_SLOTS, JETPACK_PRICE, VEHICLE_OFFERS } from '../data/shop';
-import { GEAR, GEAR_PRICES, GEAR_SLOTS, gearLabel, gearStat } from '../data/gear';
+import { GEAR, GEAR_PRICES, GEAR_SLOTS, gearLabel, gearStat, type Rarity } from '../data/gear';
+import { LOCKER_SIZE, UPGRADE_PRICE } from '../data/base';
 import { VEHICLES } from '../data/vehicles';
 import { ARMOR_PRICE, WEAPON_ORDER, WEAPONS } from '../data/weapons';
 import type { PlayerState } from '../sim/player';
 import { levelOf, requiredLevel } from '../data/progression';
 import { BUSINESSES, bizCap, bizStock } from '../data/business';
 
-export type MenuKind = 'gunshop' | 'clothes' | 'dealer' | 'wardrobe' | 'garage' | 'business' | 'bank';
+export type MenuKind = 'gunshop' | 'clothes' | 'dealer' | 'wardrobe' | 'garage' | 'business' | 'bank' | 'locker' | 'bench';
 
 interface Row {
   label: string;
@@ -70,12 +71,12 @@ export class MenuPanel {
   update(s: PlayerState) {
     if (!this.kind) return;
     // walking away from the counter / wardrobe closes the panel
-    const still = s.context && ((this.kind === 'wardrobe' && s.context.kind === 'wardrobe') || (this.kind === 'garage' && s.context.kind === 'garage') || (this.kind === 'business' && s.context.kind === 'business') || (this.kind === 'bank' && s.context.kind === 'bank') || (s.context.kind === 'shop' && s.context.target === this.kind));
+    const still = s.context && ((this.kind === 'wardrobe' && s.context.kind === 'wardrobe') || (this.kind === 'garage' && s.context.kind === 'garage') || (this.kind === 'business' && s.context.kind === 'business') || (this.kind === 'bank' && s.context.kind === 'bank') || (this.kind === 'locker' && s.context.kind === 'locker') || (this.kind === 'bench' && s.context.kind === 'bench') || (s.context.kind === 'shop' && s.context.target === this.kind));
     if (!still) {
       this.close();
       return;
     }
-    const key = JSON.stringify([this.kind === 'business' ? Math.floor(Date.now() / 3000) : 0, s.jetpack, s.bank, s.biz, s.rep, s.money, s.weapons, s.ammo, s.armor, s.clothes, s.outfit, s.garage, s.gear]);
+    const key = JSON.stringify([this.kind === 'business' ? Math.floor(Date.now() / 3000) : 0, s.jetpack, s.bank, s.biz, s.rep, s.money, s.weapons, s.ammo, s.armor, s.clothes, s.outfit, s.garage, s.gear, s.locker]);
     if (key === this.lastKey) return;
     this.lastKey = key;
     const { title, rows } = this.rows(this.kind, s);
@@ -175,6 +176,31 @@ export class MenuPanel {
       }
       case 'bank':
         return { title: 'Mon compte', rows: bankRows(s) };
+      case 'locker': {
+        // what you wear can be put away; what is inside stays safe even if you fall
+        const rows: Row[] = [];
+        for (const slot of GEAR_SLOTS) {
+          const r = s.gear[slot];
+          if (r !== undefined) rows.push({ label: gearLabel({ slot, r }), sub: `Sur toi · ${gearStat({ slot, r })}`, button: 'Ranger', disabled: s.locker.length >= LOCKER_SIZE, action: { action: 'locker', arg: `store:${slot}` } });
+        }
+        s.locker.forEach((g, i) => rows.push({ label: gearLabel(g), sub: `Dans le coffre · ${gearStat(g)}`, button: s.gear[g.slot] !== undefined ? 'Échanger' : 'Porter', on: true, action: { action: 'locker', arg: `take:${i}` } }));
+        if (!rows.length) rows.push({ label: 'Rien à ranger', sub: 'Ramasse des fringues dehors', button: '—', disabled: true });
+        return { title: `Coffre à stuff ${s.locker.length}/${LOCKER_SIZE}`, rows };
+      }
+      case 'bench': {
+        const rows: Row[] = [];
+        for (const slot of GEAR_SLOTS) {
+          const r = s.gear[slot];
+          if (r === undefined) continue;
+          if (r >= 3) rows.push({ label: gearLabel({ slot, r }), sub: 'Déjà légendaire', button: '✓', disabled: true, on: true });
+          else {
+            const next = { slot, r: (r + 1) as Rarity };
+            rows.push({ label: gearLabel({ slot, r }), sub: `→ ${gearLabel(next)} · ${gearStat(next)}`, button: euro(UPGRADE_PRICE[r]), disabled: s.money + s.bank < UPGRADE_PRICE[r], action: { action: 'upgrade', arg: slot } });
+          }
+        }
+        if (!rows.length) rows.push({ label: 'Tu ne portes rien', sub: 'L’établi améliore ce que tu as sur toi', button: '—', disabled: true });
+        return { title: 'Établi', rows };
+      }
       case 'business': {
         const now = Math.floor(Date.now() / 1000);
         const rows: Row[] = [...bankRows(s)];

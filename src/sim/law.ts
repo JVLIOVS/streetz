@@ -45,7 +45,8 @@ export class LawSystem {
     const room = s.interior ? this.w.rooms.get(s.interior) : undefined;
     const def = s.interior ? this.w.map.interiors.find((i) => i.id === s.interior) : undefined;
     const spot = def?.kind === 'bank' ? room?.counter : def?.kind === 'hideout' ? room?.office : null;
-    if (!spot || Math.hypot(s.x - spot.x, s.z - spot.z) > 3.5) return;
+    const safe = this.w.base.atSafe(p);
+    if (!safe && (!spot || Math.hypot(s.x - spot.x, s.z - spot.z) > 3.5)) return;
     const [op, amt] = arg.split(':');
     if (op === 'deposit') {
       const n = amt === 'all' ? s.money : Math.min(s.money, positive(amt));

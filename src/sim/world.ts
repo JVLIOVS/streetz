@@ -22,6 +22,7 @@ import { HeistSystem } from './heist';
 import { LawSystem } from './law';
 import { RoofSystem } from './roofs';
 import { FamilySystem } from './family';
+import { BaseSystem } from './base';
 import { RESPECT } from '../data/law';
 import { REPAINT_PRICE } from '../data/police';
 import { levelOf, requiredLevel } from '../data/progression';
@@ -178,6 +179,7 @@ export class SimWorld {
   readonly law: LawSystem;
   readonly roofs: RoofSystem;
   readonly family: FamilySystem;
+  readonly base: BaseSystem;
   /** Local calendar day number (set by the game from the clock; 0 = unknown). */
   day = 0;
   /** Wall-clock time in seconds (set by the game; used by hideout businesses). */
@@ -213,6 +215,7 @@ export class SimWorld {
     this.law = new LawSystem(this);
     this.roofs = new RoofSystem(this);
     this.family = new FamilySystem(this);
+    this.base = new BaseSystem(this);
     this.props = new PropField(map.props);
     this.buildProps();
     if (role === 'authority') {
@@ -250,6 +253,7 @@ export class SimWorld {
     if (p.state.vehicle >= 0) this.leaveVehicle(p);
     this.missions.drop(id);
     this.family.drop(id);
+    this.base.drop(id);
     this.progress.drop(id);
     this.social.drop(id);
     this.law.drop(id);
@@ -969,6 +973,15 @@ export class SimWorld {
       case 'guards':
         this.family.toggleGuards(p);
         break;
+      case 'build':
+        if (arg) this.base.build(p, arg);
+        break;
+      case 'locker':
+        if (arg) this.base.locker(p, arg);
+        break;
+      case 'upgrade':
+        if (arg) this.base.upgrade(p, arg);
+        break;
       case 'heist':
         this.heist.start(p);
         break;
@@ -1062,6 +1075,9 @@ export class SimWorld {
         this.clearWanted(p, 'Voiture repeinte : la police ne te reconnaît plus');
         break;
       }
+      case 'module':
+        this.base.use(p, ctx.target as number);
+        break;
       case 'travel':
         this.toast(p, '✈ Bientôt disponible : Amérique latine, Afrique, Île, Asie');
         break;
@@ -1181,6 +1197,8 @@ export class SimWorld {
       const def = this.interior(s.interior)!;
       if (Math.hypot(s.x - room.exit.x, s.z - room.exit.z) < 2.4) return { kind: 'exit_building', label: 'Sortir', target: s.interior };
       if (room.wardrobe && Math.hypot(s.x - room.wardrobe.x, s.z - room.wardrobe.z) < 2) return { kind: 'wardrobe', label: 'Garde-robe', target: def.id };
+      const built = this.base.context(p);
+      if (built) return built;
       if (room.garage && Math.hypot(s.x - room.garage.x, s.z - room.garage.z) < 2) return { kind: 'garage', label: 'Mon garage', target: def.id };
       if (room.office && Math.hypot(s.x - room.office.x, s.z - room.office.z) < 2) return { kind: 'business', label: 'Mes business', target: def.id };
       if (room.counter && Math.hypot(s.x - room.counter.x, s.z - room.counter.z) < 3) {

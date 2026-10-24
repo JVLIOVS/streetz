@@ -228,3 +228,21 @@ Améliorations faites, sans coût notable en performance :
 - occlusion ambiante cuite au pied des bâtiments ;
 - reflets d'eau ;
 - particules de pluie.
+
+---
+
+## 12. Contre-audit externe (ChatGPT, 24/10) — ce qui a été retenu
+
+| Constat externe | Verdict | Statut |
+|---|---|---|
+| Profil forgé : compétences à 999, endurance qui soigne au lieu de blesser | Juste (déjà en partie bloqué par `sanitize` en test 12) | ✅ Lecture plafonnée à 10 en plus, dégâts jamais négatifs, test |
+| Position à 900 000 m, dégâts véhicule négatifs | Juste, corrigé en test 12 (`validReport`) | ✅ |
+| Banque : montants négatifs | Juste, corrigé en test 12 | ✅ |
+| Crews identifiés par leur nom (deux crews homonymes = alliés) | Juste | ✅ Identifiant unique de crew |
+| Fuite GPU au changement de qualité (104 → 713 géométries) | Juste | ✅ Libération de l'ancienne ville, test e2e (83 → 83) |
+| Écart PvP trop fort entre vétéran et novice | Juste | ✅ Bonus de compétences divisés par 2 contre des joueurs |
+| CI sans PR | Juste | ✅ Tests et build sur chaque pull request |
+| Zone d'intérêt 130 m et fusil de précision 150 m | Juste | ✅ 170 m quand on tient le fusil |
+| Serveur autoritaire, comptes, persistance, salles durables | Juste, c'est le chantier n° 1 | 📌 Décision d'hébergement à prendre |
+| QG constructible au cœur du produit | Rejoint la demande du testeur | ✅ Première version : planque à aménager, meubles utiles |
+| « Suspendre l'expansion du catalogue » | Partiellement : le stuff ajouté sert la boucle (sortir, ramasser, rentrer ranger au coffre) | — |
