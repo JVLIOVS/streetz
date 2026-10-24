@@ -1460,3 +1460,66 @@ body {
 #build-bar .chip.dim {
   opacity: 0.5;
 }
+
+/* evolution: awakening + energy buttons */
+.act.b3 {
+  right: 196px;
+  bottom: 30px;
+  background: linear-gradient(#ffe36e, #ff9d00);
+  --cool: 0;
+}
+.act.b3 .lbl,
+.act.b4 .lbl {
+  font-size: 11px;
+}
+.act.b3.cool {
+  filter: grayscale(0.9);
+  opacity: 0.6;
+}
+.act.b3.ready {
+  animation: awaken-pulse 1.1s ease-in-out infinite;
+}
+@keyframes awaken-pulse {
+  50% {
+    box-shadow: 0 0 22px 6px rgba(255, 210, 63, 0.85);
+  }
+}
+.act.b4 {
+  right: 124px;
+  bottom: 176px;
+  background: radial-gradient(circle at 40% 35%, #e8fbff, #4fc3ff 55%, #1565c0);
+}
+.act.b4.charging {
+  box-shadow: 0 0 26px 10px rgba(111, 216, 255, 0.9);
+}
+#flash {
+  position: fixed;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 50;
+  transition: opacity 0.5s ease-out;
+}
+#flash.on {
+  opacity: 0.85;
+  transition: none;
+}
+#awaken-title {
+  position: fixed;
+  left: 50%;
+  top: 30%;
+  transform: translate(-50%, -50%) scale(0.6);
+  font: 900 54px/1 system-ui, sans-serif;
+  letter-spacing: 0.06em;
+  color: #ffe14a;
+  text-shadow: 0 0 18px #ff9d00, 0 4px 0 #1b1430;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 40;
+  transition: opacity 0.3s, transform 0.3s;
+}
+#awaken-title.on {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}

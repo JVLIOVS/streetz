@@ -267,6 +267,35 @@ export class Sound {
     this.burst(0.12, 900, 0.35 * vol, 0.5, pan);
   }
 
+  /** Awakening: a rising roar while the aura builds up (2.4 s), crackles of lightning. */
+  awakenCharge(x: number, z: number) {
+    const { vol, pan } = this.spatial(x, z, 70);
+    this.tone('sawtooth', 70, 420, 2.4, 0.22 * vol, 0, pan);
+    this.tone('sine', 140, 840, 2.4, 0.18 * vol, 0, pan);
+    for (let k = 0; k < 7; k++) this.burst(0.06, 3200, 0.25 * vol, 3, pan, 'bandpass', 0.2 + k * 0.3);
+  }
+
+  /** Awakening: the boom of the transformation. */
+  awakenBoom(x: number, z: number) {
+    const { vol, pan } = this.spatial(x, z, 90);
+    this.burst(0.9, 300, 1.2 * vol, 0.7, pan);
+    this.tone('sine', 90, 30, 0.8, 1.0 * vol, 0, pan);
+    this.tone('triangle', 660, 1320, 0.5, 0.25 * vol, 0.05, pan);
+  }
+
+  /** Energy ball (whoosh + zap) or beam (long charged blast). */
+  energy(x: number, z: number, beam: boolean) {
+    const { vol, pan } = this.spatial(x, z, 70);
+    if (beam) {
+      this.tone('sawtooth', 220, 880, 0.35, 0.3 * vol, 0, pan);
+      this.burst(1.0, 1800, 0.6 * vol, 1.2, pan, 'bandpass', 0.3);
+      this.tone('sine', 110, 60, 1.1, 0.5 * vol, 0.3, pan);
+    } else {
+      this.tone('sine', 900, 300, 0.25, 0.35 * vol, 0, pan);
+      this.burst(0.18, 2600, 0.3 * vol, 2, pan, 'bandpass');
+    }
+  }
+
   /** Chainsaw buzz while cutting. */
   chainsaw() {
     this.tone('sawtooth', 115, 140, 0.13, 0.12);

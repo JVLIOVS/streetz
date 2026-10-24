@@ -306,6 +306,10 @@ function copyShared(p: Player, np: NetPlayer) {
   s.interior = np.interior;
   s.outfit = np.outfit;
   s.gear = np.gear ?? {};
+  s.awaken = np.awaken ?? 0;
+  s.awakenCharge = np.awakenCharge ?? 0;
+  s.awakenCooldown = np.awakenCooldown ?? 0;
+  s.powerCooldown = np.powerCooldown ?? 0;
   s.wanted = np.wanted;
   s.bounty = np.bounty;
   s.bountyTimer = np.bountyTimer;

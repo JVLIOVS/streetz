@@ -8,6 +8,9 @@ import type { GameRenderer } from './render/renderer';
 import type { SimWorld } from './sim/world';
 import type { Hud } from './ui/hud';
 import { BuildBar } from './ui/build';
+import type { PlayerState } from './sim/player';
+import { levelOf } from './data/progression';
+import { STAGES, stageOf } from './data/evolution';
 import { MenuPanel, type MenuKind } from './ui/menus';
 import { missionById } from './data/missions';
 import { HEIST } from './data/social';
@@ -209,7 +212,10 @@ export class Game {
           break;
         case 'levelup':
           if (e.playerId === this.localId) {
-            this.hud.levelUp(e.level, e.unlocks);
+            // a new stage of your character: a bigger moment than a plain level
+            const st = STAGES.find((q) => q.level === e.level);
+            if (st) this.hud.banner('ÉVOLUTION', `${st.icon} ${st.name.toUpperCase()}`, st.perk, 6);
+            else this.hud.levelUp(e.level, e.unlocks);
             this.sound.fanfare();
             this.vibrate([40, 60, 80]);
             this.onSave?.();
@@ -242,6 +248,36 @@ export class Game {
             this.hud.toast(`${e.name} : « ${e.text} »`, Math.max(4, e.text.length / 14));
             this.sound.voices?.say(e.text, e.seed);
           }
+          break;
+        case 'awaken': {
+          const mine = e.playerId === this.localId;
+          if (e.phase === 'charge') {
+            this.sound.awakenCharge(e.x, e.z);
+            if (mine) {
+              const t = document.getElementById('awaken-title')!;
+              t.textContent = 'ÉVEIL…';
+              t.classList.add('on');
+              this.vibrate([30, 60, 30, 60, 30, 60, 30]);
+            }
+          } else if (e.phase === 'boom') {
+            this.sound.awakenBoom(e.x, e.z);
+            const d = Math.hypot(e.x - this.player.x, e.z - this.player.z);
+            if (d < 40) this.view.cam.shake(mine ? 1 : 0.6 * (1 - d / 40));
+            if (mine) {
+              const f = document.getElementById('flash')!;
+              f.classList.add('on');
+              requestAnimationFrame(() => requestAnimationFrame(() => f.classList.remove('on')));
+              const t = document.getElementById('awaken-title')!;
+              t.textContent = `⚡ ${STAGES[stageOf(levelOf(this.player.rep))].name.toUpperCase()} ⚡`;
+              setTimeout(() => t.classList.remove('on'), 1600);
+              this.vibrate([120, 40, 200]);
+            }
+          } else if (mine) this.hud.toast('L’aura s’éteint… (recharge en cours)', 2.5);
+          break;
+        }
+        case 'energy':
+          this.sound.energy(e.fx, e.fz, e.kind === 'beam');
+          if (e.kind === 'beam' && e.playerId === this.localId) this.view.cam.shake(0.45);
           break;
         case 'promoted':
           if (e.playerId === this.localId) {
@@ -311,6 +347,25 @@ export class Game {
   private tmp = new Vector3();
   private slowmo = 0;
   /** Sends an action from a menu (pause screen, panels) with the next tick. */
+  private powerKey = '';
+  /** ⚡ Éveil when unlocked and ready (grey while recharging), 🔵 energy while awakened. */
+  private updatePowerButtons(me: PlayerState) {
+    const st = STAGES[stageOf(levelOf(me.rep))];
+    const onFoot = me.vehicle < 0 && !me.dead && !me.interior;
+    const showAwaken = !!st.awaken && onFoot && me.awaken <= 0 && me.awakenCharge <= 0;
+    const cool = me.awakenCooldown > 0;
+    const showPower = onFoot && me.awaken > 0;
+    const key = `${showAwaken}|${cool}|${showPower}|${cool ? Math.ceil(me.awakenCooldown) : 0}`;
+    if (key === this.powerKey) return;
+    this.powerKey = key;
+    const a = document.getElementById('btn-awaken')!;
+    a.classList.toggle('hidden', !showAwaken);
+    a.classList.toggle('cool', cool);
+    a.classList.toggle('ready', !cool);
+    a.querySelector('.lbl')!.textContent = cool ? `${Math.ceil(me.awakenCooldown)} s` : 'ÉVEIL';
+    document.getElementById('btn-power')!.classList.toggle('hidden', !showPower);
+  }
+
   sendAction(action: ActionCommand['action'], arg: string) {
     this.menuActions.push({ action, arg });
     // solo pause: run one tick so the answer comes right away
@@ -456,6 +511,7 @@ export class Game {
     this.lastHealth = me.health;
     this.menu.update(me);
     this.build.update(me);
+    this.updatePowerButtons(me);
     this.updateTargetBar(me.lastHit, me.lastHitTick);
     if (this.sim.players.size > 1) this.updateNameTags(me);
     this.hudTimer -= dt;

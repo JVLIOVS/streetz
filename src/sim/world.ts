@@ -23,6 +23,7 @@ import { LawSystem } from './law';
 import { RoofSystem } from './roofs';
 import { FamilySystem } from './family';
 import { BaseSystem } from './base';
+import { PowerSystem } from './powers';
 import { RESPECT } from '../data/law';
 import { REPAINT_PRICE } from '../data/police';
 import { levelOf, requiredLevel } from '../data/progression';
@@ -90,6 +91,10 @@ export type SimEvent =
   | { type: 'jail'; playerId: string; seized: number; lost: string[] }
   /** A mission partner / giver speaks to this player. */
   | { type: 'say'; playerId: string; name: string; text: string; seed: number }
+  /** Awakening: charge (cinematic), boom (transformed), end. */
+  | { type: 'awaken'; playerId: string; x: number; y: number; z: number; phase: 'charge' | 'boom' | 'end'; aura: number }
+  /** Energy ball / beam. */
+  | { type: 'energy'; playerId: string; kind: 'ball' | 'beam'; fx: number; fy: number; fz: number; tx: number; ty: number; tz: number; aura: number }
   /** Climbed a rank in the Family. */
   | { type: 'promoted'; playerId: string; rank: number; name: string; perk: string; bonus: number }
   /** Prologue done: the open world is yours. */
@@ -131,7 +136,7 @@ export interface PlayerReport {
 }
 
 /** Something a player can hit. */
-interface Target {
+export interface Target {
   x: number;
   y: number;
   z: number;
@@ -180,6 +185,7 @@ export class SimWorld {
   readonly roofs: RoofSystem;
   readonly family: FamilySystem;
   readonly base: BaseSystem;
+  readonly powers: PowerSystem;
   /** Local calendar day number (set by the game from the clock; 0 = unknown). */
   day = 0;
   /** Wall-clock time in seconds (set by the game; used by hideout businesses). */
@@ -216,6 +222,7 @@ export class SimWorld {
     this.roofs = new RoofSystem(this);
     this.family = new FamilySystem(this);
     this.base = new BaseSystem(this);
+    this.powers = new PowerSystem(this);
     this.props = new PropField(map.props);
     this.buildProps();
     if (role === 'authority') {
@@ -473,6 +480,7 @@ export class SimWorld {
     this.law.update();
     this.roofs.update();
     this.family.update();
+    this.powers.update();
     if (this.tick % 20 === 0) this.managePopulation();
     for (const p of this.players.values()) p.state.context = this.computeContext(p);
     this.physics.step();
@@ -784,6 +792,17 @@ export class SimWorld {
     }
     for (const p of this.players.values()) {
       if (p.state.vehicle >= 0 || p.state.dead || !inside(p.state.x, p.state.z, 0.4)) continue;
+      // from "Costaud" on, cars can't throw you around: they bounce off (and get dented)
+      if (this.powers.stage(p).sturdy) {
+        if (speed > 4) {
+          if (v.police && this.police.aggressive(p.state)) this.damagePlayer(p, speed * 1.2);
+          s.health -= speed * 4;
+          s.vx *= -0.3;
+          s.vz *= -0.3;
+          this.events.push({ type: 'punch', x: p.state.x, y: p.state.y + 1, z: p.state.z });
+        }
+        continue;
+      }
       // a police car only bumps you (no damage) unless they are allowed to get rough
       if (v.police && !this.police.aggressive(p.state)) {
         p.state.vx = s.vx * 0.5;
@@ -972,6 +991,12 @@ export class SimWorld {
         break;
       case 'guards':
         this.family.toggleGuards(p);
+        break;
+      case 'awaken':
+        this.powers.awaken(p);
+        break;
+      case 'power':
+        this.powers.power(p, arg ?? 'ball');
         break;
       case 'build':
         if (arg) this.base.build(p, arg);
@@ -1562,7 +1587,7 @@ export class SimWorld {
   }
 
   /** Everything a player can hit: pedestrians, other players, cars (guns only). */
-  private targets(p: Player, withVehicles: boolean): Target[] {
+  targets(p: Player, withVehicles: boolean): Target[] {
     const out: Target[] = [];
     const s = p.state;
     // never your own partner or bodyguards
@@ -1599,7 +1624,7 @@ export class SimWorld {
     return best;
   }
 
-  private autoAim(p: Player, yaw: number, range: number, cone: number): Target | null {
+  autoAim(p: Player, yaw: number, range: number, cone: number): Target | null {
     const s = p.state;
     const fx = -Math.sin(yaw);
     const fz = -Math.cos(yaw);
@@ -1661,11 +1686,11 @@ export class SimWorld {
     for (const o of this.peds.values()) if (o !== t.ped && Math.hypot(o.state.x - s.x, o.state.z - s.z) < 14) o.scare(s.x, s.z, false);
   }
 
-  private hitTarget(p: Player, t: Target, damage: number, melee: boolean) {
+  hitTarget(p: Player, t: Target, damage: number, melee: boolean) {
     const s = p.state;
     // skill bonus, halved against players
     const bonus = melee ? 0.08 * this.law.level(p, 'force') + meleeBonus(s.gear) : 0.05 * this.law.level(p, 'precision');
-    damage *= 1 + (t.player ? bonus / 2 : bonus);
+    damage *= (1 + (t.player ? bonus / 2 : bonus)) * this.powers.attack(p);
     if (t.ped) {
       const cop = t.ped.state.role !== 'civ';
       const wasAlive = t.ped.alive;
@@ -1798,8 +1823,9 @@ export class SimWorld {
     if (s.dead) return;
     // endurance: -5 % per point, half as much against other players (PvP stays fair for newcomers)
     amount = Math.max(0, amount * (1 - (by && by !== p ? 0.025 : 0.05) * this.law.level(p, 'endurance')));
-    // clothes protect a little (cap, top, trousers)
-    amount *= defenseFactor(s.gear);
+    // clothes protect a little (cap, top, trousers), and so does your evolution
+    amount *= defenseFactor(s.gear) * this.powers.defense(p);
+    if (amount <= 0) return;
     const absorbed = Math.min(s.armor, amount * 0.7);
     s.armor -= absorbed;
     s.health -= amount - absorbed;
@@ -1837,7 +1863,7 @@ export class SimWorld {
 
   // ------------------------------------------------------------------ wanted level
 
-  private crime(p: Player, kind: Crime, x: number, z: number, victim: Ped | null, always = false) {
+  crime(p: Player, kind: Crime, x: number, z: number, victim: Ped | null, always = false) {
     let witnessed = always;
     if (!witnessed) {
       for (const ped of this.peds.values()) {

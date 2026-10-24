@@ -12,7 +12,7 @@ import { toonGradient } from './materials';
  * caps and a face merged into the same skinned geometry → 1 draw call per human.
  */
 
-export type HairStyle = 'short' | 'buzz' | 'long' | 'ponytail' | 'afro' | 'bald' | 'mohawk';
+export type HairStyle = 'short' | 'buzz' | 'long' | 'ponytail' | 'afro' | 'bald' | 'mohawk' | 'spiky';
 export type HatStyle = 'none' | 'cap' | 'beanie';
 
 export interface HumanLook {
@@ -78,6 +78,11 @@ export function playerLook(seed: number, outfit: Partial<HumanLook>, gear?: Gear
   if (gear.feet === undefined) look.shoes = look.skin;
   if (gear.head === undefined) look.hat = 'none';
   return look;
+}
+
+/** Awakened look: golden (or icy blue) spiky hair, no hat. */
+export function awakenedLook(look: HumanLook, aura: number): HumanLook {
+  return { ...look, hairStyle: 'spiky', hair: aura === 0x6fd8ff ? 0x9fe8ff : 0xffe14a, hat: 'none' };
 }
 
 export function randomLook(seed: number): HumanLook {
@@ -324,6 +329,29 @@ function headAccessories(look: HumanLook, t: Template): THREE.BufferGeometry[] {
     case 'mohawk': {
       const g = new THREE.BoxGeometry(rx * 0.35, ry * 0.5, rz * 1.7);
       out.push(rigid(at(g, 0, ry * 0.95, -rz * 0.1), head, look.hair));
+      break;
+    }
+    case 'spiky': {
+      // awakened: tall spikes swept back and up
+      const base = capHair(1.1, Math.PI * 0.45);
+      base.rotateX(-0.25);
+      out.push(rigid(at(base, 0, ry * 0.1, -rz * 0.05), head, look.hair));
+      const spikes: [number, number, number, number, number][] = [
+        [0, 1.25, -0.1, -0.35, 1.5],
+        [-0.45, 1.05, -0.15, -0.5, 1.2],
+        [0.45, 1.05, -0.15, -0.5, 1.2],
+        [-0.25, 1.0, -0.55, -0.9, 1.25],
+        [0.25, 1.0, -0.55, -0.9, 1.25],
+        [0, 0.85, -0.85, -1.2, 1.1],
+        [-0.7, 0.7, -0.3, -0.6, 0.9],
+        [0.7, 0.7, -0.3, -0.6, 0.9],
+      ];
+      for (const [x, y, z, tilt, len] of spikes) {
+        const c = new THREE.ConeGeometry(rx * 0.3, ry * 0.95 * len, 5);
+        c.rotateX(tilt);
+        c.rotateZ(-x * 0.6);
+        out.push(rigid(at(c, rx * x, ry * y, rz * z), head, look.hair));
+      }
       break;
     }
     case 'bald':

@@ -1,4 +1,6 @@
+import { levelOf } from '../data/progression';
 import { speedBonus, type Gear, type GearItem } from '../data/gear';
+import { AWAKEN_SPEED, DASH_COOLDOWN, DASH_SPEED, DASH_TIME, STAGES, stageOf } from '../data/evolution';
 import { STARTER_BASE, type Placed } from '../data/base';
 import type RAPIER_T from '@dimforge/rapier3d-compat';
 import type { MoveCommand } from '../core/commands';
@@ -150,6 +152,12 @@ export interface PlayerState {
   jetpack: boolean;
   /** Clothes / gear worn (rarity per slot): src/data/gear.ts. Empty = underwear. */
   gear: Gear;
+  /** Awakening (src/data/evolution.ts): seconds left transformed, cinematic charge left, cooldown. */
+  awaken: number;
+  awakenCharge: number;
+  awakenCooldown: number;
+  /** Energy blast cooldown (s). */
+  powerCooldown: number;
   /** Your hideout as you built it (src/data/base.ts) and the stuff in your locker. */
   base: Placed[];
   locker: GearItem[];
@@ -187,6 +195,13 @@ export const PLAYER_TUNING = {
 
 /** Runtime player: state + physics handles. Physics handles never leave the sim. */
 export class Player {
+  /** Dash (evolution): time left, cooldown, direction; last sprint state (rising edge). */
+  dashTime = 0;
+  dashCooldown = 0;
+  private dashX = 0;
+  private dashZ = 0;
+  private prevSprint = false;
+  private chargeY = 0;
   state: PlayerState;
   /** Position at the previous tick, for render interpolation. */
   prev = { x: 0, y: 0, z: 0, facing: 0 };
@@ -291,6 +306,10 @@ export class Player {
       stash: null,
       jetpack: false,
       gear: {},
+      awaken: 0,
+      awakenCharge: 0,
+      awakenCooldown: 0,
+      powerCooldown: 0,
       base: STARTER_BASE.map((q) => ({ ...q })),
       locker: [],
       fuel: 1,
@@ -335,16 +354,36 @@ export class Player {
     const dirZ = -Math.sin(yaw) * sx - Math.cos(yaw) * sy;
     // Three gaits: light push = walk, full push = run, sprint button = sprint
     const sprint = !!inp?.sprint && mag > 0.3;
+    // evolution: switching sprint on gives a dash; awakened = faster; transforming = rooted
+    const stage = STAGES[stageOf(levelOf(s.rep))];
+    if (this.dashCooldown > 0) this.dashCooldown -= DT;
+    if (!!inp?.sprint && !this.prevSprint && stage.dash && this.dashCooldown <= 0 && !s.dead && s.awakenCharge <= 0) {
+      this.dashTime = DASH_TIME;
+      this.dashCooldown = DASH_COOLDOWN;
+      const len = Math.hypot(dirX, dirZ);
+      this.dashX = len > 0.1 ? dirX / len : -Math.sin(s.facing);
+      this.dashZ = len > 0.1 ? dirZ / len : -Math.cos(s.facing);
+    }
+    this.prevSprint = !!inp?.sprint;
     // Speed skill: +3 % per point
     const skill = 1 + 0.03 * Math.min(10, s.skills?.speed ?? 0) + speedBonus(s.gear ?? {});
-    const maxSpeed = s.dead ? 0 : (sprint ? T.sprintSpeed : mag < 0.65 ? T.walkSpeed * Math.min(1, mag / 0.4) : T.runSpeed) * skill;
+    const power = s.awakenCharge > 0 ? 0 : s.awaken > 0 ? AWAKEN_SPEED : 1;
+    const maxSpeed = s.dead ? 0 : (sprint ? T.sprintSpeed : mag < 0.65 ? T.walkSpeed * Math.min(1, mag / 0.4) : T.runSpeed) * skill * power;
     const dl = Math.hypot(dirX, dirZ);
     const tx = dl > 1e-4 ? (dirX / dl) * maxSpeed : 0;
     const tz = dl > 1e-4 ? (dirZ / dl) * maxSpeed : 0;
 
     const accel = s.grounded ? T.groundAccel : T.airAccel;
     const k = 1 - Math.exp(-accel * DT);
-    if (this.lungeTicks > 0) {
+    if (this.dashTime > 0) {
+      this.dashTime -= DT;
+      s.vx = this.dashX * DASH_SPEED * (s.awaken > 0 ? 1.4 : 1);
+      s.vz = this.dashZ * DASH_SPEED * (s.awaken > 0 ? 1.4 : 1);
+      if (this.dashTime <= 0) {
+        s.vx *= 0.45;
+        s.vz *= 0.45;
+      }
+    } else if (this.lungeTicks > 0) {
       this.lungeTicks--; // lunging at a target: keep the dash velocity
       if (this.lungeTicks === 0) {
         s.vx *= 0.2;
@@ -364,6 +403,14 @@ export class Player {
       s.vy -= T.gravity * DT;
     }
     this.jumpQueued = false;
+    // transforming: you rise a little and float in your aura
+    if (s.awakenCharge > 0) s.vy = s.y < this.chargeY + 0.6 ? 1.2 : 0;
+    else this.chargeY = s.y;
+    // ultimate awakening: fly (hold jump to climb, release to glide down slowly)
+    if (s.awaken > 0 && stage.flight && !s.dead) {
+      if (inp?.jumpHeld) s.vy = Math.min(10, s.vy + 40 * DT);
+      else if (!s.grounded) s.vy = Math.max(s.vy, -2.5);
+    }
     // jetpack: hold jump in the air to fly up (fuel refills on the ground)
     s.jetting = false;
     if (s.jetpack && !s.dead) {

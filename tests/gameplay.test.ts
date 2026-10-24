@@ -1621,3 +1621,74 @@ describe('hideout building', () => {
     expect(s.locker.length).toBe(1);
   });
 });
+
+describe('evolution (awakening)', () => {
+  const XP = async (level: number) => {
+    const { xpToNext } = await import('../src/data/progression');
+    let xp = 0;
+    for (let l = 1; l < level; l++) xp += xpToNext(l);
+    return xp;
+  };
+
+  it('stages by level: dash at 5, sturdy at 10 (cars bounce off), awakening at 15', async () => {
+    const { stageOf, STAGES } = await import('../src/data/evolution');
+    expect(STAGES[stageOf(1)].dash).toBe(false);
+    expect(STAGES[stageOf(5)].dash).toBe(true);
+    expect(STAGES[stageOf(10)].sturdy).toBe(true);
+    expect(STAGES[stageOf(15)].awaken).toBeGreaterThan(0);
+    expect(STAGES[stageOf(40)].flight).toBe(true);
+    // dash: switching sprint on at level 5 throws you forward much faster than running
+    const w = await world();
+    w.density = { peds: 0, traffic: 0, parkedRadius: 0 };
+    run(w, 30);
+    const s = P(w);
+    s.rep = await XP(5);
+    run(w, 2, (t) => [move(t, { y: 1 })]);
+    run(w, 1, (t) => [move(t, { y: 1, sprint: true })]);
+    run(w, 3, (t) => [move(t, { y: 1, sprint: true })]);
+    expect(Math.hypot(s.vx, s.vz)).toBeGreaterThan(15);
+  });
+
+  it('awakening: charge (untouchable) → boom (people blown away) → transformed, energy ball hurts, then cooldown', async () => {
+    const w = await world();
+    w.density = { peds: 0, traffic: 0, parkedRadius: 0 };
+    run(w, 30);
+    const p = w.players.get('p1')!;
+    const s = P(w);
+    s.rep = await XP(15);
+    const near = w.spawnPed(s.x + 3, s.z, { ambient: false, mode: 'idle' });
+    run(w, 1, (t) => [act(t, 'awaken')]);
+    expect(s.awakenCharge).toBeGreaterThan(0);
+    const hp = s.health;
+    w.damagePlayer(p, 50);
+    expect(s.health).toBe(hp);
+    w.drainEvents();
+    run(w, 60 * 2.5);
+    const ev = w.drainEvents();
+    expect(ev.some((e) => e.type === 'awaken' && e.phase === 'boom')).toBe(true);
+    expect(s.awaken).toBeGreaterThan(0);
+    expect(Math.hypot(near.state.x - s.x, near.state.z - s.z)).toBeGreaterThan(3.5);
+    // energy ball at somebody in front
+    const target = w.spawnPed(s.x - Math.sin(s.facing) * 8, s.z - Math.cos(s.facing) * 8, { ambient: false, mode: 'idle' });
+    const before = target.state.health;
+    run(w, 1, (t) => [move(t, { yaw: s.facing }), act(t, 'power', 'ball')]);
+    expect(target.state.health).toBeLessThan(before);
+    expect(w.drainEvents().some((e) => e.type === 'energy')).toBe(true);
+    // the aura runs out: cooldown before the next one
+    s.awaken = 0.01;
+    run(w, 2);
+    expect(s.awaken).toBe(0);
+    expect(s.awakenCooldown).toBeGreaterThan(0);
+    run(w, 1, (t) => [act(t, 'awaken')]);
+    expect(s.awakenCharge).toBe(0);
+  });
+
+  it('below level 15 there is no awakening', async () => {
+    const w = await world();
+    run(w, 2);
+    const s = P(w);
+    s.rep = 0;
+    run(w, 1, (t) => [act(t, 'awaken')]);
+    expect(s.awakenCharge).toBe(0);
+  });
+});

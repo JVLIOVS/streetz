@@ -347,6 +347,26 @@ async function launch(map: MapData, assets: GameAssets, quality: QualityLevel, s
   };
   jumpBtn.addEventListener('pointerup', releaseJump);
   jumpBtn.addEventListener('pointercancel', releaseJump);
+  // evolution: awaken + energy (tap = ball, hold = beam when unlocked)
+  tap($('btn-awaken'), () => game.sendAction('awaken', ''));
+  const powerBtn = $('btn-power');
+  let powerStart = -1;
+  powerBtn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    powerStart = performance.now();
+    powerBtn.classList.add('charging');
+  });
+  const powerUp = (e: PointerEvent) => {
+    e.stopPropagation();
+    if (powerStart < 0) return;
+    const held = performance.now() - powerStart;
+    powerStart = -1;
+    powerBtn.classList.remove('charging');
+    game.sendAction('power', held > 450 ? 'beam' : 'ball');
+  };
+  powerBtn.addEventListener('pointerup', powerUp);
+  powerBtn.addEventListener('pointercancel', powerUp);
   const sprint = $('btn-sprint');
   tap(sprint, () => controls.toggleSprint());
   controls.onSprintChange = (on) => sprint.classList.toggle('on', on);

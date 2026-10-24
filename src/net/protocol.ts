@@ -122,6 +122,10 @@ export type NetPlayer = Pick<
   | 'gear'
   | 'base'
   | 'locker'
+  | 'awaken'
+  | 'awakenCharge'
+  | 'awakenCooldown'
+  | 'powerCooldown'
 >;
 
 /** Private fields only sent to their owner (inventory, contracts…). */
@@ -139,6 +143,10 @@ function packFull(s: PlayerState): NetPlayer {
     gear: s.gear,
     base: s.base,
     locker: s.locker,
+    awaken: q(s.awaken),
+    awakenCharge: q(s.awakenCharge),
+    awakenCooldown: Math.ceil(s.awakenCooldown),
+    powerCooldown: q(s.powerCooldown),
     x: q(s.x),
     y: q(s.y),
     z: q(s.z),

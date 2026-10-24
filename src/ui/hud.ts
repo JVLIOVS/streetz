@@ -1,6 +1,7 @@
 import { WEAPONS } from '../data/weapons';
 import { CHAOS_WINDOW, levelProgress, nextUnlock } from '../data/progression';
 import { GEAR, GEAR_SLOTS, RARITY, gearLabel, gearStat, type GearSlot } from '../data/gear';
+import { STAGES, stageOf } from '../data/evolution';
 import { FAMILY_NAME, MAX_RANK, RANKS, jobsOfRank, rankOf, rankProgress } from '../data/family';
 import { STREAK_REWARDS } from '../data/contracts';
 import { VEHICLES } from '../data/vehicles';
@@ -196,6 +197,12 @@ export class Hud {
     const esc = (t: string) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
     const bar = (r: number) => `<div class="pp-bar"><i style="width:${Math.min(100, r * 100).toFixed(0)}%"></i></div>`;
     let h = this.familySection(s, lp.level);
+    // your character's evolution: stages by level
+    const cur = stageOf(lp.level);
+    h += `<div class="pp-sec">TON ÉVOLUTION · ${STAGES[cur].icon} ${STAGES[cur].name.toUpperCase()}</div>`;
+    h += `<div class="pp-row pp-ladder">${STAGES.map((q, i) => `<span class="${i < cur ? 'past' : i === cur ? 'cur' : ''}">${q.icon}<small>niv. ${q.level}</small></span>`).join('')}</div>`;
+    const nextSt = STAGES[cur + 1];
+    if (nextSt) h += `<div class="pp-row">Niveau ${nextSt.level} : <b>${nextSt.name}</b><small style="float:none;display:block;color:#cfc8e8">${nextSt.perk}</small></div>`;
     h += `<div class="pp-sec">TON STUFF 🎽</div>`;
     for (const slot of GEAR_SLOTS) {
       const r = s.gear[slot];

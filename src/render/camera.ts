@@ -22,6 +22,8 @@ export class ThirdPersonCamera {
   /** Screen shake strength (decays). */
   private trauma = 0;
   private shakeT = 0;
+  /** Transformation cinematic: close, low angle, slowly circling (0 = normal play). */
+  cinematic = false;
 
   constructor(aspect: number, private collider: CameraCollider) {
     this.camera = new THREE.PerspectiveCamera(62, aspect, 0.3, 1200);
@@ -72,7 +74,12 @@ export class ThirdPersonCamera {
       if (inCar) this.pitch += (0.22 - this.pitch) * (1 - Math.exp(-2 * dt));
     }
 
-    const wanted = inCar ? 7.5 + Math.min(4, Math.abs(vehicleSpeed) * 0.12) : 5.2 + Math.min(1.5, speed * 0.12);
+    if (this.cinematic) {
+      this.yaw += dt * 1.1;
+      this.pitch += (0.02 - this.pitch) * (1 - Math.exp(-3 * dt));
+      this.sinceDrag = 0;
+    }
+    const wanted = this.cinematic ? 3.4 : inCar ? 7.5 + Math.min(4, Math.abs(vehicleSpeed) * 0.12) : 5.2 + Math.min(1.5, speed * 0.12);
     _dir.set(Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), Math.cos(this.yaw) * Math.cos(this.pitch));
     const hit = this.collider.castStatic(this.target.x, this.target.y, this.target.z, _dir.x, _dir.y, _dir.z, wanted + 0.4);
     const allowed = Math.max(1.2, hit - 0.4);
@@ -82,7 +89,12 @@ export class ThirdPersonCamera {
 
     const c = this.camera;
     c.position.copy(this.target).addScaledVector(_dir, this.dist);
-    c.lookAt(this.target.x, this.target.y + 0.15, this.target.z);
+    c.lookAt(this.target.x, this.target.y + (this.cinematic ? 0.5 : 0.15), this.target.z);
+    const fov = this.cinematic ? 50 : 62;
+    if (Math.abs(c.fov - fov) > 0.05) {
+      c.fov += (fov - c.fov) * (1 - Math.exp(-4 * dt));
+      c.updateProjectionMatrix();
+    }
     if (this.trauma > 0.001) {
       // smooth noise, strength = trauma² (small hits barely shake, big ones do)
       this.shakeT += dt * 32;
