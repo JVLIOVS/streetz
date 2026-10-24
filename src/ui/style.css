@@ -1508,7 +1508,7 @@ body {
 #awaken-title {
   position: fixed;
   left: 50%;
-  top: 30%;
+  top: 46%;
   transform: translate(-50%, -50%) scale(0.6);
   font: 900 54px/1 system-ui, sans-serif;
   letter-spacing: 0.06em;

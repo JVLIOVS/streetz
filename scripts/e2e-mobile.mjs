@@ -137,7 +137,8 @@ try {
   // Punch button
   const seq0 = (await stats()).player.actionSeq;
   await page.locator('#btn-attack').tap();
-  await page.waitForTimeout(300);
+  // a few frames are needed in the slow software renderer
+  await page.waitForFunction((seq) => window.__streetz.stats().player.actionSeq !== seq, seq0, { timeout: 3000 }).catch(() => {});
   if ((await stats()).player.actionSeq === seq0) fail('attack button had no effect');
 
   // Walk up to the sports car parked next to the square, get in with the contextual button, drive, get out
@@ -211,6 +212,27 @@ try {
   results.mission = await page.locator('#objective .obj-txt').textContent();
   if (!(await page.locator('#objective').isVisible())) fail('mission did not start');
   await page.screenshot({ path: OUT + 'mission.png' });
+
+  // Evolution: at level 15 the awakening button appears; the transformation plays
+  await page.evaluate(() => {
+    const { sim, localId } = window.__streetz;
+    const p = sim.players.get(localId);
+    p.state.rep = 6000;
+    p.state.interior = null;
+  });
+  await page.locator('#btn-awaken').waitFor({ state: 'visible', timeout: 5000 });
+  await page.locator('#btn-awaken').tap();
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: OUT + 'awaken-charge.png' });
+  // the sim runs slower than real time in this software renderer: wait for the boom
+  await page.waitForFunction(() => window.__streetz.sim.players.get(window.__streetz.localId).state.awaken > 0, null, { timeout: 30000 }).catch(() => {});
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: OUT + 'awaken.png' });
+  results.awakened = await page.evaluate(() => window.__streetz.sim.players.get(window.__streetz.localId).state.awaken > 0);
+  if (!results.awakened) fail('awakening did not happen');
+  await page.locator('#btn-power').tap();
+  await page.waitForTimeout(200);
+  await page.screenshot({ path: OUT + 'energy.png' });
 
   // Hideout: build mode, place a piece of furniture
   await page.evaluate(() => {
