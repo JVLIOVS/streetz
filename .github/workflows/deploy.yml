@@ -5,6 +5,8 @@ name: Build, test & deploy to GitHub Pages
 on:
   push:
     branches: [main]
+  # every pull request is tested and built too (no deployment)
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -31,6 +33,7 @@ jobs:
       - run: npm test
       - run: npm run build
       - name: Push dist/ to gh-pages
+        if: github.event_name != 'pull_request'
         run: |
           cd dist
           touch .nojekyll

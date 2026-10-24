@@ -217,6 +217,22 @@ try {
   if (!(await page.locator('#pause').isVisible())) fail('pause menu did not open');
   await page.screenshot({ path: OUT + 'pause.png' });
   await page.locator('#btn-resume').tap();
+
+  // GPU memory stays flat when the quality is changed again and again
+  const mem = await page.evaluate(async () => {
+    const v = window.__streetz.view;
+    const m = () => ({ ...v.renderer.info.memory });
+    v.setQuality('low');
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const before = m();
+    for (const q of ['high', 'medium', 'low', 'high', 'medium', 'low']) {
+      v.setQuality(q);
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    }
+    return { before, after: m() };
+  });
+  results.gpuMemory = mem;
+  if (mem.after.geometries > mem.before.geometries * 1.3 + 10) fail(`GPU leak on quality change: ${mem.before.geometries} → ${mem.after.geometries} geometries`);
   await ctx.close();
 } catch (e) {
   fail(String(e?.stack || e));

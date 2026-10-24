@@ -113,7 +113,9 @@ export class NetHost implements NetSession {
       if (!me) continue;
       const cx = me.state.x;
       const cz = me.state.z;
-      const near = (x: number, z: number, r = AOI) => Math.abs(x - cx) < r && Math.abs(z - cz) < r;
+      // with the sniper rifle (range 150 m) you must see what you can hit
+      const aoi = me.state.weapon === 'sniper' ? 170 : AOI;
+      const near = (x: number, z: number, r = aoi) => Math.abs(x - cx) < r && Math.abs(z - cz) < r;
       const D: number[][] = [];
       for (const ped of this.sim.peds.values()) if (near(ped.state.x, ped.state.z)) D.push(packPed(ped.state));
       const V: number[][] = [];
@@ -127,11 +129,11 @@ export class NetHost implements NetSession {
         if (d.resting && d.spray <= 0) g.sentProps.add(id);
       }
       const H: number[][] = [];
-      for (const h of this.sim.police.helis.values()) if (near(h.state.x, h.state.z, AOI + 80)) H.push(packHeli(h.state));
+      for (const h of this.sim.police.helis.values()) if (near(h.state.x, h.state.z, aoi + 80)) H.push(packHeli(h.state));
       const E = this.events.filter((e) => {
         if (e.type === 'toast' || e.type === 'money' || e.type === 'respawn' || e.type === 'levelup' || e.type === 'chaos' || e.type === 'chaosEnd' || e.type === 'contract' || e.type === 'streak' || e.type === 'dmg' || e.type === 'crate' || e.type === 'say' || e.type === 'freeRoam' || e.type === 'deal' || e.type === 'jail' || e.type === 'promoted') return e.playerId === g.peer;
-        if ('x' in e) return near((e as { x: number }).x, (e as { z: number }).z, AOI + 30);
-        if (e.type === 'shot') return near(e.fx, e.fz, AOI + 30);
+        if ('x' in e) return near((e as { x: number }).x, (e as { z: number }).z, aoi + 30);
+        if (e.type === 'shot') return near(e.fx, e.fz, aoi + 30);
         return true;
       });
       // rooftop stashes: 1 = full

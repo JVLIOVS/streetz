@@ -64,7 +64,11 @@ export class SocialSystem {
 
   /** Crewmates can't hurt each other. */
   friendly(a: Player, b: Player) {
-    return !!a.state.crew && !!b.state.crew && a.state.crew.name === b.state.crew.name;
+    const ca = a.state.crew;
+    const cb = b.state.crew;
+    if (!ca || !cb) return false;
+    // same crew = same id (older saves without id: same name)
+    return ca.id || cb.id ? ca.id === cb.id : ca.name === cb.name;
   }
 
   /** A player knocked out another one. */
@@ -118,7 +122,7 @@ export class SocialSystem {
       if (!name) return this.w.toast(p, 'Nom de crew : 2 à 12 lettres ou chiffres');
       if (s.money < CREW_PRICE) return this.w.toast(p, `Il faut ${CREW_PRICE} € pour fonder un crew`);
       s.money -= CREW_PRICE;
-      s.crew = { name, color: crewColor(name) };
+      s.crew = { name, color: crewColor(name), id: `${s.id.slice(0, 12)}-${this.w.tick}` };
       this.w.toast(p, `Crew [${name}] fondé ! Les autres joueurs peuvent le rejoindre en venant te voir.`);
     } else if (cmd === 'join') {
       const o = this.w.players.get(rest);

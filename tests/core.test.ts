@@ -154,3 +154,37 @@ describe('security: bounds', () => {
     expect(p.state.bank).toBe(0);
   });
 });
+
+describe('audit ChatGPT: fairness and identity', () => {
+  it('stored skills are capped, damage never heals, skills count half in PvP', async () => {
+    const { SimWorld } = await import('../src/sim/world');
+    const { buildParisMap } = await import('../src/maps/paris/layout');
+    const w = await SimWorld.create(buildParisMap());
+    const a = w.addPlayer('a');
+    const b = w.addPlayer('b');
+    b.state.skills.endurance = 999; // a forged save
+    b.state.health = 50;
+    b.state.armor = 0;
+    w.damagePlayer(b, 10, a);
+    expect(b.state.health).toBeLessThan(50);
+    expect(b.state.armor).toBe(0);
+    expect(w.law.level(b, 'endurance')).toBe(10);
+    // max endurance vs a player: -25 % (not -50 %)
+    b.state.health = 100;
+    w.damagePlayer(b, 40, a);
+    expect(b.state.health).toBeCloseTo(70, 5);
+  });
+
+  it('two crews with the same name are not friends', async () => {
+    const { SimWorld } = await import('../src/sim/world');
+    const { buildParisMap } = await import('../src/maps/paris/layout');
+    const w = await SimWorld.create(buildParisMap());
+    const a = w.addPlayer('a');
+    const b = w.addPlayer('b');
+    a.state.crew = { name: 'LOUPS', color: 1, id: 'a-1' };
+    b.state.crew = { name: 'LOUPS', color: 1, id: 'b-9' };
+    expect(w.social.friendly(a, b)).toBe(false);
+    b.state.crew = { ...a.state.crew };
+    expect(w.social.friendly(a, b)).toBe(true);
+  });
+});
