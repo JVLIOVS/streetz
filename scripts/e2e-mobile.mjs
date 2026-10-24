@@ -151,7 +151,7 @@ try {
   results.contextNearCar = ctxLabel?.trim();
   if (!/MONTER/.test(ctxLabel ?? '')) fail(`expected "Monter" near the car, got "${ctxLabel}"`);
   await page.locator('#btn-action').tap();
-  await page.waitForTimeout(400);
+  await page.waitForFunction(() => window.__streetz.stats().player.vehicle >= 0, null, { timeout: 4000 }).catch(() => {});
   const inCar = await stats();
   if (inCar.player.vehicle < 0) fail('could not get in the car');
   const gas = await page.locator('#btn-gas').boundingBox();
@@ -167,8 +167,11 @@ try {
   driven.player.speed = topSpeed;
   results.carSpeed = +topSpeed.toFixed(1);
   if (topSpeed < 5) fail(`car too slow: ${driven.player.speed} held=${JSON.stringify(await page.evaluate(() => [window.__streetz.controls.held, window.__streetz.controls.state]))} pos=${driven.player.x.toFixed(1)},${driven.player.z.toFixed(1)}`);
-  await page.locator('#btn-action').tap();
-  await page.waitForTimeout(400);
+  // tap until out (the label can change while the car slows down)
+  for (let k = 0; k < 3 && (await stats()).player.vehicle >= 0; k++) {
+    await page.locator('#btn-action').tap({ timeout: 5000 }).catch(() => {});
+    await page.waitForFunction(() => window.__streetz.stats().player.vehicle < 0, null, { timeout: 3000 }).catch(() => {});
+  }
   if ((await stats()).player.vehicle >= 0) fail('could not get out of the car');
 
   // Enter a shop through its door
