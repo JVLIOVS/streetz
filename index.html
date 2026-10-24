@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Security policy: only our own scripts run (no injected inline code), the physics engine may compile its WebAssembly,
+         multiplayer signalling goes through secure websockets (nostr relays). -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' data: blob: wss: https:; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'"
+    />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#1b1430" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="STREETZ" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+    <title>STREETZ</title>
+    <script type="module" crossorigin src="./assets/index-BC60WbqD.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/three-Bdyieb3I.js">
+    <link rel="modulepreload" crossorigin href="./assets/rapier-D3Mqfikn.js">
+    <link rel="stylesheet" crossorigin href="./assets/index-CFdLhsYO.css">
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+
+    <!-- Touch surface: joystick on the left, camera drag elsewhere -->
+    <div id="touch"></div>
+    <div id="joy-base" class="joy"></div>
+    <div id="joy-knob" class="joy"></div>
+
+    <div id="flash"></div>
+    <div id="awaken-title"></div>
+    <div id="hud" class="hidden">
+      <div id="minimap-wrap">
+        <canvas id="minimap"></canvas>
+        <div id="bars"><div id="hp"><i></i></div><div id="armor"><i></i></div></div>
+        <div id="gear-strip" aria-label="Ton stuff"></div>
+        <div id="zone-name"></div>
+        <button id="btn-level" aria-label="Progression, Famille et contrats"><span id="rank-ico">·</span><b id="lvl-num">1</b><span class="xp"><i id="xp-fill"></i></span><span id="ctr-badge">📋</span></button>
+        <div id="next-goal"></div>
+      </div>
+      <div id="top-right">
+        <div id="stars"><span>★</span><span>★</span><span>★</span><span>★</span><span>★</span></div>
+        <div id="money">0 €</div>
+        <div id="bank-line"></div>
+        <button id="btn-weapon" class="pill"><span id="weapon-icon">✊</span><span id="weapon-ammo"></span></button>
+      </div>
+      <button id="btn-pause" class="ui-btn" aria-label="Pause">II</button>
+      <div id="objective" class="hidden"><span class="obj-txt"></span><b class="obj-time"></b><button class="obj-x" aria-label="Abandonner la mission">✕</button></div>
+      <div id="players" class="hidden"></div>
+      <div id="bounty" class="hidden"></div>
+      <div id="op-invite" class="hidden"><span></span><button>Rejoindre</button></div>
+      <div id="deal" class="hidden">
+        <div class="deal-txt">👮 <b>POLICE</b> · <span></span></div>
+        <div class="deal-bar"><i></i></div>
+        <div class="deal-btns"><button id="btn-pay">💶 PAYER</button><button id="btn-refuse">✋ REFUSER</button></div>
+      </div>
+      <button id="btn-surrender" class="hidden">🏳 SE RENDRE</button>
+      <div id="fps"></div>
+      <div id="toast"></div>
+      <div id="robbery" class="hidden"><div class="lbl">BRAQUAGE</div><div class="bar"><i></i></div></div>
+      <div id="ko" class="hidden">K.O.</div>
+      <div id="jail" class="hidden"><div class="bars"></div><div class="jail-txt"><b>🚔 GARDE À VUE</b><span></span></div></div>
+      <div id="chaos" class="hidden"><div class="ch-head">CHAOS <b class="ch-mult">×1</b></div><div class="ch-score">0</div><div class="ch-bar"><i></i></div></div>
+      <div id="popups"></div>
+      <div id="levelup" class="hidden"><small>NIVEAU</small><b>2</b><span></span></div>
+      <div id="progress-panel" class="hidden">
+        <div class="pp-head"><span>Progression</span><button class="pp-close" aria-label="Fermer">✕</button></div>
+        <div class="pp-body"></div>
+      </div>
+      <div id="target-hp" class="hidden"><i></i></div>
+
+      <!-- On foot -->
+      <div id="buttons-foot" class="buttons">
+        <button id="btn-attack" class="act big" aria-label="Attaquer"><span class="ico" id="attack-icon">✊</span><span class="lbl" id="attack-lbl">FRAPPER</span></button>
+        <button id="btn-jump" class="act small b1" aria-label="Sauter">
+          <svg viewBox="0 0 24 24"><path d="M12 4 3 14h5v6h8v-6h5z" /></svg><span class="lbl">SAUT</span>
+        </button>
+        <button id="btn-awaken" class="act small b3 hidden" aria-label="Éveil"><span class="ico">⚡</span><span class="lbl">ÉVEIL</span></button>
+        <button id="btn-power" class="act small b4 hidden" aria-label="Énergie"><span class="ico">🔵</span><span class="lbl">ÉNERGIE</span></button>
+        <button id="btn-sprint" class="act small b2" aria-label="Sprint">
+          <svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></svg><span class="lbl">SPRINT</span>
+        </button>
+      </div>
+      <!-- Driving -->
+      <div id="buttons-car" class="buttons hidden">
+        <button id="btn-gas" class="act big gas" aria-label="Accélérer"><svg viewBox="0 0 24 24"><path d="M12 3 4 13h5v8h6v-8h5z" /></svg><span class="lbl">GAZ</span></button>
+        <button id="btn-brake" class="act small b1 brake" aria-label="Freiner"><svg viewBox="0 0 24 24"><path d="M12 21 4 11h5V3h6v8h5z" /></svg><span class="lbl">FREIN</span></button>
+        <button id="btn-handbrake" class="act small b2 hb" aria-label="Frein à main"><span class="ico">⟲</span><span class="lbl">DÉRAPAGE</span></button>
+        <button id="btn-horn" class="act tiny" aria-label="Klaxon">📯</button>
+      </div>
+      <!-- Contextual action (enter car, open door, rob, talk, get out...) -->
+      <button id="btn-action" class="act ctx hidden" aria-label="Action"><span class="lbl" id="action-lbl">ACTION</span></button>
+    </div>
+
+    <div id="pause" class="screen hidden">
+      <div class="panel">
+        <h2>PAUSE</h2>
+        <div id="recap"></div>
+        <div id="crew-box"></div>
+        <p class="label">Qualité graphique</p>
+        <div class="seg" id="quality">
+          <button data-q="low">Bas</button><button data-q="medium">Moyen</button><button data-q="high">Haut</button>
+        </div>
+        <p class="label">Son</p>
+        <div class="seg" id="audio-set">
+          <button data-a="music">🎵 Musique</button><button data-a="sfx">🔊 Bruitages</button><button data-a="radio">📻 Station</button>
+        </div>
+        <button id="btn-resume" class="cta">REPRENDRE</button>
+        <button id="btn-bug" class="link">🐞 Copier un rapport de bug</button>
+        <p class="hint">Prototype · version test 15 · <span id="build-id"></span></p>
+      </div>
+    </div>
+
+    <div id="start" class="screen">
+      <div class="logo">STREET<span>Z</span></div>
+      <div class="tag">Belleplace · prototype</div>
+      <div id="loading">Chargement…</div>
+      <div id="age" class="hidden">
+        <p><b>Jeu réservé aux adultes (18+)</b><br />Violence, sang, armes, langage de rue. Tout est fictif.</p>
+        <button id="btn-adult" class="cta small">J’AI 18 ANS OU PLUS</button>
+        <button id="btn-minor" class="link">J’ai moins de 18 ans</button>
+      </div>
+      <div id="menu" class="hidden">
+        <button id="btn-play" class="cta">SOLO</button>
+        <button id="btn-public" class="cta alt">🌍 MONDE OUVERT</button>
+        <button id="btn-multi" class="cta small">PARTIE PRIVÉE (CODE)</button>
+      </div>
+      <div id="multi" class="hidden">
+        <input id="nick" maxlength="14" placeholder="Ton pseudo" autocomplete="off" />
+        <button id="btn-host" class="cta small">CRÉER UNE PARTIE</button>
+        <div class="join-row">
+          <input id="code" maxlength="4" placeholder="CODE" autocomplete="off" autocapitalize="characters" />
+          <button id="btn-join" class="cta small alt">REJOINDRE</button>
+        </div>
+        <p class="privacy">🔒 Multijoueur en direct entre téléphones : les autres joueurs de la partie peuvent voir ton adresse IP. Aucun compte, aucune donnée personnelle envoyée à un serveur ; ta progression reste sur ton téléphone.</p>
+        <button id="btn-back" class="link">← retour</button>
+      </div>
+      <div id="net-status"></div>
+      <div class="legal">18+ · Violence fictive</div>
+    </div>
+
+    <div id="rotate" class="screen">
+      <div class="phone"></div>
+      <p>Tourne ton téléphone</p>
+    </div>
+
+  </body>
+</html>
