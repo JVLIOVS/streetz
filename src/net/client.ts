@@ -303,6 +303,7 @@ function copyShared(p: Player, np: NetPlayer) {
   s.look = np.look;
   s.interior = np.interior;
   s.outfit = np.outfit;
+  s.gear = np.gear ?? {};
   s.wanted = np.wanted;
   s.bounty = np.bounty;
   s.bountyTimer = np.bountyTimer;

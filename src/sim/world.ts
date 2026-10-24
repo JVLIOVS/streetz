@@ -5,6 +5,7 @@ import { Rng } from '../core/rng';
 import { TRAFFIC_MIX, VEHICLES, type VehicleType } from '../data/vehicles';
 import { APARTMENT_PRICES, CLOTHES, GARAGE_SLOTS, JETPACK_PRICE, VEHICLE_OFFERS } from '../data/shop';
 import { ARMOR_PRICE, WEAPON_ORDER, WEAPONS, type WeaponId } from '../data/weapons';
+import { GEAR, GEAR_PRICES, GEAR_SLOTS, type GearSlot, GROUND_GEAR_PER_PLAYER, PED_GEAR_DROP, defenseFactor, gearLabel, gearStat, meleeBonus, rollRarity, rollSlot, vestArmor, type GearItem } from '../data/gear';
 import { terrainHeight } from '../maps/terrain';
 import type { InteriorDef, MapData } from '../maps/types';
 import { buildStaticColliders } from './colliders';
@@ -35,11 +36,13 @@ export interface PickupState {
   x: number;
   y: number;
   z: number;
-  kind: 'money' | 'crate' | 'weapon';
+  kind: 'money' | 'crate' | 'weapon' | 'gear';
   /** Cash, or bullets for a dropped firearm. */
   amount: number;
   /** Dropped weapon (kind 'weapon'). */
   weapon?: WeaponId;
+  /** A piece of clothing / gear (kind 'gear'). */
+  gear?: GearItem;
   /** Your stuff dropped when knocked out: kept on the ground until this tick even if nobody is around. */
   owner?: string;
   until?: number;
@@ -1267,6 +1270,16 @@ export class SimWorld {
     } else if (kind === 'armor' && inside === 'gunshop') {
       if (s.armor >= 100 || !pay(ARMOR_PRICE, 'Gilet pare-balles')) return;
       s.armor = 100;
+      if ((s.gear.vest ?? -1) < 1) s.gear = { ...s.gear, vest: 1 };
+    } else if (kind === 'gear' && inside === 'clothes' && (GEAR_SLOTS as string[]).includes(id)) {
+      // a plain (common) piece: the quick way to get dressed
+      const slot = id as GearSlot;
+      if (s.gear[slot] !== undefined) {
+        this.toast(p, 'Tu portes déjà mieux ou pareil');
+        return;
+      }
+      if (!pay(GEAR_PRICES[slot], GEAR[slot].name)) return;
+      this.equipGear(p, { slot, r: 0 });
     } else if (kind === 'cloth' && inside === 'clothes') {
       const c = CLOTHES.find((x) => x.id === id);
       if (!c) return;
@@ -1632,7 +1645,9 @@ export class SimWorld {
 
   private hitTarget(p: Player, t: Target, damage: number, melee: boolean) {
     const s = p.state;
-    damage *= melee ? 1 + 0.08 * this.law.level(p, 'force') : 1 + 0.05 * this.law.level(p, 'precision');
+    // skill bonus, halved against players
+    const bonus = melee ? 0.08 * this.law.level(p, 'force') + meleeBonus(s.gear) : 0.05 * this.law.level(p, 'precision');
+    damage *= 1 + (t.player ? bonus / 2 : bonus);
     if (t.ped) {
       const cop = t.ped.state.role !== 'civ';
       const wasAlive = t.ped.alive;
@@ -1728,6 +1743,12 @@ export class SimWorld {
         this.pickups.set(id, { id, x: ped.state.x + 0.6, y: ped.state.y, z: ped.state.z, kind: 'money', amount: ped.state.money });
         ped.state.money = 0;
       }
+      // and sometimes a piece of their clothes
+      if (this.rng.chance(ped.state.role === 'civ' ? PED_GEAR_DROP : 0.5)) {
+        const luck = ped.state.role !== 'civ' ? 0.5 : ped.state.vip ? 0.8 : 0;
+        const slot = ped.state.role !== 'civ' && this.rng.chance(0.4) ? 'vest' : rollSlot(() => this.rng.next());
+        this.dropGear(ped.state.x + 0.3, ped.state.y, ped.state.z - 0.6, { slot, r: rollRarity(() => this.rng.next(), luck) });
+      }
       // armed people drop their weapon: knocking out a cop is how you get a gun early
       if (ped.state.weapon !== 'none') {
         const weapon = ped.state.weapon as WeaponId;
@@ -1757,7 +1778,10 @@ export class SimWorld {
   damagePlayer(p: Player, amount: number, by?: Player) {
     const s = p.state;
     if (s.dead) return;
-    amount *= 1 - 0.05 * this.law.level(p, 'endurance');
+    // endurance: -5 % per point, half as much against other players (PvP stays fair for newcomers)
+    amount = Math.max(0, amount * (1 - (by && by !== p ? 0.025 : 0.05) * this.law.level(p, 'endurance')));
+    // clothes protect a little (cap, top, trousers)
+    amount *= defenseFactor(s.gear);
     const absorbed = Math.min(s.armor, amount * 0.7);
     s.armor -= absorbed;
     s.health -= amount - absorbed;
@@ -1850,9 +1874,15 @@ export class SimWorld {
       const r = s.vehicle >= 0 ? 3 : 1.6;
       for (const pk of this.pickups.values()) {
         if (Math.hypot(pk.x - s.x, pk.z - s.z) < r && Math.abs(pk.y - s.y) < 2.5) {
+          // clothes no better than what you wear stay on the ground
+          if (pk.kind === 'gear' && pk.gear && (s.vehicle >= 0 || (s.gear[pk.gear.slot] ?? -1) >= pk.gear.r)) continue;
           this.pickups.delete(pk.id);
           if (pk.kind === 'crate') {
             this.openCrate(p);
+            continue;
+          }
+          if (pk.kind === 'gear' && pk.gear) {
+            this.equipGear(p, pk.gear);
             continue;
           }
           if (pk.kind === 'weapon' && pk.weapon) {
@@ -1871,11 +1901,34 @@ export class SimWorld {
     }
   }
 
+  /** Puts on a piece if the slot is empty or it is better; the old one falls on the ground. */
+  equipGear(p: Player, g: GearItem): boolean {
+    const s = p.state;
+    const cur = s.gear[g.slot];
+    if (cur !== undefined && cur >= g.r) return false;
+    s.gear = { ...s.gear, [g.slot]: g.r };
+    if (cur !== undefined) this.dropGear(s.x + 0.8, s.y, s.z + 0.4, { slot: g.slot, r: cur });
+    if (g.slot === 'vest') s.armor = Math.max(s.armor, vestArmor(s.gear));
+    this.events.push({ type: 'crate', playerId: s.id, text: `${gearLabel(g)} · ${gearStat(g)}`, rare: g.r >= 2, pickup: true });
+    return true;
+  }
+
+  dropGear(x: number, y: number, z: number, g: GearItem, owner?: string, until?: number) {
+    const id = this.nextId++;
+    this.pickups.set(id, { id, x, y, z, kind: 'gear', amount: 0, gear: g, owner, until });
+  }
+
   /** Surprise crate: mostly cash, sometimes ammo or armor, rarely a better weapon. */
   private openCrate(p: Player) {
     const s = p.state;
     this.contracts.track(p, 'crate', 1);
     this.progress.addXp(p, 15);
+    // a third of the crates hold clothes (often better than street finds)
+    if (this.rng.chance(0.33)) {
+      const g: GearItem = { slot: rollSlot(() => this.rng.next()), r: rollRarity(() => this.rng.next(), 0.4) };
+      if (!this.equipGear(p, g)) this.dropGear(s.x + 0.6, s.y, s.z, g);
+      return;
+    }
     const roll = this.rng.next();
     const guns = s.weapons.filter((w) => !WEAPONS[w].melee);
     const next = WEAPON_ORDER.find((w) => !s.weapons.includes(w) && WEAPONS[w].price > 0);
@@ -1912,6 +1965,19 @@ export class SimWorld {
       if ((!kept && !near(pk.x, pk.z, 200)) || (pk.owner && this.tick >= (pk.until ?? 0))) this.pickups.delete(pk.id);
     }
     if (centers.length === 0) return;
+    // --- clothes lying around: a few pieces always within reach of each player (you start in underwear)
+    for (const c of centers) {
+      let around = 0;
+      for (const pk of this.pickups.values()) if (pk.kind === 'gear' && !pk.owner && Math.hypot(pk.x - c.x, pk.z - c.z) < 90) around++;
+      if (around >= GROUND_GEAR_PER_PLAYER) continue;
+      const ring = this.walk.filter((q) => {
+        const d = Math.hypot(q.x - c.x, q.z - c.z);
+        return d > 8 && d < 70;
+      });
+      if (!ring.length) continue;
+      const n = ring[this.rng.int(0, ring.length - 1)];
+      this.dropGear(n.x + this.rng.range(-1, 1), this.groundY(n.x, n.z), n.z + this.rng.range(-1, 1), { slot: rollSlot(() => this.rng.next()), r: rollRarity(() => this.rng.next()) });
+    }
     // --- surprise crates: about 2 around each player, 40–120 m away on sidewalks
     for (const c of centers) {
       let around = 0;

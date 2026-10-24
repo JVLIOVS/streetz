@@ -1,3 +1,4 @@
+import { GEAR_SLOTS, bagKeeps } from '../data/gear';
 import { DT } from '../core/loop';
 import { BAIL_PER_STAR, CHECK_EVERY, STASH_MINUTES, fineFor, MAX_FICHES, NOTORIETY, OFFER_WAIT, RESPECT, SKILL_MAX, SKILLS, skillPoints, type SkillId } from '../data/law';
 import { levelOf } from '../data/progression';
@@ -92,7 +93,8 @@ export class LawSystem {
   }
 
   level(p: Player, id: SkillId) {
-    return p.state.skills[id] ?? 0;
+    // never trust a stored value: 0..SKILL_MAX
+    return Math.max(0, Math.min(SKILL_MAX, Number(p.state.skills[id]) || 0));
   }
 
   // ------------------------------------------------------------------ police deal, checks, prison
@@ -311,12 +313,24 @@ export class LawSystem {
     const owner = s.id;
     const until = w.tick + STASH_MINUTES * 3600;
     let dropped = false;
-    if (s.money > 0) {
+    // the bag keeps part of your cash
+    const kept = Math.floor(s.money * bagKeeps(s.gear));
+    if (s.money - kept > 0) {
       const id = w.newId();
-      w.pickups.set(id, { id, x: s.x + 0.5, y: s.y, z: s.z, kind: 'money', amount: s.money, owner, until });
-      s.money = 0;
+      w.pickups.set(id, { id, x: s.x + 0.5, y: s.y, z: s.z, kind: 'money', amount: s.money - kept, owner, until });
+      s.money = kept;
       dropped = true;
     }
+    // and your clothes: you get back up in your underwear
+    let g = 0;
+    for (const slot of GEAR_SLOTS) {
+      const r = s.gear[slot];
+      if (r === undefined) continue;
+      const a = Math.PI + (g++ / 4) * Math.PI;
+      w.dropGear(s.x + Math.cos(a) * 1.4, s.y, s.z + Math.sin(a) * 1.4, { slot, r }, owner, until);
+      dropped = true;
+    }
+    s.gear = {};
     let k = 0;
     for (const wpn of [...s.weapons] as WeaponId[]) {
       if (wpn === 'fist' || wpn === 'sniper') continue;

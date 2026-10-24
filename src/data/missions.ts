@@ -31,6 +31,8 @@ export type MissionStep =
   | { kind: 'equip'; text: string; weapon: WeaponId }
   /** Break street props. */
   | { kind: 'break'; text: string; count: number }
+  /** Get dressed: wear this many pieces of gear. */
+  | { kind: 'dress'; text: string; count: number }
   /** Get noticed: reach this many stars. */
   | { kind: 'wanted'; text: string; stars: number };
 
@@ -81,7 +83,13 @@ export const MISSIONS: MissionDef[] = [
     reward: 1500,
     rep: 250,
     steps: [
-      { kind: 'ko', text: 'Mets un passant K.O. (bouton rouge, tape plusieurs fois)', say: 'Choisis un passant et mets-le K.O. Le bouton rouge, c’est tes poings.' },
+      {
+        kind: 'dress',
+        count: 2,
+        text: 'Habille-toi : marche sur 2 fringues par terre (colonnes colorées)',
+        say: 'Mais t’es en caleçon ?! Ramasse des fringues, y en a partout par terre : marche dessus. Plus la couleur brille, plus c’est rare.',
+      },
+      { kind: 'ko', text: 'Mets un passant K.O. (bouton rouge, tape plusieurs fois)', say: 'Voilà, t’es présentable. Maintenant choisis un passant et mets-le K.O. Le bouton rouge, c’est tes poings.' },
       {
         kind: 'equip',
         weapon: 'pistol',

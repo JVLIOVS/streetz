@@ -9,7 +9,7 @@ import { DEFAULT_LOOK, HumanView, initHumans, playerLook, type BaseAnim, type We
 import { HeliRenderer } from './helis';
 import { MissionMarkers } from './missions';
 import { InteriorsView } from './interiors';
-import { sharedUniforms, skyMaterial } from './materials';
+import { sharedUniforms, skyMaterial, toonGradient } from './materials';
 import { PedRenderer } from './peds';
 import { AdaptiveResolution, QUALITY, type QualityLevel, type QualityPreset } from './quality';
 import { VehicleRenderer } from './vehicles';
@@ -157,6 +157,7 @@ export class GameRenderer {
     this.sun.castShadow = this.preset.shadows;
     this.configureShadows();
     this.scene.remove(this.city.root);
+    disposeTree(this.city.root, this.assets);
     this.city = new CityView(this.map, { shadows: this.preset.shadows }, this.assets);
     this.scene.add(this.city.root);
     this.scene.traverse((o) => {
@@ -220,12 +221,12 @@ export class GameRenderer {
       }
       cx = x;
       cz = z;
-      const lookKey = `${s.look}|${JSON.stringify(s.outfit)}`;
+      const lookKey = `${s.look}|${JSON.stringify(s.outfit)}|${JSON.stringify(s.gear)}`;
       if (lookKey !== this.playerLook) {
         // your own look: seed (multiplayer guests) + the clothes you wear
         this.playerLook = lookKey;
         this.player.view.dispose();
-        this.player = { view: new HumanView(playerLook(s.look, s.outfit)), seq: s.actionSeq, weapon: '', key: lookKey };
+        this.player = { view: new HumanView(playerLook(s.look, s.outfit, s.gear)), seq: s.actionSeq, weapon: '', key: lookKey };
         this.player.view.setOutline(true);
         this.scene.add(this.player.view.root);
       }
@@ -284,14 +285,14 @@ export class GameRenderer {
       const s = p.state;
       if (s.id === localId) continue;
       let slot = this.others.get(s.id);
-      const key = `${s.look}|${JSON.stringify(s.outfit)}`;
+      const key = `${s.look}|${JSON.stringify(s.outfit)}|${JSON.stringify(s.gear)}`;
       if (slot && slot.key !== key) {
         slot.view.dispose();
         this.others.delete(s.id);
         slot = undefined;
       }
       if (!slot) {
-        slot = { view: new HumanView(playerLook(s.look, s.outfit)), seq: s.actionSeq, weapon: '', key };
+        slot = { view: new HumanView(playerLook(s.look, s.outfit, s.gear)), seq: s.actionSeq, weapon: '', key };
         slot.view.setOutline(true);
         this.scene.add(slot.view.root);
         this.others.set(s.id, slot);
@@ -361,4 +362,37 @@ export class GameRenderer {
       quality: this.quality,
     };
   }
+}
+
+/**
+ * Frees the GPU memory of a subtree (geometries, materials, textures) that is not reused,
+ * keeping what belongs to the loaded GLB models (shared by every rebuild).
+ */
+function disposeTree(root: THREE.Object3D, assets: GameAssets) {
+  const keep = new Set<unknown>();
+  for (const lib of [assets.city, assets.vehicles])
+    for (const o of lib.values())
+      o.traverse((c) => {
+        const m = c as THREE.Mesh;
+        if (m.geometry) keep.add(m.geometry);
+        for (const mat of ([] as THREE.Material[]).concat(m.material ?? [])) {
+          keep.add(mat);
+          for (const v of Object.values(mat)) if (v instanceof THREE.Texture) keep.add(v);
+        }
+      });
+  const done = new Set<unknown>();
+  root.traverse((c) => {
+    const m = c as THREE.Mesh;
+    if (m.geometry && !keep.has(m.geometry) && !done.has(m.geometry)) {
+      done.add(m.geometry);
+      m.geometry.dispose();
+    }
+    for (const mat of ([] as THREE.Material[]).concat(m.material ?? [])) {
+      if (keep.has(mat) || done.has(mat)) continue;
+      done.add(mat);
+      for (const v of Object.values(mat)) if (v instanceof THREE.Texture && !keep.has(v) && v !== toonGradient()) v.dispose();
+      mat.dispose();
+    }
+    if ((c as THREE.InstancedMesh).isInstancedMesh) (c as THREE.InstancedMesh).dispose();
+  });
 }

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GEAR, type Gear } from '../data/gear';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -27,6 +28,9 @@ export interface HumanLook {
   shoes: number;
   beard: boolean;
   glasses: boolean;
+  /** No trousers: bare legs and underwear (players start like that, see src/data/gear.ts). */
+  bareLegs?: boolean;
+  underwear?: number;
   /** Body proportions. */
   height: number;
   width: number;
@@ -55,9 +59,25 @@ export const DEFAULT_LOOK: HumanLook = {
   width: 1,
 };
 
-/** Base look (seed, or the default hero) with the clothes the player wears on top. */
-export function playerLook(seed: number, outfit: Partial<HumanLook>): HumanLook {
-  return { ...(seed >= 0 ? randomLook(seed) : DEFAULT_LOOK), ...outfit };
+/**
+ * Base look (seed, or the default hero) with the wardrobe outfit on top. With `gear`,
+ * only the slots you actually wear are dressed: the rest is bare skin and underwear.
+ */
+export function playerLook(seed: number, outfit: Partial<HumanLook>, gear?: Gear): HumanLook {
+  const look: HumanLook = { ...(seed >= 0 ? randomLook(seed) : DEFAULT_LOOK), ...outfit };
+  if (!gear) return look;
+  if (gear.top === undefined) {
+    look.top = gear.vest !== undefined ? GEAR.vest.color : look.skin;
+    look.topAccent = look.top;
+    look.sleeves = 'short';
+  }
+  if (gear.legs === undefined) {
+    look.bareLegs = true;
+    look.underwear = 0xf2f2f2;
+  }
+  if (gear.feet === undefined) look.shoes = look.skin;
+  if (gear.head === undefined) look.hat = 'none';
+  return look;
 }
 
 export function randomLook(seed: number): HumanLook {
@@ -143,13 +163,14 @@ export function initHumans(gltf: GLTF) {
 
 const _c = new THREE.Color();
 
-function regionOf(bone: string): 'skin' | 'top' | 'sleeve' | 'forearm' | 'bottom' | 'shoes' | 'head' {
+function regionOf(bone: string): 'skin' | 'top' | 'sleeve' | 'forearm' | 'bottom' | 'legs' | 'shoes' | 'head' {
   if (bone === 'head') return 'head';
   if (bone.startsWith('hand') || bone.startsWith('wrist')) return 'skin';
   if (bone.startsWith('lowerarm')) return 'forearm';
   if (bone.startsWith('upperarm')) return 'sleeve';
   if (bone === 'chest' || bone === 'spine') return 'top';
   if (bone.startsWith('foot') || bone.startsWith('toes')) return 'shoes';
+  if (bone.startsWith('lowerleg') || bone.startsWith('shin') || bone.startsWith('calf')) return 'legs';
   return 'bottom'; // hips, legs, root
 }
 
@@ -189,8 +210,11 @@ function colorizePart(geo: THREE.BufferGeometry, look: HumanLook, bones: THREE.B
       case 'shoes':
         hex = look.shoes;
         break;
+      case 'legs':
+        hex = look.bareLegs ? look.skin : look.bottom;
+        break;
       default:
-        hex = look.bottom;
+        hex = look.bareLegs ? (look.underwear ?? look.skin) : look.bottom;
     }
     _c.setHex(hex);
     col[i * 3] = _c.r;

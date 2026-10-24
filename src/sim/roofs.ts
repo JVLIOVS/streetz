@@ -1,3 +1,4 @@
+import { gearLabel, rollRarity, rollSlot, type Rarity } from '../data/gear';
 import { Rng } from '../core/rng';
 import { WEAPONS, type WeaponId } from '../data/weapons';
 import type { ContextAction, Player } from './player';
@@ -88,9 +89,11 @@ export class RoofSystem {
       s.money += n;
       w.events.push({ type: 'money', playerId: s.id, amount: n });
       text = `Une liasse : +${n.toLocaleString('fr-FR')} €`;
-    } else if (roll < 0.75) {
-      s.armor = 100;
-      text = 'Un gilet pare-balles tout neuf';
+    } else if (roll < 0.8) {
+      // rooftop finds are the good stuff: rare or better
+      const g = { slot: rollSlot(() => w.rng.next()), r: Math.max(1, rollRarity(() => w.rng.next(), 0.8)) as Rarity };
+      if (!w.equipGear(p, g)) w.dropGear(s.x + 0.6, s.y, s.z, g);
+      text = `${gearLabel(g)} !`;
     } else {
       const options: WeaponId[] = ['pistol', 'smg', 'shotgun', 'rifle'];
       const wpn = options[w.rng.int(0, options.length - 1)];

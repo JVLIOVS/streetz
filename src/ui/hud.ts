@@ -1,5 +1,6 @@
 import { WEAPONS } from '../data/weapons';
 import { CHAOS_WINDOW, levelProgress, nextUnlock } from '../data/progression';
+import { GEAR, GEAR_SLOTS, RARITY, gearLabel, gearStat, type GearSlot } from '../data/gear';
 import { FAMILY_NAME, MAX_RANK, RANKS, jobsOfRank, rankOf, rankProgress } from '../data/family';
 import { STREAK_REWARDS } from '../data/contracts';
 import { VEHICLES } from '../data/vehicles';
@@ -103,6 +104,20 @@ export class Hud {
   updateProgress(s: PlayerState) {
     const lp = levelProgress(s.rep);
     if (this.changed('lvl', lp.level)) this.lvlNum.textContent = String(lp.level);
+    // your stuff: one icon per slot, colored by rarity, faded when empty
+    const gk = JSON.stringify(s.gear);
+    if (this.changed('gear', gk)) {
+      const strip = $('gear-strip');
+      strip.textContent = '';
+      for (const slot of GEAR_SLOTS) {
+        const r = s.gear[slot];
+        const el = document.createElement('span');
+        el.textContent = GEAR[slot].icon;
+        if (r === undefined) el.className = 'empty';
+        else el.style.borderColor = RARITY[r].color;
+        strip.appendChild(el);
+      }
+    }
     const rank = rankOf(s.missionsDone, s.tutorialDone);
     if (this.changed('rank', rank)) $('rank-ico').textContent = RANKS[rank].icon;
     const xp = `${Math.round((lp.cur / lp.need) * 100)}%`;
@@ -175,12 +190,20 @@ export class Hud {
 
   private renderPanel(s: PlayerState, lp: { level: number; cur: number; need: number }) {
     const board = [s, ...this.others].map((p) => [p.name, p.rep, p.crew?.name ?? '', p.bounty]);
-    const key = JSON.stringify([this.guardsOff, s.missionsDone.length, s.rep, s.contracts.map((c) => c.progress), s.streak, s.fenceOrder, s.contractsDay, s.week, board, s.skills, Math.round(s.notoriety), s.respect, s.fines]);
+    const key = JSON.stringify([s.gear, this.guardsOff, s.missionsDone.length, s.rep, s.contracts.map((c) => c.progress), s.streak, s.fenceOrder, s.contractsDay, s.week, board, s.skills, Math.round(s.notoriety), s.respect, s.fines]);
     if (key === this.panelKey) return;
     this.panelKey = key;
     const esc = (t: string) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
     const bar = (r: number) => `<div class="pp-bar"><i style="width:${Math.min(100, r * 100).toFixed(0)}%"></i></div>`;
     let h = this.familySection(s, lp.level);
+    h += `<div class="pp-sec">TON STUFF 🎽</div>`;
+    for (const slot of GEAR_SLOTS) {
+      const r = s.gear[slot];
+      h += r === undefined
+        ? `<div class="pp-row" style="opacity:.55">${GEAR[slot].icon} Rien · ${slotHint[slot]}</div>`
+        : `<div class="pp-row">${esc(gearLabel({ slot, r }))}<small style="color:${RARITY[r].color}">${esc(gearStat({ slot, r }))}</small></div>`;
+    }
+    h += `<div class="pp-row"><small style="float:none;color:#cfc8e8">Ramasse les fringues par terre, sur les gens que tu mets K.O., dans les colis et les caches des toits. Si tu tombes, tu perds tout.</small></div>`;
     h += `<div class="pp-sec">NIVEAU ${lp.level}</div><div class="pp-row">${lp.cur} / ${lp.need} XP${bar(lp.cur / lp.need)}</div>`;
     const next = nextUnlock(lp.level);
     if (next) h += `<div class="pp-row">🔓 Niveau ${next.level} : ${esc(next.label)}</div>`;
@@ -442,3 +465,13 @@ export class Hud {
 const ppBar = (r: number) => `<div class="pp-bar"><i style="width:${Math.min(100, r * 100).toFixed(0)}%"></i></div>`;
 /** Numbers shown through innerHTML: whatever a (possibly modified) host sends, only a number gets in. */
 const N = (v: unknown) => Number(v) || 0;
+
+const slotHint: Record<GearSlot, string> = {
+  head: 'une casquette protège la tête',
+  top: 'un haut protège des coups',
+  legs: 'tu es en caleçon !',
+  feet: 'pieds nus, tu cours moins vite',
+  hands: 'des gants frappent plus fort',
+  vest: 'un gilet arrête les balles',
+  bag: 'un sac garde ton cash si tu tombes',
+};

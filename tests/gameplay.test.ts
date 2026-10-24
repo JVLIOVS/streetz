@@ -967,32 +967,37 @@ describe('tutorial', () => {
     w.damagePed(ally, 999, p, s.x, s.z);
     expect(ally.alive).toBe(true);
     expect(w.drainEvents().some((e) => e.type === 'say')).toBe(true);
+    // 0. you start in underwear: get dressed
+    expect(s.objective).toContain('Habille-toi');
+    s.gear = { legs: 0, feet: 0 };
+    run(w, 2);
+    expect(s.missionStep).toBe(1);
     // 1. fists
     const ped = w.spawnPed(s.x + 1, s.z, { mode: 'idle' });
     w.damagePed(ped, 999, p, s.x, s.z);
     run(w, 2);
-    expect(s.missionStep).toBe(1);
+    expect(s.missionStep).toBe(2);
     // 2. a pistol is handed over: take it out with the weapon button
     expect(s.weapons).toContain('pistol');
     run(w, 1, (t) => [act(t, 'weapon')]);
     run(w, 2);
-    expect(s.missionStep).toBe(2);
+    expect(s.missionStep).toBe(3);
     // 3. shoot 3 props
     for (let i = 0; i < 3; i++) w.progress.onProp(p);
-    expect(s.missionStep).toBe(3);
+    expect(s.missionStep).toBe(4);
     // 4. steal a car
     const v = w.spawnVehicle('compact', s.x + 2.4, 0.3, s.z, 0, 'none', false);
     run(w, 2);
     run(w, 1, (t) => [act(t, 'use')]);
     expect(s.vehicle).toBe(v.state.id);
     run(w, 2);
-    expect(s.missionStep).toBe(4);
+    expect(s.missionStep).toBe(5);
     // 5. drive to the bank
     const bank = map.interiors.find((i) => i.kind === 'bank')!;
     run(w, 1, (t) => [act(t, 'use')]); // get out
     w.teleportPlayer(p, bank.door.x, 0.5, bank.door.z + 2);
     run(w, 3);
-    expect(s.missionStep).toBe(5);
+    expect(s.missionStep).toBe(6);
     // 6. rob it (the partner comes in too)
     w.teleportPlayer(p, bank.door.x, 0.5, bank.door.z + 1.5);
     run(w, 2);
@@ -1004,12 +1009,12 @@ describe('tutorial', () => {
     expect(s.weapon).not.toBe('fist');
     run(w, 1, (t) => [act(t, 'use')]);
     run(w, 60 * 11);
-    expect(s.missionStep).toBe(6);
+    expect(s.missionStep).toBe(7);
     expect(Math.hypot(w.peds.get(s.ally)!.state.x - s.x, w.peds.get(s.ally)!.state.z - s.z)).toBeLessThan(15);
     // 7. lose the police, 8. back to the hideout
     w.clearWanted(p);
     run(w, 2);
-    expect(s.missionStep).toBe(7);
+    expect(s.missionStep).toBe(8);
     const home = map.interiors.find((i) => i.kind === 'hideout')!;
     s.interior = null;
     w.drainEvents();
@@ -1468,5 +1473,71 @@ describe('flying', () => {
     expect(s.fuel).toBeLessThan(0.4);
     run(w, 60 * 8);
     expect(s.fuel).toBeGreaterThan(0.9);
+  });
+});
+
+describe('stuff (gear)', () => {
+  it('you start in underwear; clothes lie around; walking on a better piece puts it on', async () => {
+    const w = await world();
+    run(w, 2);
+    const s = P(w);
+    expect(s.gear).toEqual({});
+    run(w, 60);
+    const near = [...w.pickups.values()].filter((pk) => pk.kind === 'gear' && Math.hypot(pk.x - s.x, pk.z - s.z) < 90);
+    expect(near.length).toBeGreaterThan(3);
+    // a common pair of trousers, then a worse one is left on the ground, a better one replaces it
+    w.dropGear(s.x, s.y, s.z, { slot: 'legs', r: 1 });
+    run(w, 2);
+    expect(s.gear.legs).toBe(1);
+    w.dropGear(s.x, s.y, s.z, { slot: 'legs', r: 0 });
+    run(w, 2);
+    expect(s.gear.legs).toBe(1);
+    expect([...w.pickups.values()].some((pk) => pk.gear?.slot === 'legs' && pk.gear.r === 0)).toBe(true);
+    w.dropGear(s.x, s.y, s.z, { slot: 'legs', r: 3 });
+    run(w, 2);
+    expect(s.gear.legs).toBe(3);
+  });
+
+  it('clothes protect, shoes make you faster, a vest gives armor', async () => {
+    const w = await world();
+    run(w, 2);
+    const p = w.players.get('p1')!;
+    const s = P(w);
+    s.health = 100;
+    w.damagePlayer(p, 20);
+    const bare = 100 - s.health;
+    s.gear = { head: 3, top: 3, legs: 3 };
+    s.health = 100;
+    w.damagePlayer(p, 20);
+    expect(100 - s.health).toBeLessThan(bare * 0.7);
+    s.armor = 0;
+    w.equipGear(p, { slot: 'vest', r: 2 });
+    expect(s.armor).toBe(75);
+  });
+
+  it('knocked out: your clothes fall with your cash (a bag keeps some), you get up in underwear', async () => {
+    const w = await world();
+    run(w, 2);
+    const p = w.players.get('p1')!;
+    const s = P(w);
+    s.gear = { legs: 1, feet: 2, bag: 3 };
+    s.money = 1000;
+    w.damagePlayer(p, 999);
+    expect(s.gear).toEqual({});
+    expect(s.money).toBe(600);
+    const dropped = [...w.pickups.values()].filter((pk) => pk.kind === 'gear' && pk.owner === 'p1');
+    expect(dropped.length).toBe(3);
+  });
+
+  it('the clothes shop sells the basics', async () => {
+    const w = await world();
+    run(w, 2);
+    const s = P(w);
+    const shop = map.interiors.find((i) => i.kind === 'clothes')!;
+    s.interior = shop.id;
+    s.money = 1000;
+    run(w, 1, (t) => [act(t, 'buy', 'gear:legs')]);
+    expect(s.gear.legs).toBe(0);
+    expect(s.money).toBe(1000 - 160);
   });
 });

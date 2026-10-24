@@ -1,3 +1,4 @@
+import { speedBonus, type Gear } from '../data/gear';
 import type RAPIER_T from '@dimforge/rapier3d-compat';
 import type { MoveCommand } from '../core/commands';
 import { DT } from '../core/loop';
@@ -99,7 +100,8 @@ export interface PlayerState {
   /** Bounty on this player's head (multiplayer, 4★+) and seconds left to survive it. */
   bounty: number;
   bountyTimer: number;
-  crew: { name: string; color: number } | null;
+  /** `id`: unique per crew (founder + time), so two crews with the same name stay enemies. */
+  crew: { name: string; color: number; id?: string } | null;
   /** This week's records (reset every Monday). */
   week: WeekStats;
   /** Vehicle id when driving, -1 on foot. */
@@ -141,6 +143,8 @@ export interface PlayerState {
   skills: Skills;
   /** Jetpack owned, its fuel (0..1) and whether it is firing right now. */
   jetpack: boolean;
+  /** Clothes / gear worn (rarity per slot): src/data/gear.ts. Empty = underwear. */
+  gear: Gear;
   fuel: number;
   jetting: boolean;
   /** Where your stuff fell when you got knocked out (null = nothing left there). */
@@ -278,6 +282,7 @@ export class Player {
       carrying: null,
       stash: null,
       jetpack: false,
+      gear: {},
       fuel: 1,
       jetting: false,
       teleportSeq: 0,
@@ -321,7 +326,7 @@ export class Player {
     // Three gaits: light push = walk, full push = run, sprint button = sprint
     const sprint = !!inp?.sprint && mag > 0.3;
     // Speed skill: +3 % per point
-    const skill = 1 + 0.03 * (s.skills?.speed ?? 0);
+    const skill = 1 + 0.03 * Math.min(10, s.skills?.speed ?? 0) + speedBonus(s.gear ?? {});
     const maxSpeed = s.dead ? 0 : (sprint ? T.sprintSpeed : mag < 0.65 ? T.walkSpeed * Math.min(1, mag / 0.4) : T.runSpeed) * skill;
     const dl = Math.hypot(dirX, dirZ);
     const tx = dl > 1e-4 ? (dirX / dl) * maxSpeed : 0;
@@ -454,6 +459,7 @@ export function applyProfile(s: PlayerState, p: Profile) {
   s.respect = p.respect;
   s.skills = { ...noSkills(), ...p.skills };
   s.jetpack = p.jetpack;
+  s.gear = { ...p.gear };
   s.week = { ...emptyWeek(0), ...p.week };
 }
 
@@ -483,5 +489,6 @@ export function profileOf(s: PlayerState): Profile {
     respect: s.respect,
     skills: { ...s.skills },
     jetpack: s.jetpack,
+    gear: { ...s.gear },
   };
 }

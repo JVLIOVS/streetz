@@ -3,6 +3,7 @@ import { VEHICLES, type VehicleType } from '../data/vehicles';
 import { WEAPONS, type WeaponId } from '../data/weapons';
 import { MISSIONS } from '../data/missions';
 import { BUSINESSES } from '../data/business';
+import { GEAR_SLOTS, type Gear } from '../data/gear';
 import { START_XP } from '../data/progression';
 import { emptyWeek, type WeekStats } from '../sim/player';
 import { noSkills, SKILL_MAX, type Skills } from '../data/law';
@@ -33,7 +34,7 @@ export interface Profile {
   tutorial: boolean;
   /** The "Le premier coup" prologue done or skipped (new in test 8: shown once to everybody). */
   prologue: boolean;
-  crew: { name: string; color: number } | null;
+  crew: { name: string; color: number; id?: string } | null;
   week: WeekStats;
   bank: number;
   fines: number;
@@ -41,6 +42,8 @@ export interface Profile {
   respect: number;
   skills: Skills;
   jetpack: boolean;
+  /** Clothes / gear worn (lost when knocked out). */
+  gear: Gear;
 }
 
 export interface SaveData {
@@ -52,7 +55,7 @@ export interface SaveData {
 const KEY = 'streetz.save';
 
 export function defaultProfile(): Profile {
-  return { money: 500, weapons: ['fist'], ammo: {}, armor: 0, outfit: {}, clothes: [], garage: [], homes: ['hideout'], rep: START_XP, missions: [], daily: { day: 0, progress: [] }, streak: { day: 0, count: 0 }, biz: [], tutorial: false, prologue: false, crew: null, week: emptyWeek(0), bank: 0, fines: 0, notoriety: 0, respect: 0, skills: noSkills(), jetpack: false };
+  return { money: 500, weapons: ['fist'], ammo: {}, armor: 0, outfit: {}, clothes: [], garage: [], homes: ['hideout'], rep: START_XP, missions: [], daily: { day: 0, progress: [] }, streak: { day: 0, count: 0 }, biz: [], tutorial: false, prologue: false, crew: null, week: emptyWeek(0), bank: 0, fines: 0, notoriety: 0, respect: 0, skills: noSkills(), jetpack: false, gear: {} };
 }
 
 export function defaultSave(): SaveData {
@@ -133,7 +136,7 @@ export function sanitize(p: Partial<Profile> | undefined): Profile {
       .filter((b): b is { id: string; stock: number; last: number } => !!b && typeof b === 'object' && BIZ_SET.has((b as { id: string }).id))
       .map((b) => ({ id: b.id, stock: num(b.stock, 0, 1e7), last: num(b.last, 0, 1e13) }))
       .slice(0, 6),
-    crew: typeof crew.name === 'string' && crew.name.trim() ? { name: crew.name.replace(/[<>\u0000-\u001f]/g, '').slice(0, 12), color: Math.floor(num(crew.color, 0, 0xffffff, 0xffffff)) } : null,
+    crew: typeof crew.name === 'string' && crew.name.trim() ? { name: crew.name.replace(/[<>\u0000-\u001f]/g, '').slice(0, 12), color: Math.floor(num(crew.color, 0, 0xffffff, 0xffffff)), ...(typeof crew.id === 'string' ? { id: crew.id.slice(0, 32) } : {}) } : null,
     week,
     bank: Math.floor(num(p.bank, 0, 1e8)),
     fines: Math.floor(num(p.fines, 0, 5)),
@@ -141,10 +144,22 @@ export function sanitize(p: Partial<Profile> | undefined): Profile {
     respect: Math.floor(num(p.respect, 0, 1e7)),
     skills,
     jetpack: p.jetpack === true,
+    gear: cleanGear(p.gear),
     prologue: p.prologue === true,
     // players from before the tutorial existed already know the game
     tutorial: typeof p.tutorial === 'boolean' ? p.tutorial : (Array.isArray(p.missions) && p.missions.length > 0) || (Number(p.money) || 0) !== d.money,
   };
+}
+
+/** Known slots, rarity 0..3. */
+function cleanGear(v: unknown): Gear {
+  const out: Gear = {};
+  if (!v || typeof v !== 'object') return out;
+  for (const slot of GEAR_SLOTS) {
+    const r = (v as Record<string, unknown>)[slot];
+    if (r === 0 || r === 1 || r === 2 || r === 3) out[slot] = r;
+  }
+  return out;
 }
 
 const WEAPON_IDS = Object.keys(WEAPONS) as WeaponId[];

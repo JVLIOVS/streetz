@@ -1,3 +1,4 @@
+import { rollSlot, type Rarity } from '../data/gear';
 import { DT } from '../core/loop';
 import { MISSIONS, missionById, REPLAY_FACTOR, type MissionDef, type MissionStep, type MissionStepFull } from '../data/missions';
 import { RESPECT } from '../data/law';
@@ -310,7 +311,13 @@ export class MissionSystem {
     this.w.progress.addXp(p, rep);
     this.w.law.respect(p, RESPECT.mission);
     this.w.contracts.track(p, 'mission', 1);
-    if (!replay) s.missionsDone.push(run.def.id);
+    if (!replay) {
+      s.missionsDone.push(run.def.id);
+      // first time: a piece of clothing from the Family, better as you climb
+      const f = run.def.family ?? 1;
+      const g = { slot: rollSlot(() => this.w.rng.next()), r: (f >= 5 ? 3 : f >= 3 ? 2 : 1) as Rarity };
+      if (!this.w.equipGear(p, g)) this.w.dropGear(s.x + 0.6, s.y, s.z, g);
+    }
     if (run.def.auto) s.tutorialDone = true;
     this.cleanup(run);
     this.runs.delete(s.id);
@@ -492,6 +499,24 @@ export class MissionSystem {
         s.waypoint = null;
         if (s.wanted === 0) this.next(p);
         break;
+      case 'dress': {
+        // point at the closest clothes on the ground
+        let best: [number, number] | null = null;
+        let bd = 80;
+        for (const pk of this.w.pickups.values()) {
+          if (pk.kind !== 'gear' || pk.owner) continue;
+          const d = Math.hypot(pk.x - s.x, pk.z - s.z);
+          if (d < bd) {
+            bd = d;
+            best = [pk.x, pk.z];
+          }
+        }
+        s.waypoint = best;
+        const n = Object.keys(s.gear).length;
+        s.objective = `${step.text} (${Math.min(n, step.count)}/${step.count})`;
+        if (n >= step.count) this.next(p);
+        break;
+      }
       case 'wanted':
         s.waypoint = null;
         if (s.wanted >= step.stars) this.next(p);

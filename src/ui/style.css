@@ -1346,3 +1346,26 @@ body {
   color: #cfc8e8;
   text-align: center;
 }
+
+/* your stuff, under the health bar */
+#gear-strip {
+  display: flex;
+  justify-content: center;
+  gap: 2px;
+  margin-top: 3px;
+}
+#gear-strip span {
+  font-size: 11px;
+  line-height: 18px;
+  width: 20px;
+  height: 20px;
+  text-align: center;
+  border-radius: 6px;
+  border: 2px solid #b8b5c8;
+  background: rgba(27, 20, 48, 0.75);
+}
+#gear-strip span.empty {
+  opacity: 0.3;
+  border-color: transparent;
+  filter: grayscale(1);
+}

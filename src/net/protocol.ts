@@ -1,3 +1,4 @@
+import { GEAR_SLOTS, type Rarity } from '../data/gear';
 import type { ActionKind } from '../core/commands';
 import { VEHICLES, type VehicleType } from '../data/vehicles';
 import type { PedMode, PedRole, PedState, PedWeapon, Temper } from '../sim/peds';
@@ -118,6 +119,7 @@ export type NetPlayer = Pick<
   | 'searchZ'
   | 'searchR'
   | 'arrest'
+  | 'gear'
 >;
 
 /** Private fields only sent to their owner (inventory, contracts…). */
@@ -132,6 +134,7 @@ export function packPlayer(s: PlayerState, owner = true): NetPlayer {
 function packFull(s: PlayerState): NetPlayer {
   return {
     id: s.id,
+    gear: s.gear,
     x: q(s.x),
     y: q(s.y),
     z: q(s.z),
@@ -275,11 +278,14 @@ export function packVehicle(s: VehicleState, driverIndex: (d: string) => number)
 export const vehicleTypeOf = (a: number[]) => VEHICLE_TYPES[a[1]] ?? 'compact';
 
 export function packPickup(p: PickupState): number[] {
-  return [p.id, q(p.x), q(p.y), q(p.z), p.amount, p.kind === 'crate' ? 1 : p.kind === 'weapon' ? 2 : 0, p.weapon ? WEAPON_IDS.indexOf(p.weapon) : -1];
+  // the last field is the weapon index, or slot × 4 + rarity for clothes
+  const extra = p.gear ? GEAR_SLOTS.indexOf(p.gear.slot) * 4 + p.gear.r : p.weapon ? WEAPON_IDS.indexOf(p.weapon) : -1;
+  return [p.id, q(p.x), q(p.y), q(p.z), p.amount, p.kind === 'crate' ? 1 : p.kind === 'weapon' ? 2 : p.kind === 'gear' ? 3 : 0, extra];
 }
 
 export function unpackPickup(a: number[]): PickupState {
   const [id, x, y, z, amount, kind, w] = a;
+  if (kind === 3) return { id, x, y, z, amount, kind: 'gear', gear: { slot: GEAR_SLOTS[Math.floor(w / 4)] ?? 'top', r: (w % 4) as Rarity } };
   return { id, x, y, z, amount, kind: kind === 1 ? 'crate' : kind === 2 ? 'weapon' : 'money', weapon: WEAPON_IDS[w] };
 }
 

@@ -1,4 +1,9 @@
 import * as THREE from 'three';
+import { GEAR, RARITY } from '../data/gear';
+
+const MAX_GEAR = 48;
+const _col = new THREE.Color();
+const _col2 = new THREE.Color();
 import type { SimEvent, PickupState } from '../sim/world';
 import type { Vehicle } from '../sim/vehicle';
 
@@ -58,6 +63,8 @@ export class Effects {
   private crateGlow: THREE.InstancedMesh;
   private guns: THREE.InstancedMesh;
   private gunGlow: THREE.InstancedMesh;
+  private clothes: THREE.InstancedMesh;
+  private clothesGlow: THREE.InstancedMesh;
   private time = 0;
 
   constructor() {
@@ -104,6 +111,19 @@ export class Effects {
     this.gunGlow.frustumCulled = false;
     this.gunGlow.count = 0;
     this.root.add(this.guns, this.gunGlow);
+    // clothes on the ground: a folded piece + a short beam in the rarity's color
+    this.clothes = new THREE.InstancedMesh(new THREE.BoxGeometry(0.55, 0.14, 0.45), new THREE.MeshBasicMaterial({ color: 0xffffff }), MAX_GEAR);
+    this.clothesGlow = new THREE.InstancedMesh(
+      new THREE.CylinderGeometry(0.45, 0.45, 2.2, 10, 1, true).translate(0, 1.1, 0),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.32, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }),
+      MAX_GEAR,
+    );
+    for (const m of [this.clothes, this.clothesGlow]) {
+      m.frustumCulled = false;
+      m.count = 0;
+      m.setColorAt(0, _col.setHex(0xffffff));
+    }
+    this.root.add(this.clothes, this.clothesGlow);
 
     this.root.add(this.puffMesh, tracers, this.money);
     // blood pools: flat dark-red discs that spread under knocked-out people
@@ -279,7 +299,19 @@ export class Effects {
     let m = 0;
     let c = 0;
     let gn = 0;
+    let cl = 0;
     for (const pk of pickups.values()) {
+      if (pk.kind === 'gear' && pk.gear) {
+        if (cl >= MAX_GEAR) continue;
+        _q.setFromAxisAngle(_p.set(0, 1, 0), this.time * 1.2 + pk.id);
+        _m.compose(_p.set(pk.x, pk.y + 0.35 + Math.sin(this.time * 2.5 + pk.id) * 0.08, pk.z), _q, _s.setScalar(1));
+        this.clothes.setMatrixAt(cl, _m);
+        this.clothes.setColorAt(cl, _col.setHex(GEAR[pk.gear.slot].color).lerp(_col2.setHex(RARITY[pk.gear.r].hex), 0.35));
+        _m.compose(_p.set(pk.x, pk.y, pk.z), _q.identity(), _s.set(1, 0.6 + pk.gear.r * 0.35, 1));
+        this.clothesGlow.setMatrixAt(cl, _m);
+        this.clothesGlow.setColorAt(cl++, _col.setHex(RARITY[pk.gear.r].hex));
+        continue;
+      }
       if (pk.kind === 'weapon') {
         if (gn >= 16) continue;
         _q.setFromAxisAngle(_p.set(0, 1, 0), this.time * 2 + pk.id);
@@ -298,12 +330,18 @@ export class Effects {
         this.crateGlow.setMatrixAt(c++, _m);
         continue;
       }
-      if (m >= 64) break;
+      if (m >= 64) continue;
       _q.setFromAxisAngle(_p.set(0, 1, 0), this.time * 3 + pk.id);
       _m.compose(_p.set(pk.x, pk.y + 0.5 + Math.sin(this.time * 4 + pk.id) * 0.12, pk.z), _q, _s.setScalar(1));
       this.money.setMatrixAt(m++, _m);
     }
     this.money.count = m;
+    this.clothes.count = cl;
+    this.clothesGlow.count = cl;
+    this.clothes.instanceMatrix.needsUpdate = true;
+    this.clothesGlow.instanceMatrix.needsUpdate = true;
+    if (this.clothes.instanceColor) this.clothes.instanceColor.needsUpdate = true;
+    if (this.clothesGlow.instanceColor) this.clothesGlow.instanceColor.needsUpdate = true;
     this.guns.count = gn;
     this.gunGlow.count = gn;
     this.guns.instanceMatrix.needsUpdate = true;

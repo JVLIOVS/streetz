@@ -1,5 +1,6 @@
 import type { ActionKind } from '../core/commands';
 import { CLOTHES, GARAGE_SLOTS, JETPACK_PRICE, VEHICLE_OFFERS } from '../data/shop';
+import { GEAR, GEAR_PRICES, GEAR_SLOTS, gearLabel, gearStat } from '../data/gear';
 import { VEHICLES } from '../data/vehicles';
 import { ARMOR_PRICE, WEAPON_ORDER, WEAPONS } from '../data/weapons';
 import type { PlayerState } from '../sim/player';
@@ -74,7 +75,7 @@ export class MenuPanel {
       this.close();
       return;
     }
-    const key = JSON.stringify([this.kind === 'business' ? Math.floor(Date.now() / 3000) : 0, s.jetpack, s.bank, s.biz, s.rep, s.money, s.weapons, s.ammo, s.armor, s.clothes, s.outfit, s.garage]);
+    const key = JSON.stringify([this.kind === 'business' ? Math.floor(Date.now() / 3000) : 0, s.jetpack, s.bank, s.biz, s.rep, s.money, s.weapons, s.ammo, s.armor, s.clothes, s.outfit, s.garage, s.gear]);
     if (key === this.lastKey) return;
     this.lastKey = key;
     const { title, rows } = this.rows(this.kind, s);
@@ -128,10 +129,21 @@ export class MenuPanel {
       case 'clothes':
         return {
           title: 'Boutique Swagg',
-          rows: CLOTHES.filter((c) => c.price > 0).map((c) => {
-            const owned = s.clothes.includes(c.id);
-            return { label: c.name, sub: owned ? 'À toi : touche pour porter' : slotName(c.slot), button: owned ? 'Porter' : euro(c.price), disabled: !owned && s.money + s.bank < c.price, on: owned, action: { action: 'buy', arg: `cloth:${c.id}` } };
-          }),
+          rows: [
+            // basics (common gear): get dressed fast, protection included
+            ...GEAR_SLOTS.filter((g) => g !== 'vest').map((slot): Row => {
+              const worn = s.gear[slot];
+              const item = { slot, r: 0 as const };
+              return worn !== undefined
+                ? { label: `${GEAR[slot].icon} ${gearLabel({ slot, r: worn }).slice(GEAR[slot].icon.length + 1)}`, sub: `Tu le portes · ${gearStat({ slot, r: worn })}`, button: '✓', disabled: true, on: true }
+                : { label: `${GEAR[slot].icon} ${gearLabel(item).slice(GEAR[slot].icon.length + 1)}`, sub: gearStat(item), button: euro(GEAR_PRICES[slot]), disabled: s.money + s.bank < GEAR_PRICES[slot], action: { action: 'buy', arg: `gear:${slot}` } };
+            }),
+            // styles (cosmetic): colors and cuts of what you wear
+            ...CLOTHES.filter((c) => c.price > 0).map((c): Row => {
+              const owned = s.clothes.includes(c.id);
+              return { label: c.name, sub: owned ? 'Style à toi : touche pour porter' : `Style · ${slotName(c.slot)}`, button: owned ? 'Porter' : euro(c.price), disabled: !owned && s.money + s.bank < c.price, on: owned, action: { action: 'buy', arg: `cloth:${c.id}` } };
+            }),
+          ],
         };
       case 'dealer':
         return {
