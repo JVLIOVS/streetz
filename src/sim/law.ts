@@ -142,7 +142,7 @@ export class LawSystem {
   /** Hands up: prison, but you keep your stuff. */
   surrender(p: Player) {
     if (!p.state.canSurrender || p.state.wanted <= 0) return;
-    this.w.arrest(p);
+    this.w.arrest(p, 'surrender');
   }
 
   private nearestCop(x: number, z: number, r: number): Ped | null {
@@ -289,10 +289,24 @@ export class LawSystem {
     return ped;
   }
 
-  /** Prison (you surrendered): bail paid if you can, one more fiche, but you keep your stuff. */
-  jail(p: Player) {
+  /**
+   * Custody. `surrender`: bail, one more fiche, you keep your stuff. `arrested` (cuffed by
+   * the officers): double bail and your firearms are confiscated. `ko` (knocked out by the
+   * police): what you carried already fell where you dropped.
+   */
+  jail(p: Player, how: 'surrender' | 'arrested' | 'ko' = 'surrender', wanted = p.state.wanted) {
     const s = p.state;
-    const bail = Math.round(BAIL_PER_STAR * Math.max(1, s.wanted) * this.w.family.lawyer(p));
+    const bail = Math.round(BAIL_PER_STAR * Math.max(1, wanted) * (how === 'surrender' ? 1 : 2) * this.w.family.lawyer(p));
+    const lost: string[] = [];
+    if (how === 'arrested') {
+      for (const w of [...s.weapons]) {
+        if (w === 'fist' || WEAPONS[w].melee) continue;
+        s.weapons = s.weapons.filter((x) => x !== w);
+        s.ammo[w] = 0;
+        lost.push(WEAPONS[w].name);
+      }
+      if (!s.weapons.includes(s.weapon)) s.weapon = 'fist';
+    }
     const paid = this.pay(p, bail) ? bail : 0;
     s.fines++;
     s.fine = 0;
@@ -300,7 +314,7 @@ export class LawSystem {
     this.endStop(p);
     this.notoriety(p, NOTORIETY.arrest);
     this.respect(p, RESPECT.arrested);
-    this.w.events.push({ type: 'jail', playerId: s.id, seized: paid, lost: [] });
+    this.w.events.push({ type: 'jail', playerId: s.id, seized: paid, lost });
     return paid;
   }
 

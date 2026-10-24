@@ -1274,10 +1274,17 @@ body {
   background: #d63031;
 }
 #btn-surrender {
+  /* top right, under the cash: far from the joystick (the thumb used to press it by accident) */
   position: absolute;
-  left: calc(14px + var(--safe-l));
-  bottom: calc(150px + var(--safe-b));
-  background: rgba(255, 255, 255, 0.18);
+  right: calc(14px + var(--safe-r));
+  top: calc(env(safe-area-inset-top, 0px) + 150px);
+  padding: 7px 12px;
+  font-size: 13px;
+  background: rgba(27, 20, 48, 0.75);
+}
+#btn-surrender.confirm {
+  background: #d63031;
+  animation: awaken-pulse 0.8s ease-in-out infinite;
 }
 
 /* La Famille: rank badge and ladder */

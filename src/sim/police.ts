@@ -49,6 +49,9 @@ const UNIT_HEALTH: Record<Exclude<PedRole, 'civ'>, number> = { cop: 110, swat: 1
  * according to each wanted player's stars, runs their AI, and handles losing the cops
  * (leave the search zone and stay unseen) or getting arrested.
  */
+/** Seconds an officer must hold you (you not running) to cuff you. */
+const ARREST_TIME = 2.5;
+
 export class PoliceSystem {
   readonly helis = new Map<number, Heli>();
   /** Tick when the next unit may arrive, per wanted player. */
@@ -180,6 +183,23 @@ export class PoliceSystem {
     return s.wanted >= 4 || s.resist > 0 || s.fines >= MAX_FICHES;
   }
 
+  private copNextTo(x: number, z: number) {
+    for (const ped of this.w.peds.values()) {
+      if (ped.state.role === 'civ' || !ped.alive || this.w.law.isStopCop(ped)) continue;
+      if (Math.abs(ped.state.y - this.w.groundY(x, z)) < 2 && Math.hypot(ped.state.x - x, ped.state.z - z) < 1.8) return true;
+    }
+    return false;
+  }
+
+  /** Is the police after this player (officers or cars around)? */
+  chasing(p: Player) {
+    const s = p.state;
+    for (const ped of this.w.peds.values()) if (ped.state.role !== 'civ' && ped.alive && Math.hypot(ped.state.x - s.x, ped.state.z - s.z) < 60) return true;
+    for (const v of this.w.vehicles.values()) if (v.police && Math.hypot(v.state.x - s.x, v.state.z - s.z) < 80) return true;
+    for (const h of this.helis.values()) if (Math.hypot(h.state.x - s.x, h.state.z - s.z) < 120) return true;
+    return false;
+  }
+
   /** A crime was reported at (x, z): the search restarts from there. */
   reported(p: Player, x: number, z: number) {
     const s = p.state;
@@ -229,8 +249,14 @@ export class PoliceSystem {
         if (s.wanted === 0) this.w.clearWanted(p, 'La police a abandonné les recherches');
       }
     }
-    // no automatic arrest any more: the officers offer a deal (LawSystem) or you surrender
-    s.arrest = 0;
+    // cuffed: an officer on foot right next to you while you don't run away (and no deal
+    // on the table) fills the arrest bar; full = custody. Run, drive off or fight back.
+    const cop = s.fine <= 0 && s.vehicle < 0 && !s.interior && s.speed < 2.5 && this.copNextTo(s.x, s.z);
+    s.arrest = cop ? s.arrest + DT / ARREST_TIME : Math.max(0, s.arrest - DT * 0.8);
+    if (s.arrest >= 1) {
+      s.arrest = 0;
+      this.w.arrest(p, 'arrested');
+    }
   }
 
   // ------------------------------------------------------------------ dispatch

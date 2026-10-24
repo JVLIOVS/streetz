@@ -72,7 +72,7 @@ export interface WorldSnapshot {
 }
 
 export type SimEvent =
-  | { type: 'respawn'; playerId: string; reason: 'drowned' | 'hospital' }
+  | { type: 'respawn'; playerId: string; reason: 'drowned' | 'hospital' | 'police' }
   /** `w`: weapon fired (sound); 'pellet' = extra shotgun tracers, silent. */
   | { type: 'shot'; fx: number; fy: number; fz: number; tx: number; ty: number; tz: number; hit: boolean; w?: string }
   | { type: 'punch'; x: number; y: number; z: number }
@@ -623,7 +623,7 @@ export class SimWorld {
       }
       if (s.dead) {
         p.respawnTimer -= DT;
-        if (p.respawnTimer <= 0) this.respawnAtHospital(p);
+        if (p.respawnTimer <= 0) this.respawn(p);
         return;
       }
       if (p.pendingHit > 0 && --p.pendingHit === 0) this.resolveMelee(p);
@@ -633,7 +633,7 @@ export class SimWorld {
     if (s.dead) {
       p.respawnTimer -= DT;
       s.anim = 'ko';
-      if (p.respawnTimer <= 0) this.respawnAtHospital(p);
+      if (p.respawnTimer <= 0) this.respawn(p);
       return;
     }
     if (s.vehicle >= 0) {
@@ -928,11 +928,12 @@ export class SimWorld {
     if (message) this.toast(p, message);
   }
 
-  /** Busted: taken to the police station, fined, firearms confiscated. */
-  arrest(p: Player) {
+  /** Custody: you surrendered, the officers cuffed you, or they knocked you out. */
+  arrest(p: Player, how: 'surrender' | 'arrested' | 'ko' = 'surrender') {
     const s = p.state;
     if (s.vehicle >= 0) this.leaveVehicle(p);
-    const fine = this.law.jail(p);
+    const wanted = s.wanted || p.custodyWanted;
+    const fine = this.law.jail(p, how, wanted);
     this.clearWanted(p);
     s.robbery = -1;
     p.robberyTarget = null;
@@ -946,7 +947,15 @@ export class SimWorld {
     this.progress.breakCombo(p);
     if (this.heist.isMember(p)) this.heist.leave(p, 'Arrêté : ta part du butin est saisie');
     else if (s.mission) this.missions.abort(p, 'Mission échouée : arrêté');
-    this.toast(p, `Tu t’es rendu : une nuit au poste${fine ? `, caution -${fine.toLocaleString('fr-FR')} €` : ''}. Tu gardes ton stuff.`);
+    const bail = fine ? `, caution -${fine.toLocaleString('fr-FR')} €` : '';
+    this.toast(
+      p,
+      how === 'surrender'
+        ? `Tu t’es rendu : une nuit au poste${bail}. Tu gardes ton stuff.`
+        : how === 'arrested'
+          ? `Menotté ! Garde à vue${bail}, armes à feu confisquées.`
+          : `Mis K.O. par la police : réveil en garde à vue${bail}. Ton stuff est resté là où tu es tombé.`,
+    );
   }
 
   // ------------------------------------------------------------------ actions
@@ -1845,12 +1854,26 @@ export class SimWorld {
       s.health = 0;
       s.dead = true;
       p.respawnTimer = 3.5;
+      // knocked out by the police while wanted (not by a player): you wake up in custody
+      p.custodyWanted = !by && s.wanted > 0 && this.police.chasing(p) ? s.wanted : 0;
       if (s.vehicle >= 0) this.leaveVehicle(p);
       this.law.onDeath(p, by && by !== p ? by : undefined);
       this.missions.onDeath(p);
       this.toast(p, by && by !== p ? `K.O. par ${by.state.name} !` : 'K.O. !');
       if (by && by !== p) this.social.onPlayerKo(p, by);
     }
+  }
+
+  private respawn(p: Player) {
+    if (!p.custodyWanted) return this.respawnAtHospital(p);
+    const s = p.state;
+    s.health = 100;
+    s.dead = false;
+    s.interior = null;
+    s.weapon = 'fist';
+    this.events.push({ type: 'respawn', playerId: s.id, reason: 'police' });
+    this.arrest(p, 'ko');
+    p.custodyWanted = 0;
   }
 
   private respawnAtHospital(p: Player) {

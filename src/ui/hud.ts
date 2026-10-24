@@ -80,7 +80,29 @@ export class Hud {
       });
     police('btn-pay', 'pay');
     police('btn-refuse', 'refuse');
-    police('btn-surrender', 'surrender');
+    // surrendering takes two taps: the first one asks to confirm (3 s)
+    const sur = $('btn-surrender');
+    let armed = 0;
+    sur.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (performance.now() < armed) {
+        armed = 0;
+        sur.classList.remove('confirm');
+        sur.textContent = '🏳 SE RENDRE';
+        this.onPolice?.('surrender');
+        return;
+      }
+      armed = performance.now() + 3000;
+      sur.classList.add('confirm');
+      sur.textContent = '🏳 Sûr ? Retouche';
+      setTimeout(() => {
+        if (performance.now() >= armed) {
+          sur.classList.remove('confirm');
+          sur.textContent = '🏳 SE RENDRE';
+        }
+      }, 3100);
+    });
     $('deal').addEventListener('pointerdown', (e) => e.stopPropagation());
     this.panel.addEventListener('pointerdown', (e) => {
       e.stopPropagation();

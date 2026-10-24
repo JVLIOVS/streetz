@@ -522,7 +522,7 @@ async function launch(map: MapData, assets: GameAssets, quality: QualityLevel, s
   $('btn-bug').addEventListener('click', () => {
     const me = sim.players.get(localId)?.state;
     const report = [
-      `STREETZ test 14 · build ${__BUILD__} · ${new Date().toISOString()}`,
+      `STREETZ test 15 · build ${__BUILD__} · ${new Date().toISOString()}`,
       `${navigator.userAgent}`,
       `écran ${innerWidth}×${innerHeight} @${devicePixelRatio} · qualité ${quality} · ${Math.round(game.fps)} FPS · mode ${mode.kind}`,
       me ? `position ${me.x.toFixed(0)}, ${me.z.toFixed(0)} · intérieur ${me.interior ?? '-'} · mission ${me.mission ?? '-'} étape ${me.missionStep} · ★${me.wanted}` : '',

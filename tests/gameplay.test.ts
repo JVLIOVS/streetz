@@ -1759,3 +1759,85 @@ describe('crew jobs and open jobs', () => {
     expect(a.state.mission).toBeNull();
   });
 });
+
+describe('custody only when arrested, knocked out by the police, or surrendering', () => {
+  const station = () => map.interiors.find((i) => i.kind === 'police')!;
+  const nearStation = (s: { x: number; z: number }) => Math.hypot(s.x - station().door.x, s.z - station().door.z) < 6;
+
+  it('lots of crimes alone never send you to custody', async () => {
+    const w = await world();
+    w.density = { peds: 0, traffic: 0, parkedRadius: 0 };
+    run(w, 30);
+    const p = w.players.get('p1')!;
+    const s = P(w);
+    s.tutorialDone = true;
+    s.wanted = 5;
+    s.fines = 3;
+    w.drainEvents();
+    run(w, 60 * 8);
+    expect(w.drainEvents().some((e) => e.type === 'jail')).toBe(false);
+    void p;
+  });
+
+  it('an officer holding you while you stand still cuffs you: custody, firearms confiscated', async () => {
+    const w = await world();
+    w.density = { peds: 0, traffic: 0, parkedRadius: 0 };
+    run(w, 30);
+    const s = P(w);
+    s.tutorialDone = true;
+    arm(w);
+    s.weapon = 'fist';
+    s.wanted = 2;
+    s.refused = true;
+    const cop = w.spawnPed(s.x + 1, s.z, { mode: 'police' });
+    cop.state.role = 'cop';
+    cop.police = { target: 'p1', cooldown: 1, leaving: false };
+    w.drainEvents();
+    for (let i = 0; i < 60 * 4 && !w.drainEvents().some((e) => e.type === 'jail'); i++) {
+      cop.state.x = s.x + 1;
+      cop.state.z = s.z;
+      s.fine = 0;
+      run(w, 1);
+    }
+    expect(s.wanted).toBe(0);
+    expect(nearStation(s)).toBe(true);
+    expect(s.weapons).not.toContain('pistol');
+  });
+
+  it('knocked out by the police while wanted: you wake up in custody, not at the hospital', async () => {
+    const w = await world();
+    w.density = { peds: 0, traffic: 0, parkedRadius: 0 };
+    run(w, 30);
+    const p = w.players.get('p1')!;
+    const s = P(w);
+    s.tutorialDone = true;
+    s.wanted = 4;
+    const cop = w.spawnPed(s.x + 10, s.z, { mode: 'police' });
+    cop.state.role = 'cop';
+    cop.police = { target: 'p1', cooldown: 1, leaving: false };
+    w.damagePlayer(p, 999);
+    expect(s.dead).toBe(true);
+    run(w, 60 * 4);
+    expect(s.dead).toBe(false);
+    expect(nearStation(s)).toBe(true);
+    expect(s.wanted).toBe(0);
+  });
+
+  it('surrendering keeps your stuff', async () => {
+    const w = await world();
+    w.density = { peds: 0, traffic: 0, parkedRadius: 0 };
+    run(w, 30);
+    const s = P(w);
+    s.tutorialDone = true;
+    arm(w);
+    s.wanted = 2;
+    const cop = w.spawnPed(s.x + 8, s.z, { mode: 'police' });
+    cop.state.role = 'cop';
+    cop.police = { target: 'p1', cooldown: 1, leaving: false };
+    run(w, 2);
+    expect(s.canSurrender).toBe(true);
+    run(w, 1, (t) => [act(t, 'surrender')]);
+    expect(nearStation(s)).toBe(true);
+    expect(s.weapons).toContain('pistol');
+  });
+});

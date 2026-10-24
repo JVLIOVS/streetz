@@ -199,6 +199,8 @@ export const PLAYER_TUNING = {
 export class Player {
   /** Dash (evolution): time left, cooldown, direction; last sprint state (rising edge). */
   dashTime = 0;
+  /** Knocked out by the police while wanted (stars at that moment): the respawn is in custody. */
+  custodyWanted = 0;
   dashCooldown = 0;
   private dashX = 0;
   private dashZ = 0;
