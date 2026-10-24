@@ -1523,3 +1523,47 @@ body {
   opacity: 1;
   transform: translate(-50%, -50%) scale(1);
 }
+
+/* open job invitation */
+#op-invite {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 110px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 60vw;
+  padding: 6px 6px 6px 14px;
+  border-radius: 999px;
+  background: rgba(27, 20, 48, 0.9);
+  border: 2px solid #5ee86a;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  pointer-events: auto;
+}
+#op-invite button {
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 12px;
+  background: #5ee86a;
+  color: #1b1430;
+  font-weight: 900;
+}
+#crew-box .ops {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+#crew-box .ops .op {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: space-between;
+  font-size: 13px;
+}
+#crew-box .ops .op button {
+  font-size: 11px;
+  padding: 5px 8px;
+}

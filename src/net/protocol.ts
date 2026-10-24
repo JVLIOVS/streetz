@@ -126,10 +126,11 @@ export type NetPlayer = Pick<
   | 'awakenCharge'
   | 'awakenCooldown'
   | 'powerCooldown'
+  | 'opInvite'
 >;
 
 /** Private fields only sent to their owner (inventory, contracts…). */
-const PRIVATE: (keyof NetPlayer)[] = ['base', 'locker', 'ammo', 'weapons', 'clothes', 'garage', 'homes', 'missionsDone', 'contracts', 'biz', 'week', 'bank', 'skills', 'fines', 'context', 'searchX', 'searchZ', 'searchR', 'waypoint', 'missionTargets', 'objective'];
+const PRIVATE: (keyof NetPlayer)[] = ['opInvite', 'base', 'locker', 'ammo', 'weapons', 'clothes', 'garage', 'homes', 'missionsDone', 'contracts', 'biz', 'week', 'bank', 'skills', 'fines', 'context', 'searchX', 'searchZ', 'searchR', 'waypoint', 'missionTargets', 'objective'];
 
 export function packPlayer(s: PlayerState, owner = true): NetPlayer {
   const n = packFull(s);
@@ -147,6 +148,7 @@ function packFull(s: PlayerState): NetPlayer {
     awakenCharge: q(s.awakenCharge),
     awakenCooldown: Math.ceil(s.awakenCooldown),
     powerCooldown: q(s.powerCooldown),
+    opInvite: s.opInvite,
     x: q(s.x),
     y: q(s.y),
     z: q(s.z),

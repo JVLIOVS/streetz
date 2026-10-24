@@ -24,6 +24,7 @@ import { RoofSystem } from './roofs';
 import { FamilySystem } from './family';
 import { BaseSystem } from './base';
 import { PowerSystem } from './powers';
+import { OpsSystem } from './ops';
 import { RESPECT } from '../data/law';
 import { REPAINT_PRICE } from '../data/police';
 import { levelOf, requiredLevel } from '../data/progression';
@@ -186,6 +187,7 @@ export class SimWorld {
   readonly family: FamilySystem;
   readonly base: BaseSystem;
   readonly powers: PowerSystem;
+  readonly ops: OpsSystem;
   /** Local calendar day number (set by the game from the clock; 0 = unknown). */
   day = 0;
   /** Wall-clock time in seconds (set by the game; used by hideout businesses). */
@@ -223,6 +225,7 @@ export class SimWorld {
     this.family = new FamilySystem(this);
     this.base = new BaseSystem(this);
     this.powers = new PowerSystem(this);
+    this.ops = new OpsSystem(this);
     this.props = new PropField(map.props);
     this.buildProps();
     if (role === 'authority') {
@@ -261,6 +264,7 @@ export class SimWorld {
     this.missions.drop(id);
     this.family.drop(id);
     this.base.drop(id);
+    this.ops.drop(id);
     this.progress.drop(id);
     this.social.drop(id);
     this.law.drop(id);
@@ -481,6 +485,7 @@ export class SimWorld {
     this.roofs.update();
     this.family.update();
     this.powers.update();
+    this.ops.update();
     if (this.tick % 20 === 0) this.managePopulation();
     for (const p of this.players.values()) p.state.context = this.computeContext(p);
     this.physics.step();
@@ -992,6 +997,9 @@ export class SimWorld {
       case 'guards':
         this.family.toggleGuards(p);
         break;
+      case 'op':
+        if (arg) this.ops.command(p, arg);
+        break;
       case 'awaken':
         this.powers.awaken(p);
         break;
@@ -1016,6 +1024,7 @@ export class SimWorld {
       case 'mission':
         if (arg === 'abort') {
           if (this.heist.isMember(p)) this.heist.leave(p);
+          else if (this.ops.memberOf(p)) this.ops.leave(p);
           else this.missions.abort(p);
         }
         else if (arg) this.missions.start(p, arg);
@@ -1446,6 +1455,7 @@ export class SimWorld {
       this.crime(p, def.kind === 'shop' ? 'robbery_shop' : 'robbery_big', s.x, s.z, null, true);
       this.toast(p, `Butin : +${amount.toLocaleString('fr-FR')} € — file !`);
       this.missions.onRobbery(p, def.id);
+      this.ops.onRobbery(p);
       this.progress.onRobbery(p, def.kind === 'shop');
     }
   }

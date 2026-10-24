@@ -158,6 +158,8 @@ export interface PlayerState {
   awakenCooldown: number;
   /** Energy blast cooldown (s). */
   powerCooldown: number;
+  /** An open job somebody launched: shown with a « Rejoindre » button until `until` (tick). */
+  opInvite: { id: number; text: string; until: number } | null;
   /** Your hideout as you built it (src/data/base.ts) and the stuff in your locker. */
   base: Placed[];
   locker: GearItem[];
@@ -310,6 +312,7 @@ export class Player {
       awakenCharge: 0,
       awakenCooldown: 0,
       powerCooldown: 0,
+      opInvite: null,
       base: STARTER_BASE.map((q) => ({ ...q })),
       locker: [],
       fuel: 1,

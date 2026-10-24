@@ -1692,3 +1692,70 @@ describe('evolution (awakening)', () => {
     expect(s.awakenCharge).toBe(0);
   });
 });
+
+describe('crew jobs and open jobs', () => {
+  async function two() {
+    const w = await SimWorld.create(map);
+    w.density = { peds: 0, traffic: 0, parkedRadius: 0 };
+    const a = w.addPlayer('a');
+    const b = w.addPlayer('b');
+    const c = w.addPlayer('c');
+    for (const p of [a, b, c]) {
+      p.state.tutorialDone = true;
+      p.state.rep = 5000;
+    }
+    for (let i = 0; i < 3; i++) w.step([]);
+    return { w, a, b, c };
+  }
+  const cmd = (w: SimWorld, id: string, arg: string) => w.step([{ type: 'action', playerId: id, tick: w.tick, action: 'op', arg }]);
+
+  it('any member launches a crew job: the whole crew is in, outsiders are not; all members get paid', async () => {
+    const { w, a, b, c } = await two();
+    a.state.crew = { name: 'LOUPS', color: 1, id: 'x-1' };
+    b.state.crew = { name: 'LOUPS', color: 1, id: 'x-1' };
+    // b (not the founder) launches
+    cmd(w, 'b', 'start:rue:crew');
+    expect(a.state.mission).toMatch(/^op:/);
+    expect(b.state.mission).toMatch(/^op:/);
+    expect(c.state.mission).toBeNull();
+    expect(c.state.opInvite).toBeNull();
+    const id = Number(a.state.mission!.slice(3));
+    cmd(w, 'c', `join:${id}`);
+    expect(c.state.mission).toBeNull();
+    // knock the whole gang out
+    w.step([]);
+    const ma = a.state.money;
+    const mb = b.state.money;
+    for (const t of a.state.missionTargets) {
+      const ped = w.peds.get(t)!;
+      ped.state.health = 1;
+      w.damagePed(ped, 10, a, ped.state.x, ped.state.z);
+    }
+    w.step([]);
+    w.step([]);
+    expect(a.state.mission).toBeNull();
+    expect(a.state.money).toBeGreaterThan(ma + 1000);
+    expect(b.state.money).toBeGreaterThan(mb + 1000);
+  });
+
+  it('an open job invites everybody; joining shares the objective; leaving works', async () => {
+    const { w, a, b, c } = await two();
+    cmd(w, 'a', 'start:convoi:open');
+    expect(a.state.mission).toMatch(/^op:/);
+    expect(b.state.opInvite).not.toBeNull();
+    expect(c.state.opInvite).not.toBeNull();
+    cmd(w, 'b', `join:${b.state.opInvite!.id}`);
+    w.step([]);
+    expect(b.state.mission).toBe(a.state.mission);
+    expect(b.state.missionTargets).toEqual(a.state.missionTargets);
+    const van = w.vehicles.get(a.state.missionTargets[0])!;
+    expect(van.state.type).toBe('offroad');
+    w.step([{ type: 'action', playerId: 'b', tick: w.tick, action: 'mission', arg: 'abort' }]);
+    expect(b.state.mission).toBeNull();
+    expect(a.state.mission).toMatch(/^op:/);
+    van.state.health = 0;
+    w.step([]);
+    w.step([]);
+    expect(a.state.mission).toBeNull();
+  });
+});

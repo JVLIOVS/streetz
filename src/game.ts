@@ -348,6 +348,12 @@ export class Game {
   private slowmo = 0;
   /** Sends an action from a menu (pause screen, panels) with the next tick. */
   private powerKey = '';
+  private inviteKey = '';
+  /** « Rejoindre » on an open job invitation. */
+  joinInvite() {
+    const inv = this.player.opInvite;
+    if (inv) this.sendAction('op', `join:${inv.id}`);
+  }
   /** ⚡ Éveil when unlocked and ready (grey while recharging), 🔵 energy while awakened. */
   private updatePowerButtons(me: PlayerState) {
     const st = STAGES[stageOf(levelOf(me.rep))];
@@ -512,6 +518,18 @@ export class Game {
     this.menu.update(me);
     this.build.update(me);
     this.updatePowerButtons(me);
+    // open job invitation
+    const inv = me.opInvite;
+    const ik = inv ? `${inv.id}|${inv.text}` : '';
+    if (ik !== this.inviteKey) {
+      this.inviteKey = ik;
+      const el = document.getElementById('op-invite')!;
+      el.classList.toggle('hidden', !inv);
+      if (inv) {
+        el.querySelector('span')!.textContent = inv.text;
+        this.sound.alert();
+      }
+    }
     this.updateTargetBar(me.lastHit, me.lastHitTick);
     if (this.sim.players.size > 1) this.updateNameTags(me);
     this.hudTimer -= dt;

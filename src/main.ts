@@ -1,6 +1,7 @@
 import './ui/style.css';
 import { Sound } from './audio/sound';
 import { loadSave, writeSave } from './core/save';
+import { OPS, OP_LEVEL } from './data/ops';
 import { applyProfile, profileOf } from './sim/player';
 import { Game, LOCAL_PLAYER, type NetSession } from './game';
 import { Controls } from './input/controls';
@@ -385,6 +386,35 @@ async function launch(map: MapData, assets: GameAssets, quality: QualityLevel, s
   markQuality();
   // crew: found one (name + price) or leave it, from the pause menu
   const crewBox = $('crew-box');
+  tap(document.querySelector('#op-invite button') as HTMLElement, () => game.joinInvite());
+  /** Launch a job: for your crew, or open to everybody in the game. */
+  const opsBox = () => {
+    const box = document.createElement('div');
+    box.className = 'ops';
+    const title = document.createElement('b');
+    title.textContent = `Missions à lancer (niv. ${OP_LEVEL}+) : ton crew les reçoit, ou ouvertes à tous`;
+    box.appendChild(title);
+    for (const o of OPS) {
+      const row = document.createElement('div');
+      row.className = 'op';
+      const label = document.createElement('span');
+      label.textContent = `${o.icon} ${o.name} · ${o.reward.toLocaleString('fr-FR')} €`;
+      row.appendChild(label);
+      const btns = document.createElement('span');
+      for (const mode of game.player.crew ? (['crew', 'open'] as const) : (['open'] as const)) {
+        const b = document.createElement('button');
+        b.textContent = mode === 'crew' ? '👥 Crew' : '🌍 Ouverte';
+        b.addEventListener('click', () => {
+          game.sendAction('op', `start:${o.kind}:${mode}`);
+          $('btn-resume').click();
+        });
+        btns.appendChild(b);
+      }
+      row.appendChild(btns);
+      box.appendChild(row);
+    }
+    return box;
+  };
   const renderCrew = () => {
     const c = game.player.crew;
     crewBox.innerHTML = '';
@@ -414,6 +444,7 @@ async function launch(map: MapData, assets: GameAssets, quality: QualityLevel, s
       });
       crewBox.append(input, make);
     }
+    crewBox.appendChild(opsBox());
   };
   tap($('btn-pause'), () => {
     renderCrew();
