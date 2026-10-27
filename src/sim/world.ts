@@ -2266,8 +2266,10 @@ export class SimWorld {
 function driveInput(inp: MoveCommand | null, fly?: boolean): import('./vehicle').DriveInput {
   if (!inp) return { throttle: 0, steer: 0, handbrake: false };
   if (fly) return { throttle: 0, steer: inp.x, handbrake: false, lift: inp.throttle, fwd: inp.y };
-  const stickThrottle = Math.abs(inp.y) > 0.4 ? Math.sign(inp.y) : 0;
-  return { throttle: inp.throttle || stickThrottle, steer: inp.x, handbrake: !!inp.handbrake };
+  const stickThrottle = Math.abs(inp.y) > 0.55 ? Math.sign(inp.y) : 0;
+  // finer control around the center: small thumb moves = small corrections
+  const x = Math.abs(inp.x) < 0.12 ? 0 : Math.sign(inp.x) * Math.pow((Math.abs(inp.x) - 0.12) / 0.88, 1.5);
+  return { throttle: inp.throttle || stickThrottle, steer: x, handbrake: !!inp.handbrake };
 }
 
 function structuredCloneState(s: PlayerState): PlayerState {

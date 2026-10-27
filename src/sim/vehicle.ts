@@ -208,12 +208,13 @@ export class Vehicle {
         s.braking = true;
       }
       // Steering: softer at high speed, sharper with the handbrake (drift)
-      const target = inp.steer * sp.steer / (1 + Math.abs(vf) / (sp.twoWheels ? 14 : 22));
+      const target = inp.steer * sp.steer / (1 + Math.abs(vf) / (sp.twoWheels ? 14 : 18));
       s.steer += (target - s.steer) * (1 - Math.exp(-(sp.steerRate ?? 10) * DT));
       let yawRate = (vf * Math.tan(s.steer)) / sp.wheelbase;
       if (inp.handbrake) yawRate *= 1.35;
       s.yaw -= yawRate * DT;
-      const grip = inp.handbrake ? 1.4 : sp.grip;
+      // more grip than before: the car goes where it points unless you drift on purpose
+      const grip = inp.handbrake ? 1.4 : sp.grip * 1.35;
       vr *= Math.exp(-grip * DT);
     }
 
