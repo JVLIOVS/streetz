@@ -26,8 +26,11 @@ const POI_STYLE: Partial<Record<PoiKind, { color: string; label: string }>> = {
  */
 export class Minimap {
   private ctx: CanvasRenderingContext2D;
-  private base: HTMLCanvasElement;
-  private scale: number; // px per meter on the base canvas
+  /** The whole map, pre-rendered (also used by the full-screen map). */
+  readonly base: HTMLCanvasElement;
+  readonly scale: number; // px per meter on the base canvas
+  /** A spot the player marked on the big map (pink pin). */
+  mark: [number, number] | null = null;
   private size: number;
 
   constructor(canvas: HTMLCanvasElement, private map: MapData) {
@@ -45,7 +48,7 @@ export class Minimap {
     this.drawBase(this.base.getContext('2d')!);
   }
 
-  private toPx(x: number, z: number): [number, number] {
+  toPx(x: number, z: number): [number, number] {
     return [(x + this.map.half) * this.scale, (z + this.map.half) * this.scale];
   }
 
@@ -101,7 +104,7 @@ export class Minimap {
   }
 
   /** Mission start markers, current waypoint and mission targets. */
-  private drawMissions(
+  drawMissions(
     g: CanvasRenderingContext2D,
     k: number,
     sim: SimWorld,
@@ -186,6 +189,34 @@ export class Minimap {
     for (const id of me.missionTargets) {
       const t = sim.peds.get(id)?.state ?? sim.vehicles.get(id)?.state;
       if (t) dot(t.x, t.z, 4.5, blink ? '#ff3b4f' : '#ffd23f');
+    }
+    if (this.mark) {
+      const [mx, mz] = at(this.mark[0], this.mark[1]);
+      g.fillStyle = '#ff3b9a';
+      g.strokeStyle = '#fff';
+      g.lineWidth = 2 / k;
+      g.beginPath();
+      g.arc(mx, mz - 8 / k, 6 / k, Math.PI * 0.15, Math.PI * 0.85, true);
+      g.lineTo(mx, mz);
+      g.closePath();
+      g.fill();
+      g.stroke();
+    }
+    // your hideout: always big and gold (the base you build)
+    const home = this.map.pois.find((q) => q.kind === 'hideout');
+    if (home) {
+      const [hx, hz] = at(home.x, home.z);
+      g.fillStyle = '#ffd23f';
+      g.strokeStyle = '#1b1430';
+      g.lineWidth = 2.5 / k;
+      g.beginPath();
+      g.arc(hx, hz, 11 / k, 0, Math.PI * 2);
+      g.fill();
+      g.stroke();
+      g.fillStyle = '#1b1430';
+      g.font = `900 ${13 / k}px system-ui, sans-serif`;
+      g.fillText('QG', hx, hz + 1 / k);
+      g.font = `900 ${12 / k}px system-ui, sans-serif`;
     }
     if (me.waypoint) {
       const [mx, mz] = at(me.waypoint[0], me.waypoint[1]);
@@ -282,9 +313,10 @@ export class Minimap {
       g.restore();
     }
     // Next objective: an arrow on the rim when it is off the map
-    if (me?.waypoint && px <= this.map.half + 50) {
-      const dx = me.waypoint[0] - px;
-      const dz = me.waypoint[1] - pz;
+    const goal = me?.waypoint ?? this.mark;
+    if (goal && px <= this.map.half + 50) {
+      const dx = goal[0] - px;
+      const dz = goal[1] - pz;
       // rotate like the map: camera forward is up
       const c = Math.cos(yaw);
       const sn = Math.sin(yaw);
@@ -296,7 +328,7 @@ export class Minimap {
         g.save();
         g.translate(S / 2 + (rx / d) * R, S / 2 + (rz / d) * R);
         g.rotate(Math.atan2(rz, rx) + Math.PI / 2);
-        g.fillStyle = '#ffd23f';
+        g.fillStyle = me?.waypoint ? '#ffd23f' : '#ff3b9a';
         g.strokeStyle = '#1b1430';
         g.lineWidth = 2;
         g.beginPath();

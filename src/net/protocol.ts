@@ -127,6 +127,7 @@ export type NetPlayer = Pick<
   | 'awakenCooldown'
   | 'powerCooldown'
   | 'opInvite'
+  | 'hqVisited'
 >;
 
 /** Private fields only sent to their owner (inventory, contracts…). */
@@ -149,6 +150,7 @@ function packFull(s: PlayerState): NetPlayer {
     awakenCooldown: Math.ceil(s.awakenCooldown),
     powerCooldown: q(s.powerCooldown),
     opInvite: s.opInvite,
+    hqVisited: s.hqVisited,
     x: q(s.x),
     y: q(s.y),
     z: q(s.z),

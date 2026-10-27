@@ -180,6 +180,7 @@ export class MissionSystem {
         if (!s.tutorialDone && !s.mission && !s.dead && !s.interior) this.start(p, 'tuto');
       }
     }
+    if (this.w.tick % 30 === 0) for (const p of this.w.players.values()) this.guide(p);
     for (const [id, run] of [...this.runs]) {
       const p = this.w.players.get(id);
       if (!p) {
@@ -194,6 +195,40 @@ export class MissionSystem {
       }
       if (run.def.partner) this.updateAlly(p, run);
       this.updateStep(p, run);
+    }
+  }
+
+  /**
+   * With nothing to do, the objective bar suggests the next step: first your HQ (to
+   * build it), then the next job of the Family. Never while a job is running.
+   */
+  private guide(p: Player) {
+    const s = p.state;
+    if (!s.tutorialDone || s.mission || s.dead || p.guideOff) return;
+    const hq = this.w.map.interiors.find((i) => i.kind === 'hideout');
+    if (!s.hqVisited) {
+      if (s.interior === hq?.id) {
+        s.hqVisited = true;
+        s.objective = '';
+        s.waypoint = null;
+        this.w.toast(p, '🏠 Bienvenue dans ton QG ! Touche 🔨 Aménager : lit, coffre à stuff, établi… Le tableau 📌 te donne ton prochain coup.');
+        return;
+      }
+      if (hq) {
+        s.objective = '🏠 Va à ton QG (rond doré « QG » sur la carte) pour l’aménager';
+        s.waypoint = [hq.door.x, hq.door.z];
+      }
+      return;
+    }
+    const rank = this.rank(p);
+    const job = MISSIONS.find((m) => m.family !== undefined && m.family <= rank && !s.missionsDone.includes(m.id) && this.unlocked(p, m));
+    const g = job && this.givers.find((q) => q.id === job.id);
+    if (g && !s.interior) {
+      s.objective = `👉 Prochain coup : « ${job.name} » avec ${job.giver} (« ! » jaune) · ou fais ce que tu veux`;
+      s.waypoint = [g.x, g.z];
+    } else if (s.objective.startsWith('👉') || s.objective.startsWith('🏠')) {
+      s.objective = '';
+      s.waypoint = null;
     }
   }
 

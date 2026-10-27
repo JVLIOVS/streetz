@@ -45,6 +45,8 @@ export interface Profile {
   jetpack: boolean;
   /** Clothes / gear worn (lost when knocked out). */
   gear: Gear;
+  /** Visited the HQ (guide). */
+  hq: boolean;
   /** Hideout layout and locker. */
   base: Placed[];
   locker: GearItem[];
@@ -59,7 +61,7 @@ export interface SaveData {
 const KEY = 'streetz.save';
 
 export function defaultProfile(): Profile {
-  return { money: 500, weapons: ['fist'], ammo: {}, armor: 0, outfit: {}, clothes: [], garage: [], homes: ['hideout'], rep: START_XP, missions: [], daily: { day: 0, progress: [] }, streak: { day: 0, count: 0 }, biz: [], tutorial: false, prologue: false, crew: null, week: emptyWeek(0), bank: 0, fines: 0, notoriety: 0, respect: 0, skills: noSkills(), jetpack: false, gear: {}, base: STARTER_BASE.map((q) => ({ ...q })), locker: [] };
+  return { money: 500, weapons: ['fist'], ammo: {}, armor: 0, outfit: {}, clothes: [], garage: [], homes: ['hideout'], rep: START_XP, missions: [], daily: { day: 0, progress: [] }, streak: { day: 0, count: 0 }, biz: [], tutorial: false, prologue: false, crew: null, week: emptyWeek(0), bank: 0, fines: 0, notoriety: 0, respect: 0, skills: noSkills(), jetpack: false, gear: {}, hq: false, base: STARTER_BASE.map((q) => ({ ...q })), locker: [] };
 }
 
 export function defaultSave(): SaveData {
@@ -149,6 +151,7 @@ export function sanitize(p: Partial<Profile> | undefined): Profile {
     skills,
     jetpack: p.jetpack === true,
     gear: cleanGear(p.gear),
+    hq: p.hq === true,
     base: Array.isArray(p.base)
       ? p.base
           .filter((q): q is Placed => !!q && typeof q === 'object' && !!moduleById((q as Placed).m))

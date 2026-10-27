@@ -243,6 +243,7 @@ export class NetClient implements NetSession {
     s.base = np.base ?? s.base;
     s.locker = np.locker ?? s.locker;
     s.opInvite = np.opInvite ?? null;
+    s.hqVisited = np.hqVisited ?? s.hqVisited;
     s.mission = np.mission;
     s.missionStep = np.missionStep;
     s.objective = np.objective;

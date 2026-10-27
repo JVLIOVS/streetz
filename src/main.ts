@@ -1,6 +1,7 @@
 import './ui/style.css';
 import { Sound } from './audio/sound';
-import { loadSave, writeSave } from './core/save';
+import { defaultSave, loadSave, writeSave } from './core/save';
+import { START_XP, levelOf } from './data/progression';
 import { OPS, OP_LEVEL } from './data/ops';
 import { applyProfile, profileOf } from './sim/player';
 import { Game, LOCAL_PLAYER, type NetSession } from './game';
@@ -168,6 +169,31 @@ async function boot() {
     }
   };
 
+  // a saved game: continue it, or start over (two taps, it erases everything)
+  {
+    const p = save.profile;
+    const started = p.prologue || p.missions.length > 0 || p.rep > START_XP;
+    if (started) {
+      const info = $('save-info');
+      info.classList.remove('hidden');
+      info.textContent = `Partie en cours : niveau ${levelOf(p.rep)} · ${(p.money + p.bank).toLocaleString('fr-FR')} € · ${p.missions.length} mission${p.missions.length > 1 ? 's' : ''}`;
+      $('btn-play').textContent = 'CONTINUER (SOLO)';
+      const reset = $('btn-new');
+      reset.classList.remove('hidden');
+      let armed = 0;
+      reset.addEventListener('click', () => {
+        if (performance.now() > armed) {
+          armed = performance.now() + 4000;
+          reset.textContent = '⚠ Tout effacer ? Touche encore pour confirmer';
+          return;
+        }
+        const fresh = defaultSave();
+        fresh.settings = save.settings;
+        writeSave(fresh);
+        location.reload();
+      });
+    }
+  }
   $('btn-play').addEventListener('click', () => start({ kind: 'solo' }));
   /** First time going online: play the prologue in solo first, then come back here automatically. */
   const prologueFirst = (after: string) => {

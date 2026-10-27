@@ -25,6 +25,12 @@ export class MissionMarkers {
   private allyMark: THREE.Mesh;
   private chests: THREE.Group[] = [];
   private stash: THREE.Mesh;
+  private pinBeam: THREE.Mesh;
+  /** The pin the player dropped on the big map (pink beam). */
+  pin: [number, number] | null = null;
+  /** Who your gun points at now (ped or vehicle id), shown with a red reticle. */
+  aim = -1;
+  private reticle: THREE.Mesh;
 
   constructor(private sim: SimWorld) {
     const beamGeo = new THREE.CylinderGeometry(1.1, 1.1, 3.2, 20, 1, true);
@@ -98,6 +104,13 @@ export class MissionMarkers {
     this.stash = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 40, 16, 1, true).translate(0, 20, 0), beamMat(0xb56cff, 0.35));
     this.stash.visible = false;
     this.root.add(this.stash);
+    this.pinBeam = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 60, 16, 1, true).translate(0, 30, 0), beamMat(0xff3b9a, 0.32));
+    this.pinBeam.visible = false;
+    this.root.add(this.pinBeam);
+    this.reticle = new THREE.Mesh(new THREE.RingGeometry(0.45, 0.62, 24, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xff3b4f, transparent: true, opacity: 0.9, depthTest: false, side: THREE.DoubleSide }));
+    this.reticle.renderOrder = 10;
+    this.reticle.visible = false;
+    this.root.add(this.reticle);
     const wpGeo = new THREE.CylinderGeometry(1.4, 1.4, 70, 16, 1, true);
     wpGeo.translate(0, 35, 0);
     this.waypoint = new THREE.Mesh(wpGeo, beamMat(0xffd23f, 0.3));
@@ -148,6 +161,16 @@ export class MissionMarkers {
       bang.rotation.y = this.time * 2;
     }
     this.fence.visible = !indoors;
+    this.pinBeam.visible = !!this.pin && !indoors;
+    const aimed = this.aim >= 0 ? (this.sim.peds.get(this.aim)?.state ?? this.sim.vehicles.get(this.aim)?.state) : undefined;
+    this.reticle.visible = !!aimed;
+    if (aimed) {
+      this.reticle.position.set(aimed.x, aimed.y + 0.08, aimed.z);
+      this.reticle.rotation.y = this.time * 2;
+      const pulse = 1 + Math.sin(this.time * 8) * 0.08;
+      this.reticle.scale.set(pulse, 1, pulse);
+    }
+    if (this.pin) this.pinBeam.position.set(this.pin[0], this.sim.groundY(this.pin[0], this.pin[1]), this.pin[1]);
     this.stash.visible = !!me?.stash && !indoors;
     if (me?.stash) this.stash.position.set(me.stash[0], this.sim.groundY(me.stash[0], me.stash[1]), me.stash[1]);
     this.sim.roofs.chests.forEach((c, i) => {

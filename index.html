@@ -36,8 +36,6 @@
         <div id="bars"><div id="hp"><i></i></div><div id="armor"><i></i></div></div>
         <div id="gear-strip" aria-label="Ton stuff"></div>
         <div id="zone-name"></div>
-        <button id="btn-level" aria-label="Progression, Famille et contrats"><span id="rank-ico">·</span><b id="lvl-num">1</b><span class="xp"><i id="xp-fill"></i></span><span id="ctr-badge">📋</span></button>
-        <div id="next-goal"></div>
       </div>
       <div id="top-right">
         <div id="stars"><span>★</span><span>★</span><span>★</span><span>★</span><span>★</span></div>
@@ -46,6 +44,11 @@
         <button id="btn-weapon" class="pill"><span id="weapon-icon">✊</span><span id="weapon-ammo"></span></button>
       </div>
       <button id="btn-pause" class="ui-btn" aria-label="Pause">II</button>
+      <!-- top center, next to pause: out of the joystick's way -->
+      <div id="lvl-wrap">
+        <button id="btn-level" aria-label="Progression, Famille et contrats"><span id="rank-ico">·</span><b id="lvl-num">1</b><span class="xp"><i id="xp-fill"></i></span><span id="ctr-badge">📋</span></button>
+        <div id="next-goal"></div>
+      </div>
       <div id="objective" class="hidden"><span class="obj-txt"></span><b class="obj-time"></b><button class="obj-x" aria-label="Abandonner la mission">✕</button></div>
       <div id="players" class="hidden"></div>
       <div id="bounty" class="hidden"></div>
@@ -122,9 +125,11 @@
         <button id="btn-minor" class="link">J’ai moins de 18 ans</button>
       </div>
       <div id="menu" class="hidden">
+        <div id="save-info" class="hidden"></div>
         <button id="btn-play" class="cta">SOLO</button>
         <button id="btn-public" class="cta alt">🌍 MONDE OUVERT</button>
         <button id="btn-multi" class="cta small">PARTIE PRIVÉE (CODE)</button>
+        <button id="btn-new" class="link hidden">↺ Nouvelle partie (tout recommencer)</button>
       </div>
       <div id="multi" class="hidden">
         <input id="nick" maxlength="14" placeholder="Ton pseudo" autocomplete="off" />
