@@ -5,7 +5,9 @@ import type { ContextAction, Player } from './player';
 import type { SimWorld } from './world';
 
 /** Rooftops: stashes to loot (some already emptied) and paying sniper spots. */
-export const ROOF_CHESTS = 30;
+export const ROOF_CHESTS = 60;
+/** Loose loot (cash, clothes) kept on the roofs around each player. */
+export const ROOF_LOOT = 6;
 export const SNIPER_SPOTS = 6;
 export const SNIPER_PRICE = 300;
 /** A looted stash fills up again after this many seconds. */
@@ -31,6 +33,8 @@ export class RoofSystem {
   readonly spots: { x: number; y: number; z: number }[] = [];
   /** Who rents a sniper rifle, at which spot. */
   private rentals = new Map<string, number>();
+  /** Every reachable roof (loot appears on them). */
+  private roofs: { x: number; z: number; y: number; w: number; d: number }[] = [];
 
   constructor(private w: SimWorld) {
     const r = new Rng(w.map.seed ^ 0x700f);
@@ -43,6 +47,7 @@ export class RoofSystem {
       if (this.spots.some((q) => Math.hypot(q.x - b.x, q.z - b.z) < 150)) continue;
       this.spots.push({ x: b.x, y: b.y, z: b.z });
     }
+    this.roofs = roofs;
     const rest = roofs.filter((b) => !this.spots.some((q) => q.x === b.x && q.z === b.z));
     for (let i = 0; i < ROOF_CHESTS && rest.length; i++) {
       const b = rest.splice(r.int(0, rest.length - 1), 1)[0];
@@ -120,7 +125,31 @@ export class RoofSystem {
     this.w.toast(p, '🔭 Fusil de précision : 12 balles, portée énorme. Il reste sur ce toit.');
   }
 
+  /** Keeps a few bundles of cash and pieces of clothing on the roofs around each player. */
+  private loot() {
+    const w = this.w;
+    for (const p of w.players.values()) {
+      const s = p.state;
+      if (s.interior || s.dead) continue;
+      let n = 0;
+      for (const pk of w.pickups.values()) if (pk.roof && Math.hypot(pk.x - s.x, pk.z - s.z) < 150) n++;
+      if (n >= ROOF_LOOT) continue;
+      const near = this.roofs.filter((b) => {
+        const d = Math.hypot(b.x - s.x, b.z - s.z);
+        return d > 25 && d < 140;
+      });
+      if (!near.length) continue;
+      const b = near[w.rng.int(0, near.length - 1)];
+      const x = b.x + w.rng.range(-0.3, 0.3) * b.w;
+      const z = b.z + w.rng.range(-0.3, 0.3) * b.d;
+      const id = w.newId();
+      if (w.rng.chance(0.45)) w.pickups.set(id, { id, x, y: b.y, z, kind: 'money', amount: w.rng.int(150, 600), roof: true });
+      else w.pickups.set(id, { id, x, y: b.y, z, kind: 'gear', amount: 0, gear: { slot: rollSlot(() => w.rng.next()), r: rollRarity(() => w.rng.next(), 0.5) }, roof: true });
+    }
+  }
+
   update() {
+    if (this.w.tick % 300 === 0) this.loot();
     if (this.w.tick % 15 !== 0) return;
     for (const [id, spot] of this.rentals) {
       const p = this.w.players.get(id);

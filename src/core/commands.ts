@@ -18,6 +18,8 @@ export interface MoveCommand {
   jump: boolean;
   /** Charge of the jump (0 = tap, 1 = fully charged super jump). */
   jumpPower?: number;
+  /** Sprint button held then released: a boost, with its charge (0..1). One-shot. */
+  boost?: number;
   /** Jump button held (jetpack thrust while in the air). */
   jumpHeld?: boolean;
   /** Vehicle pedals: 1 accelerate, -1 brake/reverse, 0 none. */

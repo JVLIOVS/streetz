@@ -46,6 +46,8 @@ export interface PickupState {
   weapon?: WeaponId;
   /** A piece of clothing / gear (kind 'gear'). */
   gear?: GearItem;
+  /** Loot placed on a rooftop (reward for climbing). */
+  roof?: boolean;
   /** Your stuff dropped when knocked out: kept on the ground until this tick even if nobody is around. */
   owner?: string;
   until?: number;

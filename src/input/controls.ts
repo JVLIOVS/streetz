@@ -190,6 +190,34 @@ export class Controls {
     return Math.max(0, Math.min(1, ((performance.now() - this.jumpStart) / 1000 - 0.18) / 0.7));
   }
 
+  // ---- boost: hold SPRINT to charge, release to blast forward (a quick tap still toggles sprint)
+  private sprintStart = -1;
+  private boostPower = 0;
+
+  startSprintHold() {
+    this.sprintStart = performance.now();
+  }
+
+  releaseSprintHold() {
+    if (this.sprintStart < 0) return;
+    const held = (performance.now() - this.sprintStart) / 1000;
+    this.sprintStart = -1;
+    if (held < 0.35) this.toggleSprint();
+    else this.boostPower = Math.max(0.3, this.boostCharge(held));
+  }
+
+  /** Charge of a held sprint button, 0..1 (full after ~1.5 s). */
+  boostCharge(held = this.sprintStart < 0 ? 0 : (performance.now() - this.sprintStart) / 1000) {
+    return Math.max(0, Math.min(1, (held - 0.35) / 1.2));
+  }
+
+  /** Returns the released boost once (0 = none). */
+  consumeBoost() {
+    const b = this.boostPower;
+    this.boostPower = 0;
+    return b;
+  }
+
   toggleSprint() {
     this.sprintToggle = !this.sprintToggle;
     this.onSprintChange?.(this.sprintToggle);

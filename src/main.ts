@@ -395,7 +395,19 @@ async function launch(map: MapData, assets: GameAssets, quality: QualityLevel, s
   powerBtn.addEventListener('pointerup', powerUp);
   powerBtn.addEventListener('pointercancel', powerUp);
   const sprint = $('btn-sprint');
-  tap(sprint, () => controls.toggleSprint());
+  // tap = sprint on/off, hold = charge a boost (released = blast forward)
+  sprint.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    sprint.setPointerCapture?.(e.pointerId);
+    controls.startSprintHold();
+  });
+  const sprintUp = (e: PointerEvent) => {
+    e.stopPropagation();
+    controls.releaseSprintHold();
+  };
+  sprint.addEventListener('pointerup', sprintUp);
+  sprint.addEventListener('pointercancel', sprintUp);
   controls.onSprintChange = (on) => sprint.classList.toggle('on', on);
   controls.bindHold($('btn-attack'), 'attack', () => controls.pushAction('attack'));
   controls.bindHold($('btn-gas'), 'gas');

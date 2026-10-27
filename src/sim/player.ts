@@ -217,6 +217,12 @@ export class Player {
   private dashZ = 0;
   private prevSprint = false;
   private chargeY = 0;
+  /** Boost (hold SPRINT): queued charge, time left, cooldown, direction. */
+  private boostQueued = 0;
+  boostTime = 0;
+  private boostCooldown = 0;
+  private boostX = 0;
+  private boostZ = 0;
   state: PlayerState;
   /** Position at the previous tick, for render interpolation. */
   prev = { x: 0, y: 0, z: 0, facing: 0 };
@@ -339,6 +345,7 @@ export class Player {
   }
 
   setInput(cmd: MoveCommand) {
+    if (cmd.boost) this.boostQueued = Math.max(0, Math.min(1, cmd.boost));
     if (cmd.jump) {
       this.jumpQueued = true;
       this.jumpPower = Math.max(0, Math.min(1, cmd.jumpPower ?? 0));
@@ -382,6 +389,20 @@ export class Player {
       this.dashZ = len > 0.1 ? dirZ / len : -Math.cos(s.facing);
     }
     this.prevSprint = !!inp?.sprint;
+    // boost: the longer you held SPRINT and the more you evolved, the longer and faster
+    if (this.boostCooldown > 0) this.boostCooldown -= DT;
+    if (this.boostQueued > 0) {
+      const charge = this.boostQueued;
+      this.boostQueued = 0;
+      if (this.boostCooldown <= 0 && !s.dead && s.awakenCharge <= 0) {
+        const st = stageOf(levelOf(s.rep));
+        this.boostTime = (1.2 + 0.6 * st) * charge + 0.4;
+        this.boostCooldown = this.boostTime + 1.5;
+        const len = Math.hypot(dirX, dirZ);
+        this.boostX = len > 0.1 ? dirX / len : -Math.sin(yaw);
+        this.boostZ = len > 0.1 ? dirZ / len : -Math.cos(yaw);
+      }
+    }
     // Speed skill: +3 % per point
     const skill = 1 + 0.03 * Math.min(10, s.skills?.speed ?? 0) + speedBonus(s.gear ?? {});
     const power = s.awakenCharge > 0 ? 0 : s.awaken > 0 ? AWAKEN_SPEED : 1;
@@ -392,7 +413,25 @@ export class Player {
 
     const accel = s.grounded ? T.groundAccel : T.airAccel;
     const k = 1 - Math.exp(-accel * DT);
-    if (this.dashTime > 0) {
+    if (this.boostTime > 0) {
+      this.boostTime -= DT;
+      // steerable a little with the stick
+      const len = Math.hypot(dirX, dirZ);
+      if (len > 0.1) {
+        this.boostX += (dirX / len - this.boostX) * 3 * DT;
+        this.boostZ += (dirZ / len - this.boostZ) * 3 * DT;
+        const n = Math.hypot(this.boostX, this.boostZ) || 1;
+        this.boostX /= n;
+        this.boostZ /= n;
+      }
+      const v = (14 + 1.5 * stageOf(levelOf(s.rep))) * (s.awaken > 0 ? 1.3 : 1);
+      s.vx = this.boostX * v;
+      s.vz = this.boostZ * v;
+      if (this.boostTime <= 0) {
+        s.vx *= 0.5;
+        s.vz *= 0.5;
+      }
+    } else if (this.dashTime > 0) {
       this.dashTime -= DT;
       s.vx = this.dashX * DASH_SPEED * (s.awaken > 0 ? 1.4 : 1);
       s.vz = this.dashZ * DASH_SPEED * (s.awaken > 0 ? 1.4 : 1);
@@ -428,8 +467,10 @@ export class Player {
       if (inp?.jumpHeld) s.vy = Math.min(10, s.vy + 40 * DT);
       else if (!s.grounded) s.vy = Math.max(s.vy, -2.5);
     }
+    // boosting through the air: you glide instead of dropping
+    if (this.boostTime > 0 && !s.grounded) s.vy = Math.max(s.vy, -1.5);
     // jetpack: hold jump in the air to fly up (fuel refills on the ground)
-    s.jetting = false;
+    s.jetting = this.boostTime > 0;
     if (s.jetpack && !s.dead) {
       if (!s.grounded && inp?.jumpHeld && s.fuel > 0.01) {
         s.vy = Math.min(9, s.vy + 48 * DT);

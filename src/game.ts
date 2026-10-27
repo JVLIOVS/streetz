@@ -52,6 +52,7 @@ export class Game {
   readonly bigMap: BigMap;
   private bigMapTimer = 0;
   private aimTimer = 0;
+  private lastBoost = 0;
   private audio: AudioDirector;
   private radioCar = -1;
   private lastCharge = 0;
@@ -127,6 +128,7 @@ export class Game {
       yaw: this.view.cam.yaw,
       sprint: s.sprint,
       ...((j) => ({ jump: j.jump, jumpPower: j.power }))(this.controls.consumeJump()),
+      boost: this.controls.consumeBoost() || undefined,
       jumpHeld: this.controls.jumpHeld(),
       throttle: gas ? 1 : brake ? -1 : 0,
       handbrake: h.handbrake || k.handbrake,
@@ -487,6 +489,11 @@ export class Game {
     if (charge !== this.lastCharge) {
       this.lastCharge = charge;
       document.getElementById('btn-jump')?.style.setProperty('--charge', String(charge));
+    }
+    const bc = this.controls.boostCharge();
+    if (bc !== this.lastBoost) {
+      this.lastBoost = bc;
+      document.getElementById('btn-sprint')?.style.setProperty('--charge', String(bc));
     }
     const d = this.controls.takeCameraDelta();
     if (d.yaw || d.pitch) this.view.cam.rotate(d.yaw, d.pitch);

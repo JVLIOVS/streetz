@@ -1844,3 +1844,33 @@ describe('custody only when arrested, knocked out by the police, or surrendering
     expect(s.weapons).toContain('pistol');
   });
 });
+
+describe('boost and rooftops', () => {
+  it('holding SPRINT then releasing blasts you forward; longer when you evolved', async () => {
+    const dist = async (rep: number) => {
+      const w = await world();
+      w.density = { peds: 0, traffic: 0, parkedRadius: 0 };
+      run(w, 30);
+      const s = P(w);
+      s.rep = rep;
+      const x0 = s.x;
+      const z0 = s.z;
+      run(w, 1, (t) => [move(t, { boost: 1 })]);
+      run(w, 60 * 4, (t) => [move(t)]);
+      return Math.hypot(s.x - x0, s.z - z0);
+    };
+    const base = await dist(0);
+    expect(base).toBeGreaterThan(15);
+    const evolved = await dist(30000);
+    expect(evolved).toBeGreaterThan(base * 1.5);
+  });
+
+  it('cash and clothes keep appearing on the roofs around you', async () => {
+    const w = await world();
+    w.density = { peds: 0, traffic: 0, parkedRadius: 0 };
+    run(w, 60 * 40);
+    const roof = [...w.pickups.values()].filter((pk) => pk.roof);
+    expect(roof.length).toBeGreaterThanOrEqual(4);
+    expect(roof.every((pk) => pk.y > 8)).toBe(true);
+  });
+});

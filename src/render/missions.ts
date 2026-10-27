@@ -76,7 +76,8 @@ export class MissionMarkers {
     const chestBox = new THREE.BoxGeometry(0.9, 0.55, 0.6);
     const chestMat = new THREE.MeshToonMaterial({ color: 0x6b4423 });
     const bandMat = new THREE.MeshBasicMaterial({ color: 0xffd23f });
-    const glowGeo = new THREE.CylinderGeometry(0.7, 0.7, 2.5, 12, 1, true).translate(0, 1.25, 0);
+    // tall enough to be seen from the street: a reason to jump up there
+    const glowGeo = new THREE.CylinderGeometry(0.7, 0.7, 9, 12, 1, true).translate(0, 4.5, 0);
     const glowMat = beamMat(0xffd23f, 0.25);
     for (const c of sim.roofs.chests) {
       const g = new THREE.Group();
@@ -175,7 +176,7 @@ export class MissionMarkers {
     if (me?.stash) this.stash.position.set(me.stash[0], this.sim.groundY(me.stash[0], me.stash[1]), me.stash[1]);
     this.sim.roofs.chests.forEach((c, i) => {
       const full = c.refill === 0 || this.sim.tick >= c.refill;
-      this.chests[i].visible = full && !indoors && !!me && Math.abs(c.x - me.x) < 120 && Math.abs(c.z - me.z) < 120;
+      this.chests[i].visible = full && !indoors && !!me && Math.abs(c.x - me.x) < 220 && Math.abs(c.z - me.z) < 220;
     });
     this.heist.visible = !indoors && !me?.mission;
     // players with a bounty: a big red arrow everybody can see
