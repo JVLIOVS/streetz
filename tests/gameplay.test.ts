@@ -188,7 +188,7 @@ describe('combat', () => {
     }
     expect(ped.alive).toBe(false);
     // the dropped cash is picked up by walking over it
-    const cash = [...w.pickups.values()].filter((pk) => pk.kind === 'money');
+    const cash = [...w.pickups.values()].filter((pk) => pk.kind === 'money' && !pk.roof);
     for (const pk of cash) w.players.get('p1')!.teleport(pk.x, 0.2, pk.z);
     run(w, 3);
     expect(cash.every((pk) => !w.pickups.has(pk.id))).toBe(true);
@@ -315,7 +315,7 @@ describe('fights', () => {
       run(w, 30);
     }
     expect(ped.alive).toBe(false);
-    const cash = [...w.pickups.values()].reduce((a, p) => a + p.amount, 0) + (P(w).money - 500);
+    const cash = [...w.pickups.values()].filter((p) => p.kind === 'money' && !p.roof).reduce((a, p) => a + p.amount, 0) + (P(w).money - 500);
     expect(cash).toBe(321);
   });
 });
