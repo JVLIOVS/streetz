@@ -25,6 +25,7 @@ import { FamilySystem } from './family';
 import { BaseSystem } from './base';
 import { PowerSystem } from './powers';
 import { OpsSystem } from './ops';
+import { LootSystem } from './loot';
 import { RESPECT } from '../data/law';
 import { REPAINT_PRICE, WITNESS_CALL } from '../data/police';
 import { levelOf, requiredLevel } from '../data/progression';
@@ -190,6 +191,7 @@ export class SimWorld {
   readonly base: BaseSystem;
   readonly powers: PowerSystem;
   readonly ops: OpsSystem;
+  readonly loot: LootSystem;
   /** Local calendar day number (set by the game from the clock; 0 = unknown). */
   day = 0;
   /** Wall-clock time in seconds (set by the game; used by hideout businesses). */
@@ -228,6 +230,7 @@ export class SimWorld {
     this.base = new BaseSystem(this);
     this.powers = new PowerSystem(this);
     this.ops = new OpsSystem(this);
+    this.loot = new LootSystem(this);
     this.props = new PropField(map.props);
     this.buildProps();
     if (role === 'authority') {
@@ -267,6 +270,7 @@ export class SimWorld {
     this.family.drop(id);
     this.base.drop(id);
     this.ops.drop(id);
+    this.loot.drop(id);
     this.progress.drop(id);
     this.social.drop(id);
     this.law.drop(id);
@@ -500,6 +504,7 @@ export class SimWorld {
     this.family.update();
     this.powers.update();
     this.ops.update();
+    this.loot.update();
     if (this.tick % 20 === 0) this.managePopulation();
     for (const p of this.players.values()) p.state.context = this.computeContext(p);
     this.physics.step();
@@ -1140,6 +1145,9 @@ export class SimWorld {
       case 'module':
         this.base.use(p, ctx.target as number);
         break;
+      case 'loot':
+        this.loot.start(p, ctx.target as number);
+        break;
       case 'travel':
         this.toast(p, '✈ Bientôt disponible : Amérique latine, Afrique, Île, Asie');
         break;
@@ -1259,7 +1267,7 @@ export class SimWorld {
       const def = this.interior(s.interior)!;
       if (Math.hypot(s.x - room.exit.x, s.z - room.exit.z) < 2.4) return { kind: 'exit_building', label: 'Sortir', target: s.interior };
       if (room.wardrobe && Math.hypot(s.x - room.wardrobe.x, s.z - room.wardrobe.z) < 2) return { kind: 'wardrobe', label: 'Garde-robe', target: def.id };
-      const built = this.base.context(p);
+      const built = this.base.context(p) ?? this.loot.context(p);
       if (built) return built;
       if (room.garage && Math.hypot(s.x - room.garage.x, s.z - room.garage.z) < 2) return { kind: 'garage', label: 'Mon garage', target: def.id };
       if (room.office && Math.hypot(s.x - room.office.x, s.z - room.office.z) < 2) return { kind: 'business', label: 'Mes business', target: def.id };
@@ -1942,6 +1950,20 @@ export class SimWorld {
   }
 
   // ------------------------------------------------------------------ wanted level
+
+  /** Straight to (at least) this many stars: seen in the act (alarm, clerk, officers). */
+  raiseWanted(p: Player, level: number) {
+    const s = p.state;
+    const before = s.wanted;
+    s.wanted = Math.min(5, Math.max(s.wanted, level));
+    s.wantedCooldown = WANTED_DECAY;
+    p.reportAt = 0;
+    this.police.reported(p, s.x, s.z);
+    if (s.wanted !== before) {
+      this.events.push({ type: 'wanted', playerId: s.id, level: s.wanted });
+      this.law.notoriety(p, 2 * (s.wanted - before));
+    }
+  }
 
   crime(p: Player, kind: Crime, x: number, z: number, victim: Ped | null, always = false) {
     let witnessed = always;

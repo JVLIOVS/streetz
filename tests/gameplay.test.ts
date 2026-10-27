@@ -1874,3 +1874,53 @@ describe('boost and rooftops', () => {
     expect(roof.every((pk) => pk.y > 8)).toBe(true);
   });
 });
+
+describe('loot inside buildings', () => {
+  async function inside(kind: string) {
+    const w = await world();
+    w.density = { peds: 0, traffic: 0, parkedRadius: 0 };
+    run(w, 5);
+    const p = w.players.get('p1')!;
+    const s = P(w);
+    s.tutorialDone = true;
+    const def = map.interiors.find((i) => i.kind === kind)!;
+    const room = w.rooms.get(def.id)!;
+    s.interior = def.id;
+    return { w, p, s, def, room };
+  }
+  const go = (w: SimWorld, p: ReturnType<SimWorld['addPlayer']>, x: number, z: number, id: string) => {
+    w.teleportPlayer(p, x, 0.3, z);
+    p.state.interior = id;
+    run(w, 3);
+    p.state.interior = id;
+    run(w, 1);
+  };
+
+  it('a shop has a register, a back-room safe and shelves; cracking the safe pays and brings the police', async () => {
+    const { w, p, s, def, room } = await inside('shop');
+    const kinds = room.loot.map((l) => l.kind);
+    expect(kinds).toEqual(expect.arrayContaining(['register', 'safe', 'shelf']));
+    const safe = room.loot.findIndex((l) => l.kind === 'safe');
+    go(w, p, room.loot[safe].x, room.loot[safe].z, def.id);
+    expect(s.context?.kind).toBe('loot');
+    const money = s.money;
+    run(w, 1, (t) => [act(t, 'use')]);
+    expect(s.wanted).toBeGreaterThanOrEqual(2);
+    run(w, 60 * 7);
+    expect(s.money).toBeGreaterThan(money + 500);
+    // empty for a while
+    run(w, 2);
+    expect(s.context?.label).toMatch(/Vide/);
+  });
+
+  it('the police station armory gives a big gun (and a lot of stars)', async () => {
+    const { w, p, s, def, room } = await inside('police');
+    const i = room.loot.findIndex((l) => l.kind === 'armory');
+    expect(i).toBeGreaterThanOrEqual(0);
+    go(w, p, room.loot[i].x, room.loot[i].z, def.id);
+    run(w, 1, (t) => [act(t, 'use')]);
+    expect(s.wanted).toBeGreaterThanOrEqual(4);
+    run(w, 60 * 9);
+    expect(s.weapons.some((x) => ['smg', 'shotgun', 'rifle'].includes(x))).toBe(true);
+  });
+});

@@ -8,7 +8,8 @@ const LEGEND: [string, string][] = [
   ['$$', 'Braquage coop « Le Coffre »'],
   ['€', 'Receleur : livre-lui la voiture qu’il veut'],
   ['⊕', 'Postes de tir sur les toits (super saut)'],
-  ['🛒', 'Supérettes à braquer · 🔫 armurerie · 👕 fringues · 🚗 concession'],
+  ['🛒', 'Supérettes : caisse, coffre, rayons · 🔫 armurerie · 👕 fringues · 🚗 concession'],
+  ['★', 'Commissariat : armurerie et coffre des scellés (gros risque)'],
   ['📦', 'Colis surprises · carrés verts = cash · bleus = armes'],
   ['📍', 'Touche la carte pour poser ton repère'],
 ];

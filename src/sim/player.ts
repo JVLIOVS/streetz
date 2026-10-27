@@ -44,7 +44,9 @@ export interface ContextAction {
     /** Hideout modules you built: use (bed, board, bag) / locker / workbench menus. */
     | 'module'
     | 'locker'
-    | 'bench';
+    | 'bench'
+    /** Something to grab or crack open in a building. */
+    | 'loot';
   label: string;
   target: number | string;
 }

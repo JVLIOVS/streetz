@@ -32,7 +32,29 @@ export interface RoomLayout {
   garage: { x: number; z: number } | null;
   /** Hideout only: laptop to run the businesses. */
   office: { x: number; z: number } | null;
+  /** Things to grab or crack open (register, safe, display cases, armory…). */
+  loot: LootSpot[];
 }
+
+export type LootKind = 'register' | 'safe' | 'shelf' | 'case' | 'ammo' | 'rack' | 'armory' | 'evidence' | 'boxes';
+export interface LootSpot {
+  kind: LootKind;
+  x: number;
+  z: number;
+}
+
+/** Visual of each loot spot (a box or two), standing against where the player interacts. */
+const LOOT_LOOK: Record<LootKind, { sx: number; sy: number; sz: number; color: number; top?: number }> = {
+  register: { sx: 0.6, sy: 0.35, sz: 0.45, color: 0x2b2b30, top: 0x5ee86a },
+  safe: { sx: 1.0, sy: 1.2, sz: 0.9, color: 0x3c4048, top: 0xc0c4cc },
+  shelf: { sx: 0.8, sy: 1.1, sz: 0.5, color: 0xffd23f },
+  case: { sx: 1.0, sy: 1.0, sz: 0.7, color: 0x2b2440, top: 0xd6f4ff },
+  ammo: { sx: 1.0, sy: 0.6, sz: 0.6, color: 0x3d5a40, top: 0xffd23f },
+  rack: { sx: 1.4, sy: 1.5, sz: 0.4, color: 0xff7eb6 },
+  armory: { sx: 1.6, sy: 2.0, sz: 0.6, color: 0x1c2a4a, top: 0x9aa3ad },
+  evidence: { sx: 1.0, sy: 1.2, sz: 0.9, color: 0x2a3a5a, top: 0xffd23f },
+  boxes: { sx: 1.6, sy: 0.9, sz: 0.6, color: 0x8a6d4f, top: 0xd4af37 },
+};
 
 const PALETTE: Record<InteriorDef['kind'], { floor: number; wall: number; trim: number; counter: number }> = {
   shop: { floor: 0xe9e4d8, wall: 0xfff3d6, trim: 0x2ec95a, counter: 0xd35400 },
@@ -142,6 +164,33 @@ export function roomLayout(def: InteriorDef): RoomLayout {
     boxes.push({ x: ox - w / 2 + 0.55, y: 1.6, z: oz + 2.5, sx: 0.05, sy: 0.6, sz: 0.7, color: 0x5ee8ff, deco: true });
     garage = { x: ox - w / 2 + 1.4, z: oz + 2.5 };
   }
+  // loot: placed along the back wall (z = back + 0.6), the player stands in front of it
+  const loot: LootSpot[] = [];
+  const back = oz - d / 2;
+  const addLoot = (kind: LootKind, x: number, z = back + 0.6, y0 = 0) => {
+    const l = LOOT_LOOK[kind];
+    boxes.push({ x, y: y0 + l.sy / 2, z, sx: l.sx, sy: l.sy, sz: l.sz, color: l.color, deco: y0 > 0 });
+    if (l.top) boxes.push({ x, y: y0 + l.sy * 0.75, z: z + l.sz / 2 + 0.02, sx: l.sx * 0.5, sy: l.sy * 0.25, sz: 0.04, color: l.top, deco: true });
+    loot.push({ kind, x, z: z + l.sz / 2 + 0.8 });
+  };
+  if (def.kind === 'shop') {
+    addLoot('register', ox + 1.6, cz, 1.15); // on the counter
+    addLoot('safe', ox - w / 2 + 1.2);
+    addLoot('shelf', ox + w / 2 - 2.6);
+  } else if (def.kind === 'jewelry') {
+    for (let k = 0; k < 3; k++) addLoot('case', ox - 3 + k * 3);
+  } else if (def.kind === 'bank') {
+    addLoot('boxes', ox - w / 2 + 2);
+    addLoot('boxes', ox - w / 2 + 4.5);
+  } else if (def.kind === 'gunshop') {
+    addLoot('ammo', ox - w / 2 + 1.2, oz + 3);
+  } else if (def.kind === 'clothes') {
+    addLoot('rack', ox - w / 2 + 1.5);
+    addLoot('rack', ox + w / 2 - 1.5);
+  } else if (def.kind === 'police') {
+    addLoot('armory', ox - w / 2 + 1.5);
+    addLoot('evidence', ox + w / 2 - 1.5);
+  }
   let office: RoomLayout['office'] = null;
   if (def.kind === 'hideout') {
     const x = ox + w / 2 - 1.3;
@@ -152,6 +201,7 @@ export function roomLayout(def: InteriorDef): RoomLayout {
   }
   return {
     boxes,
+    loot,
     wardrobe,
     garage,
     office,
