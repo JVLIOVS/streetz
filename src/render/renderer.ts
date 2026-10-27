@@ -71,7 +71,7 @@ export class GameRenderer {
   readonly effects = new Effects();
   private interiors: InteriorsView;
   private helis = new HeliRenderer();
-  private missions: MissionMarkers;
+  readonly missions: MissionMarkers;
   /** Your hideout furniture + the build preview. */
   readonly base: BaseView;
   /** Auras, lightning, energy balls and beams. */

@@ -8,6 +8,7 @@ import type { GameRenderer } from './render/renderer';
 import type { SimWorld } from './sim/world';
 import type { Hud } from './ui/hud';
 import { BuildBar } from './ui/build';
+import { BigMap } from './ui/bigmap';
 import type { PlayerState } from './sim/player';
 import { levelOf } from './data/progression';
 import { STAGES, stageOf } from './data/evolution';
@@ -48,6 +49,9 @@ export class Game {
   net: NetSession | null = null;
   readonly menu: MenuPanel;
   readonly build: BuildBar;
+  readonly bigMap: BigMap;
+  private bigMapTimer = 0;
+  private aimTimer = 0;
   private audio: AudioDirector;
   private radioCar = -1;
   private lastCharge = 0;
@@ -68,6 +72,11 @@ export class Game {
       () => {},
     );
     this.audio = new AudioDirector(sim, sound);
+    this.bigMap = new BigMap(hud.minimap, sim, () => this.player);
+    document.getElementById('minimap')!.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      this.bigMap.toggle(true);
+    });
     this.build = new BuildBar(sim.map, view.base, (action, arg) => this.menuActions.push({ action, arg }));
     hud.onSkill = (id) => this.sendAction('skill', id);
     hud.onGuards = () => this.sendAction('guards', '');
@@ -517,6 +526,17 @@ export class Game {
     this.lastHealth = me.health;
     this.menu.update(me);
     this.build.update(me);
+    this.view.missions.pin = this.hud.minimap.mark;
+    // the reticle: a few times per second is plenty
+    if ((this.aimTimer -= dt) <= 0) {
+      this.aimTimer = 0.1;
+      const meP = this.sim.players.get(this.localId);
+      this.view.missions.aim = meP ? this.sim.aimPreview(meP, this.view.cam.yaw) : -1;
+    }
+    if (this.bigMap.isOpen && (this.bigMapTimer -= dt) <= 0) {
+      this.bigMapTimer = 0.4;
+      this.bigMap.draw();
+    }
     this.updatePowerButtons(me);
     // open job invitation
     const inv = me.opInvite;

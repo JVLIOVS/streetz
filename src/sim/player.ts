@@ -160,6 +160,8 @@ export interface PlayerState {
   powerCooldown: number;
   /** An open job somebody launched: shown with a « Rejoindre » button until `until` (tick). */
   opInvite: { id: number; text: string; until: number } | null;
+  /** Has been to the hideout (HQ) at least once (the guide points there until then). */
+  hqVisited: boolean;
   /** Your hideout as you built it (src/data/base.ts) and the stuff in your locker. */
   base: Placed[];
   locker: GearItem[];
@@ -201,6 +203,15 @@ export class Player {
   dashTime = 0;
   /** Knocked out by the police while wanted (stars at that moment): the respawn is in custody. */
   custodyWanted = 0;
+  /** The player dismissed the suggestions (✕). */
+  guideOff = false;
+  /** Last player who hurt you (auto-aim fires back at them first). */
+  lastAttacker = '';
+  lastAttackTick = -1e9;
+  /** A witness is calling the police (tick when the star comes), and where. */
+  reportAt = 0;
+  reportX = 0;
+  reportZ = 0;
   dashCooldown = 0;
   private dashX = 0;
   private dashZ = 0;
@@ -315,6 +326,7 @@ export class Player {
       awakenCooldown: 0,
       powerCooldown: 0,
       opInvite: null,
+      hqVisited: false,
       base: STARTER_BASE.map((q) => ({ ...q })),
       locker: [],
       fuel: 1,
@@ -522,6 +534,7 @@ export function applyProfile(s: PlayerState, p: Profile) {
   s.skills = { ...noSkills(), ...p.skills };
   s.jetpack = p.jetpack;
   s.gear = { ...p.gear };
+  s.hqVisited = p.hq;
   s.base = p.base.map((q) => ({ ...q }));
   s.locker = p.locker.map((q) => ({ ...q }));
   s.week = { ...emptyWeek(0), ...p.week };
@@ -554,6 +567,7 @@ export function profileOf(s: PlayerState): Profile {
     skills: { ...s.skills },
     jetpack: s.jetpack,
     gear: { ...s.gear },
+    hq: s.hqVisited,
     base: s.base.map((q) => ({ ...q })),
     locker: s.locker.map((q) => ({ ...q })),
   };

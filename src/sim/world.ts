@@ -26,7 +26,7 @@ import { BaseSystem } from './base';
 import { PowerSystem } from './powers';
 import { OpsSystem } from './ops';
 import { RESPECT } from '../data/law';
-import { REPAINT_PRICE } from '../data/police';
+import { REPAINT_PRICE, WITNESS_CALL } from '../data/police';
 import { levelOf, requiredLevel } from '../data/progression';
 import { GOLD_PAINT } from '../data/contracts';
 import { businessById, bizStock } from '../data/business';
@@ -465,7 +465,19 @@ export class SimWorld {
       if (c.type === 'move') p.setInput(c);
       else this.handleAction(p, c.action, c.arg);
     }
-    for (const p of this.players.values()) this.updatePlayer(p);
+    for (const p of this.players.values()) {
+      // the witness's call goes through: one star
+      if (p.reportAt > 0 && this.tick >= p.reportAt) {
+        p.reportAt = 0;
+        if (p.state.wanted === 0 && !p.state.dead) {
+          p.state.wanted = 1;
+          p.state.wantedCooldown = WANTED_DECAY;
+          this.police.reported(p, p.reportX, p.reportZ);
+          this.events.push({ type: 'wanted', playerId: p.state.id, level: 1 });
+        }
+      }
+      this.updatePlayer(p);
+    }
     for (const v of this.vehicles.values()) this.updateVehicle(v);
     for (const ped of this.peds.values()) {
       ped.savePrev();
@@ -1034,7 +1046,12 @@ export class SimWorld {
         if (arg === 'abort') {
           if (this.heist.isMember(p)) this.heist.leave(p);
           else if (this.ops.memberOf(p)) this.ops.leave(p);
-          else this.missions.abort(p);
+          else if (!s.mission) {
+            // ✕ on a suggestion: hide the guide for this session
+            p.guideOff = true;
+            s.objective = '';
+            s.waypoint = null;
+          } else this.missions.abort(p);
         }
         else if (arg) this.missions.start(p, arg);
         break;
@@ -1643,6 +1660,28 @@ export class SimWorld {
     return best;
   }
 
+  /** Somebody fighting you, the police coming for you, a player who just hit you. */
+  private isThreat(p: Player, t: Target): boolean {
+    const s = p.state;
+    if (t.ped) {
+      const ps = t.ped.state;
+      if (ps.mode === 'fight' && ps.target === s.id) return true;
+      if (ps.role !== 'civ' && s.wanted > 0 && this.police.aggressive(s)) return true;
+      return false;
+    }
+    if (t.player) return p.lastAttacker === t.player.state.id && this.tick - p.lastAttackTick < 600;
+    return false;
+  }
+
+  /** What a shot would hit now (the red reticle), for the local player's weapon. */
+  aimPreview(p: Player, yaw: number): number {
+    const s = p.state;
+    const spec = WEAPONS[s.weapon];
+    if (spec.melee || s.vehicle >= 0 || s.dead) return -1;
+    const t = this.autoAim(p, yaw, spec.range, spec.aimCone * (1 + 0.06 * this.law.level(p, 'precision')));
+    return t?.ped ? t.ped.state.id : t?.vehicle ? t.vehicle.state.id : -1;
+  }
+
   autoAim(p: Player, yaw: number, range: number, cone: number): Target | null {
     const s = p.state;
     const fx = -Math.sin(yaw);
@@ -1655,9 +1694,11 @@ export class SimWorld {
       const d = Math.hypot(dx, dz);
       if (d > range || d < 0.1) continue;
       const cos = (dx * fx + dz * fz) / d;
-      if (cos < Math.cos(cone)) continue;
+      // whoever is attacking you comes first (in a much wider cone), then the closest
+      const threat = this.isThreat(p, t);
+      if (cos < Math.cos(threat ? Math.min(1.9, cone * 2.5 + 0.6) : cone)) continue;
       // people first, cars only if nobody is in the cone
-      const score = d * (2 - cos) + (t.vehicle ? 60 : 0);
+      const score = threat ? d * 0.4 : d * (1.6 - cos * 0.6) + (t.vehicle ? 60 : 0);
       if (score >= bestScore) continue;
       if (d > 2 && this.castStatic(s.x, s.y + 1.3, s.z, dx / d, (t.y - s.y - 1.3) / d, dz / d, d) < d - 0.5) continue;
       bestScore = score;
@@ -1845,6 +1886,10 @@ export class SimWorld {
     // clothes protect a little (cap, top, trousers), and so does your evolution
     amount *= defenseFactor(s.gear) * this.powers.defense(p);
     if (amount <= 0) return;
+    if (by && by !== p) {
+      p.lastAttacker = by.state.id;
+      p.lastAttackTick = this.tick;
+    }
     const absorbed = Math.min(s.armor, amount * 0.7);
     s.armor -= absorbed;
     s.health -= amount - absorbed;
@@ -1909,6 +1954,18 @@ export class SimWorld {
     if (!witnessed) return;
     const s = p.state;
     const before = s.wanted;
+    // a scuffle, a stolen car, a shot in the air: a witness calls first (a few seconds)
+    const small = kind === 'assault' || kind === 'carjack' || kind === 'gunshot' || kind === 'hit_and_run' || kind === 'knockout';
+    if (small && before === 0 && !always) {
+      if (p.reportAt <= 0) {
+        p.reportAt = this.tick + WITNESS_CALL * 60;
+        p.reportX = x;
+        p.reportZ = z;
+        this.toast(p, '📞 Un témoin appelle la police…');
+      }
+      return;
+    }
+    p.reportAt = 0;
     switch (kind) {
       case 'assault':
       case 'carjack':

@@ -30,7 +30,10 @@ export const POLICE_LEVELS: PoliceLevel[] = [
  * Seconds before the first unit shows up after you get stars (per level), then
  * seconds between two reinforcements: the police doesn't teleport in.
  */
-export const RESPONSE_DELAY = [0, 14, 9, 6, 5, 4];
+/** Seconds before the first patrol shows up, by stars (a small brawl doesn't bring the cavalry at once). */
+export const RESPONSE_DELAY = [0, 24, 14, 7, 5, 4];
+/** Small crimes: a witness first has to call the police (seconds). */
+export const WITNESS_CALL = 7;
 export const REINFORCE_EVERY = 3;
 
 /** Search zone radius around the last place the police saw you. */

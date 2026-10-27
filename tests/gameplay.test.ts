@@ -117,6 +117,9 @@ describe('vehicles', () => {
     run(w, 1, (t) => [act(t, 'use')]);
     expect(P(w).vehicle).toBe(car.state.id);
     expect(w.peds.size).toBe(peds + 1);
+    // a witness calls the police: the star comes a few seconds later
+    expect(P(w).wanted).toBe(0);
+    run(w, 60 * 8);
     expect(P(w).wanted).toBeGreaterThanOrEqual(1);
   });
 
